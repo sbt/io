@@ -234,11 +234,12 @@ object IO {
       Set() ++ set
     }
 
-  /** Retrieves the content of the given URL and writes it to the given File. */
-  def download(url: URL, to: File) =
-    Using.urlInputStream(url) { inputStream =>
-      transfer(inputStream, to)
-    }
+  // TODO: provide a better API to download things.
+  // /** Retrieves the content of the given URL and writes it to the given File. */
+  // def download(url: URL, to: File) =
+  //   Using.urlInputStream(url) { inputStream =>
+  //     transfer(inputStream, to)
+  //   }
 
   /** Copies the contents of `in` to `out`.*/
   def transfer(in: File, out: File): Unit =
