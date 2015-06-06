@@ -1,7 +1,7 @@
 /* sbt -- Simple Build Tool
  * Copyright 2008, 2009 Mark Harrah
  */
-package sbt
+package sbt.io
 
 import org.scalacheck._
 import Prop._

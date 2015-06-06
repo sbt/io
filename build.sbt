@@ -24,6 +24,6 @@ lazy val io = (project in file("io")).
     // testedBaseSettings,
     // Util.crossBuild,
     name := "IO",
-    libraryDependencies += scalaCompiler.value % Test,
+    libraryDependencies ++= Seq(scalaCompiler.value % Test, scalaCheck % Test, specs2 % Test),
     crossScalaVersions := Seq(scala210, scala211)
   )

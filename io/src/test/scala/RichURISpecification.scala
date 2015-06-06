@@ -1,7 +1,7 @@
 /* sbt -- Simple Build Tool
  * Copyright 2012 Eugene Vigdorchik */
 
-package sbt
+package sbt.io
 
 import org.scalacheck._
 import Gen._
