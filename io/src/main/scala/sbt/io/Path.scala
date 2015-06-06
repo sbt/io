@@ -52,10 +52,12 @@ import File.pathSeparator
 trait PathLow {
   implicit def singleFileFinder(file: File): PathFinder = PathFinder(file)
 }
+
 trait PathExtra extends Alternatives with Mapper with PathLow {
   implicit def richFile(file: File): RichFile = new RichFile(file)
   implicit def filesToFinder(cc: Traversable[File]): PathFinder = PathFinder.strict(cc)
 }
+
 object Path extends PathExtra {
   def apply(f: File): RichFile = new RichFile(f)
   def apply(f: String): RichFile = new RichFile(new File(f))
@@ -102,7 +104,12 @@ sealed abstract class PathFinder {
    * Constructs a new finder that selects all paths with a name that matches <code>filter</code> and are
    * descendants of paths selected by this finder.
    */
-  def **(filter: FileFilter): PathFinder = new DescendantOrSelfPathFinder(this, filter)
+  def globRecursive(filter: FileFilter): PathFinder = new DescendantOrSelfPathFinder(this, filter)
+
+  /**
+   * Alias of globRecursive.
+   */
+  final def **(filter: FileFilter): PathFinder = globRecursive(filter)
 
   def allPaths: PathFinder = **(AllPassFilter)
 
@@ -110,7 +117,13 @@ sealed abstract class PathFinder {
    * Constructs a new finder that selects all paths with a name that matches <code>filter</code> and are
    * immediate children of paths selected by this finder.
    */
-  def *(filter: FileFilter): PathFinder = new ChildPathFinder(this, filter)
+  def glob(filter: FileFilter): PathFinder = new ChildPathFinder(this, filter)
+
+  /**
+   * Alias of glob
+   */
+  final def *(filter: FileFilter): PathFinder = glob(filter)
+
   /**
    * Constructs a new finder that selects all paths with name <code>literal</code> that are immediate children
    * of paths selected by this finder.
