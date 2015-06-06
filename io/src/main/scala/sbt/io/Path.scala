@@ -3,7 +3,7 @@
  */
 package sbt.io
 
-import Path._
+import sbt.internal.io.Alternatives
 import IO.{ pathSplit, wrapNull }
 import java.io.File
 import java.net.URL
@@ -92,6 +92,8 @@ object PathFinder {
  * has changed.
  */
 sealed abstract class PathFinder {
+  import Path._
+
   /** The union of the paths found by this <code>PathFinder</code> with the paths found by 'paths'.*/
   def +++(paths: PathFinder): PathFinder = new Paths(this, paths)
   /** Excludes all paths from <code>excludePaths</code> from the paths selected by this <code>PathFinder</code>.*/

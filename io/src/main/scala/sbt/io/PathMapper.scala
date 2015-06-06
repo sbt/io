@@ -4,6 +4,7 @@
 package sbt.io
 
 import java.io.File
+import sbt.internal.io.Alternatives
 
 trait Mapper {
   type PathMap = File => Option[String]
@@ -108,18 +109,3 @@ trait Mapper {
   private[this] def fold[A, B, T](zero: A => Option[B], in: Iterable[T])(f: T => A => Option[B]): A => Option[B] =
     (zero /: in)((mapper, base) => f(base) | mapper)
 }
-
-trait Alternative[A, B] { def |(g: A => Option[B]): A => Option[B] }
-trait Alternatives {
-  implicit def alternative[A, B](f: A => Option[B]): Alternative[A, B] =
-    new Alternative[A, B] {
-      def |(g: A => Option[B]) =
-        (a: A) => f(a) orElse g(a)
-    }
-  final def alternatives[A, B](alts: Seq[A => Option[B]]): A => Option[B] =
-    alts match {
-      case Seq(f, fs @ _*) => f | alternatives(fs)
-      case Seq()           => a => None
-    }
-}
-object Alternatives extends Alternatives
