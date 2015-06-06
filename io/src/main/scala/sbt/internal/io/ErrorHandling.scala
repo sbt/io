@@ -1,11 +1,11 @@
 /* sbt -- Simple Build Tool
  * Copyright 2009  Mark Harrah
  */
-package sbt
+package sbt.internal.io
 
 import java.io.IOException
 
-object ErrorHandling {
+private[sbt] object ErrorHandling {
   def translate[T](msg: => String)(f: => T) =
     try { f }
     catch {
@@ -32,7 +32,7 @@ object ErrorHandling {
     } else
       e.toString
 }
-sealed class TranslatedException private[sbt] (msg: String, cause: Throwable) extends RuntimeException(msg, cause) {
+private[sbt] sealed class TranslatedException private[sbt] (msg: String, cause: Throwable) extends RuntimeException(msg, cause) {
   override def toString = msg
 }
-final class TranslatedIOException private[sbt] (msg: String, cause: IOException) extends TranslatedException(msg, cause)
+private[sbt] final class TranslatedIOException private[sbt] (msg: String, cause: IOException) extends TranslatedException(msg, cause)

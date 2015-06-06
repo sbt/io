@@ -1,7 +1,7 @@
 /* sbt
  * Copyright 2009-2015 Typesafe, Inc, Mark Harrah, and others
  */
-package sbt
+package sbt.io
 
 import java.io.{ Closeable, File, FileInputStream, FileOutputStream, InputStream, OutputStream }
 import java.io.{ BufferedInputStream, BufferedOutputStream, ByteArrayOutputStream, InputStreamReader, OutputStreamWriter }
@@ -13,7 +13,7 @@ import java.nio.channels.FileChannel
 import java.util.jar.{ Attributes, JarEntry, JarFile, JarInputStream, JarOutputStream, Manifest }
 import java.util.zip.{ GZIPOutputStream, ZipEntry, ZipFile, ZipInputStream, ZipOutputStream }
 
-import ErrorHandling.translate
+import sbt.internal.io.ErrorHandling.translate
 import Using._
 
 abstract class Using[Source, T] {

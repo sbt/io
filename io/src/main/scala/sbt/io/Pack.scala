@@ -1,7 +1,7 @@
 /* sbt
  * Copyright 2009-2015 Typesafe, Inc, Mark Harrah, and others
  */
-package sbt
+package sbt.io
 
 import java.io.{ File, FileOutputStream }
 import java.util.jar.{ JarEntry, JarFile, JarOutputStream, Pack200 }

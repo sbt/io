@@ -1,10 +1,10 @@
 /* sbt
  * Copyright 2009-2015 Typesafe, Inc, Mark Harrah, and others
  */
-package sbt
+package sbt.io
 
 import Using._
-import ErrorHandling.translate
+import sbt.internal.io.ErrorHandling.translate
 
 import java.io.{ BufferedReader, ByteArrayOutputStream, BufferedWriter, File, FileInputStream, InputStream, OutputStream, PrintWriter }
 import java.io.{ ObjectInputStream, ObjectStreamClass }

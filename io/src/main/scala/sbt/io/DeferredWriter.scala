@@ -1,4 +1,4 @@
-package sbt
+package sbt.io
 
 import java.io.Writer
 
