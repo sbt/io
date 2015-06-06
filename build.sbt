@@ -1,29 +1,35 @@
 import Dependencies._
 
-// ThisBuild settings take lower precedence,
-// but can be shared across the multi projects.
-def buildLevelSettings: Seq[Setting[_]] = Seq(
-  organization in ThisBuild := "org.scala-sbt",
-  version in ThisBuild := "0.1.0-SNAPSHOT"
-  // bintrayOrganization in ThisBuild := Some("sbt"),
-  // bintrayRepository in ThisBuild := s"ivy-${(publishStatus in ThisBuild).value}",
-  // bintrayPackage in ThisBuild := "sbt",
-  // bintrayReleaseOnPublish in ThisBuild := false
-)
-
 def commonSettings: Seq[Setting[_]] = Seq(
   scalaVersion := "2.10.5",
   javacOptions in compile ++= Seq("-Xlint", "-Xlint:-serial"),
   scalacOptions ++= Seq("-feature", "-language:implicitConversions", "-deprecation", "-Xlint"),
-  incOptions := incOptions.value.withNameHashing(true)
-  // crossScalaVersions := Seq(scala210),
-  // bintrayPackage := (bintrayPackage in ThisBuild).value,
-  // bintrayRepository := (bintrayRepository in ThisBuild).value
+  incOptions := incOptions.value.withNameHashing(true),
+  crossScalaVersions := Seq(scala210, scala211),
+  bintrayPackage := (bintrayPackage in ThisBuild).value,
+  bintrayRepository := (bintrayRepository in ThisBuild).value
 )
 
 lazy val root = (project in file(".")).
   aggregate(io).
   settings(
+    inThisBuild(Seq(
+      organization := "org.scala-sbt",
+      version := "0.1.0-SNAPSHOT",
+      homepage := Some(url("https://github.com/sbt/io")),
+      description := "IO module for sbt",
+      licenses := List("BSD 3-Clause" -> url("https://github.com/sbt/sbt/blob/0.13/LICENSE")),
+      scmInfo := Some(ScmInfo(url("https://github.com/sbt/io"), "git@github.com:sbt/io.git")),
+      developers := List(
+        Developer("harrah", "Mark Harrah", "@harrah", url("https://github.com/harrah")),
+        Developer("eed3si9n", "Eugene Yokota", "@eed3si9n", url("https://github.com/eed3si9n")),
+        Developer("jsuereth", "Josh Suereth", "@jsuereth", url("https://github.com/jsuereth"))
+      ),
+      bintrayReleaseOnPublish := false,
+      bintrayOrganization := Some("sbt"),
+      bintrayRepository := "maven-releases",
+      bintrayPackage := "io"
+    )),
     publish := ()
   )
 
