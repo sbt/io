@@ -11,15 +11,15 @@ import RichURI._
 
 object RichURISpecification extends Properties("Rich URI") {
   val strGen = {
-    val charGen = frequency((1, value(' ')), (9, alphaChar))
+    val charGen = frequency((1, const(' ')), (9, alphaChar))
     val withEmptyGen = for (cs <- listOf(charGen)) yield cs.mkString
     withEmptyGen map (_.trim.replace(" ", "%20")) filter (!_.isEmpty)
   }
 
   val pathGen =
-    for (s <- listOf1(strGen)) yield s.mkString("/", "/", "")
+    for (s <- nonEmptyListOf(strGen)) yield s.mkString("/", "/", "")
 
-  def nullable[T >: Null](g: Gen[T]): Gen[T] = frequency((1, value(null)), (25, g))
+  def nullable[T >: Null](g: Gen[T]): Gen[T] = frequency((1, const(null)), (25, g))
 
   implicit val arbitraryURI: Arbitrary[URI] =
     Arbitrary(

@@ -20,7 +20,7 @@ object CopySpec extends Properties("Copy") {
     Gen.frequency(
       80 -> Gen.oneOf(derivedSize),
       8 -> randomSize,
-      1 -> Gen.value(0))
+      1 -> Gen.const(0))
 
   property("same contents") = forAll(fileSizeGen, arbLong.arbitrary) { (size: Long, seed: Long) =>
     IO.withTemporaryDirectory { dir =>

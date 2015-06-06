@@ -4,6 +4,7 @@
 package sbt.io
 
 import java.io.File
+import scala.language.implicitConversions
 
 trait Mapper {
   type PathMap = File => Option[String]
