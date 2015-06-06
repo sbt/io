@@ -1,7 +1,6 @@
-/* sbt -- Simple Build Tool
- * Copyright 2011 Sanjin Sehic
+/* sbt
+ * Copyright 2009-2015 Typesafe, Inc, Mark Harrah, and others
  */
-
 package sbt
 
 import java.net.URI

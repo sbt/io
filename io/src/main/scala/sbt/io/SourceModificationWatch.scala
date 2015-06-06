@@ -1,5 +1,5 @@
-/* sbt -- Simple Build Tool
- * Copyright 2009, 2010  Mikko Peltonen, Stuart Roebuck, Mark Harrah
+/* sbt
+ * Copyright 2009-2015 Typesafe, Inc, Mark Harrah, and others
  */
 package sbt
 
