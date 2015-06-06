@@ -1,6 +1,7 @@
 /* sbt -- Simple Build Tool
  * Copyright 2012 Eugene Vigdorchik */
 
+/*
 package sbt.io
 
 import org.scalacheck._
@@ -53,3 +54,4 @@ object RichURISpecification extends Properties("Rich URI") {
     uri.withoutMarkerScheme.getFragment == uri.getFragment
   }
 }
+*/

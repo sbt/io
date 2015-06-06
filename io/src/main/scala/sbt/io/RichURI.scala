@@ -1,6 +1,8 @@
 /* sbt
  * Copyright 2009-2015 Typesafe, Inc, Mark Harrah, and others
  */
+
+/* TODO: port fixes from Activator.
 package sbt.io
 
 import java.net.URI
@@ -51,3 +53,4 @@ object RichURI {
   /** Provides additional convenience methods for `uri`. */
   implicit def fromURI(uri: URI): RichURI = new RichURI(uri)
 }
+*/
