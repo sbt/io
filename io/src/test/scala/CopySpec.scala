@@ -5,6 +5,7 @@ import java.util.Arrays
 import org.scalacheck._
 import Prop._
 import Arbitrary.arbLong
+import sbt.internal.io.Using
 
 object CopySpec extends Properties("Copy") {
   // set to 0.25 GB by default for success on most systems without running out of space.

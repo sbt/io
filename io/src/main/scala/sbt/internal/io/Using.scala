@@ -1,7 +1,7 @@
 /* sbt
  * Copyright 2009-2015 Typesafe, Inc, Mark Harrah, and others
  */
-package sbt.io
+package sbt.internal.io
 
 import java.io.{ Closeable, File, FileInputStream, FileOutputStream, InputStream, OutputStream }
 import java.io.{ BufferedInputStream, BufferedOutputStream, ByteArrayOutputStream, InputStreamReader, OutputStreamWriter }
@@ -13,10 +13,11 @@ import java.nio.channels.FileChannel
 import java.util.jar.{ Attributes, JarEntry, JarFile, JarInputStream, JarOutputStream, Manifest }
 import java.util.zip.{ GZIPOutputStream, ZipEntry, ZipFile, ZipInputStream, ZipOutputStream }
 
-import sbt.internal.io.ErrorHandling.translate
+import sbt.io.IO
+import ErrorHandling.translate
 import Using._
 
-abstract class Using[Source, T] {
+private[sbt] abstract class Using[Source, T] {
   protected def open(src: Source): T
   def apply[R](src: Source)(f: T => R): R =
     {
@@ -27,13 +28,13 @@ abstract class Using[Source, T] {
   protected def close(out: T): Unit
 }
 import scala.reflect.{ Manifest => SManifest }
-abstract class WrapUsing[Source, T](implicit srcMf: SManifest[Source], targetMf: SManifest[T]) extends Using[Source, T] {
+private[sbt] abstract class WrapUsing[Source, T](implicit srcMf: SManifest[Source], targetMf: SManifest[T]) extends Using[Source, T] {
   protected def label[S](m: SManifest[S]) = m.runtimeClass.getSimpleName
   protected def openImpl(source: Source): T
   protected final def open(source: Source): T =
     translate("Error wrapping " + label(srcMf) + " in " + label(targetMf) + ": ") { openImpl(source) }
 }
-trait OpenFile[T] extends Using[File, T] {
+private[sbt] trait OpenFile[T] extends Using[File, T] {
   protected def openImpl(file: File): T
   protected final def open(file: File): T =
     {
@@ -43,7 +44,7 @@ trait OpenFile[T] extends Using[File, T] {
       openImpl(file)
     }
 }
-object Using {
+private[sbt] object Using {
   def wrap[Source, T <: Closeable](openF: Source => T)(implicit srcMf: SManifest[Source], targetMf: SManifest[T]): Using[Source, T] =
     wrap(openF, closeCloseable)
   def wrap[Source, T](openF: Source => T, closeF: T => Unit)(implicit srcMf: SManifest[Source], targetMf: SManifest[T]): Using[Source, T] =

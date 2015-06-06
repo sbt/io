@@ -1,13 +1,13 @@
 /* sbt
  * Copyright 2009-2015 Typesafe, Inc, Mark Harrah, and others
  */
-package sbt.io
+package sbt.internal.io
 
 import java.io.File
-import IO._
+import sbt.io.IO._
 import Resources.error
 
-object Resources {
+private[sbt] object Resources {
   def apply(basePath: String) =
     {
       require(basePath.startsWith("/"))
@@ -25,9 +25,9 @@ object Resources {
   def error(msg: String) = throw new ResourcesException(msg)
   private val LoadErrorPrefix = "Error loading initial project: "
 }
-class ResourcesException(msg: String) extends Exception(msg)
+private[sbt] final class ResourcesException(msg: String) extends Exception(msg)
 
-class Resources(val baseDirectory: File) {
+private[sbt] final class Resources(val baseDirectory: File) {
   import Resources._
   // The returned directory is not actually read-only, but it should be treated that way
   def readOnlyResourceDirectory(group: String, name: String): File =

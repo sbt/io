@@ -3,7 +3,7 @@
  */
 package sbt.io
 
-import Using._
+import sbt.internal.io.Using, Using._
 import sbt.internal.io.ErrorHandling.translate
 
 import java.io.{ BufferedReader, ByteArrayOutputStream, BufferedWriter, File, FileInputStream, InputStream, OutputStream, PrintWriter }
@@ -571,7 +571,7 @@ object IO {
    * Any parent directories that do not exist are created.
    */
   def copyDirectory(source: File, target: File, overwrite: Boolean = false, preserveLastModified: Boolean = false): Unit =
-    copy((PathFinder(source) ***) pair Path.rebase(source, target), overwrite, preserveLastModified)
+    copy((PathFinder(source).***) pair Path.rebase(source, target), overwrite, preserveLastModified)
 
   /**
    * Copies the contents of `sourceFile` to the location of `targetFile`, overwriting any existing content.

@@ -11,6 +11,16 @@ def buildLevelSettings: Seq[Setting[_]] = Seq(
   // bintrayReleaseOnPublish in ThisBuild := false
 )
 
+def commonSettings: Seq[Setting[_]] = Seq(
+  scalaVersion := "2.10.5",
+  javacOptions in compile ++= Seq("-Xlint", "-Xlint:-serial"),
+  scalacOptions ++= Seq("-feature", "-language:implicitConversions", "-deprecation", "-Xlint"),
+  incOptions := incOptions.value.withNameHashing(true)
+  // crossScalaVersions := Seq(scala210),
+  // bintrayPackage := (bintrayPackage in ThisBuild).value,
+  // bintrayRepository := (bintrayRepository in ThisBuild).value
+)
+
 lazy val root = (project in file(".")).
   aggregate(io).
   settings(
@@ -21,6 +31,7 @@ lazy val root = (project in file(".")).
 lazy val io = (project in file("io")).
   // dependsOn(controlProj).
   settings(
+    commonSettings,
     // testedBaseSettings,
     // Util.crossBuild,
     name := "IO",
