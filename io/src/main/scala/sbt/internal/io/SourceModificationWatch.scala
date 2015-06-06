@@ -1,11 +1,12 @@
 /* sbt
  * Copyright 2009-2015 Typesafe, Inc, Mark Harrah, and others
  */
-package sbt.io
+package sbt.internal.io
 
 import annotation.tailrec
+import sbt.io.PathFinder
 
-object SourceModificationWatch {
+private[sbt] object SourceModificationWatch {
   @tailrec def watch(sourcesFinder: PathFinder, pollDelayMillis: Int, state: WatchState)(terminationCondition: => Boolean): (Boolean, WatchState) =
     {
       import state._
@@ -37,16 +38,10 @@ object SourceModificationWatch {
       }
     }
 }
-final class WatchState(val lastCallbackCallTime: Long, val previousFiles: Set[String], val awaitingQuietPeriod: Boolean, val count: Int) {
-
+private[sbt] final class WatchState(val lastCallbackCallTime: Long, val previousFiles: Set[String], val awaitingQuietPeriod: Boolean, val count: Int) {
   def previousFileCount: Int = previousFiles.size
-
-  @deprecated("Use another constructor", "0.13.6")
-  def this(lastCallbackCallTime: Long, previousFileCount: Int, awaitingQuietPeriod: Boolean, count: Int) {
-    this(lastCallbackCallTime, Set.empty[String], awaitingQuietPeriod, count)
-  }
 }
 
-object WatchState {
+private[sbt] object WatchState {
   def empty = new WatchState(0L, Set.empty[String], false, 0)
 }
