@@ -40,8 +40,8 @@ final class RichFile(val asFile: File) {
       if (dot < 0) (nme, "") else (nme.substring(0, dot), nme.substring(dot + 1))
     }
 
-  def relativize(sub: File): Option[File] = Path.relativizeFile(asFile, sub)
-  def relativeTo(base: File): Option[File] = Path.relativizeFile(base, asFile)
+  def relativize(sub: File): Option[File] = IO.relativizeFile(asFile, sub)
+  def relativeTo(base: File): Option[File] = IO.relativizeFile(base, asFile)
 
   def hash: Array[Byte] = Hash(asFile)
   def hashString: String = Hash.toHex(hash)
@@ -73,9 +73,6 @@ object Path extends PathExtra {
 
   /** The separator character of the platform.*/
   val sep = java.io.File.separatorChar
-
-  @deprecated("Use IO.relativizeFile", "0.13.1")
-  def relativizeFile(baseFile: File, file: File): Option[File] = IO.relativizeFile(baseFile, file)
 
   def toURLs(files: Seq[File]): Array[URL] = files.map(_.toURI.toURL).toArray
 }
@@ -121,9 +118,6 @@ sealed abstract class PathFinder {
    */
   final def \(literal: String): PathFinder = this / literal
 
-  @deprecated("Use pair.", "0.13.1")
-  def x_![T](mapper: File => Option[T]): Traversable[(File, T)] = pair(mapper, false)
-
   /**
    * Applies `mapper` to each path selected by this PathFinder and returns the path paired with the non-empty result.
    * If the result is empty (None) and `errorIfNone` is true, an exception is thrown.
@@ -134,9 +128,6 @@ sealed abstract class PathFinder {
       val apply = if (errorIfNone) mapper | fail else mapper
       for (file <- get; mapped <- apply(file)) yield (file, mapped)
     }
-
-  @deprecated("Use pair.", "0.13.1")
-  def x[T](mapper: File => Option[T], errorIfNone: Boolean = true): Seq[(File, T)] = pair(mapper, errorIfNone)
 
   /**
    * Selects all descendant paths with a name that matches <code>include</code> and do not have an intermediate
