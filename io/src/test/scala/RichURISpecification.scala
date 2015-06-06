@@ -27,8 +27,7 @@ object RichURISpecification extends Properties("Rich URI") {
         scheme <- identifier;
         path <- pathGen;
         fragment <- nullable(strGen)
-      ) yield new URI(scheme, "file:" + path, fragment)
-    )
+      ) yield new URI(scheme, "file:" + path, fragment))
 
   property("withoutFragment should drop fragment") = forAll { (uri: URI) =>
     uri.withoutFragment.getFragment eq null

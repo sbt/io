@@ -68,8 +68,7 @@ object CheckStash extends Specification {
       "a/b/e" -> "content1",
       "c" -> "",
       "e/g" -> "asdf",
-      "a/g/c" -> "other"
-    ) map {
+      "a/g/c" -> "other") map {
         case (f, c) => (new File(f), c)
       }
 }
