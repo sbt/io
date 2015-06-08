@@ -5,6 +5,7 @@ package sbt.io
 
 import java.io.File
 import java.util.regex.Pattern
+import scala.language.implicitConversions
 
 /** A `java.io.FileFilter` with additional methods for combining filters. */
 trait FileFilter extends java.io.FileFilter with NotNull {

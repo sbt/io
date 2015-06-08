@@ -6,6 +6,7 @@
 package sbt.io
 
 import java.net.URI
+import scala.language.implicitConversions
 
 /** Extends `URI` with additional convenience methods. */
 class RichURI(uri: URI) {

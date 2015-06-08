@@ -8,6 +8,7 @@ import IO.{ pathSplit, wrapNull }
 import java.io.File
 import java.net.URL
 import scala.collection.{ generic, immutable, mutable }
+import scala.language.implicitConversions
 
 final class RichFile(val asFile: File) {
   def /(component: String): File = if (component == ".") asFile else new File(asFile, component)
