@@ -18,7 +18,7 @@ lazy val root = (project in file(".")).
       version := "0.1.0-SNAPSHOT",
       homepage := Some(url("https://github.com/sbt/io")),
       description := "IO module for sbt",
-      licenses := List("BSD 3-Clause" -> url("https://github.com/sbt/sbt/blob/0.13/LICENSE")),
+      licenses := List("BSD New" -> url("https://github.com/sbt/sbt/blob/0.13/LICENSE")),
       scmInfo := Some(ScmInfo(url("https://github.com/sbt/io"), "git@github.com:sbt/io.git")),
       developers := List(
         Developer("harrah", "Mark Harrah", "@harrah", url("https://github.com/harrah")),
