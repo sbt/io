@@ -50,7 +50,9 @@ class RichURI(uri: URI) {
     }
 }
 
-object RichURI {
+object RichURI extends URIExtra
+
+trait URIExtra {
   /** Provides additional convenience methods for `uri`. */
   implicit def fromURI(uri: URI): RichURI = new RichURI(uri)
 }
