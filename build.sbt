@@ -14,7 +14,7 @@ lazy val root = (project in file(".")).
   aggregate(io).
   settings(
     inThisBuild(Seq(
-      organization := "org.scala-sbt",
+      organization := "org.scala-sbt.io",
       version := "0.1.0-SNAPSHOT",
       homepage := Some(url("https://github.com/sbt/io")),
       description := "IO module for sbt",
