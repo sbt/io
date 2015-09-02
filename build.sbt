@@ -7,7 +7,9 @@ def commonSettings: Seq[Setting[_]] = Seq(
   incOptions := incOptions.value.withNameHashing(true),
   crossScalaVersions := Seq(scala210, scala211),
   bintrayPackage := (bintrayPackage in ThisBuild).value,
-  bintrayRepository := (bintrayRepository in ThisBuild).value
+  bintrayRepository := (bintrayRepository in ThisBuild).value,
+  publishArtifact in Compile := true,
+  publishArtifact in Test := true
 )
 
 lazy val root = (project in file(".")).
@@ -15,7 +17,7 @@ lazy val root = (project in file(".")).
   settings(
     inThisBuild(Seq(
       organization := "org.scala-sbt",
-      version := "0.1.0-SNAPSHOT",
+      version := "1.0.0-SNAPSHOT",
       homepage := Some(url("https://github.com/sbt/io")),
       description := "IO module for sbt",
       licenses := List("BSD New" -> url("https://github.com/sbt/sbt/blob/0.13/LICENSE")),
@@ -30,7 +32,8 @@ lazy val root = (project in file(".")).
       bintrayRepository := "maven-releases",
       bintrayPackage := "io"
     )),
-    publish := ()
+    publish := (),
+    publishArtifact := false
   )
 
 // Path, IO (formerly FileUtilities), NameFilter and other I/O utility classes
