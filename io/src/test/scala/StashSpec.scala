@@ -3,44 +3,41 @@
 
 package sbt.io
 
-import org.specs2._
-import mutable.Specification
+import org.scalatest._
 
 import IO._
 import java.io.File
 import Function.tupled
 
-object CheckStash extends Specification {
-  "stash" should {
-    "handle empty files" in {
-      stash(Set()) {}
-      true must beTrue
-    }
-
-    "move files during execution" in {
-      WithFiles(TestFiles: _*)(checkMove)
-    }
-
-    "restore files on exceptions but not errors" in {
-      WithFiles(TestFiles: _*)(checkRestore)
-    }
+class StashSpec extends FlatSpec with Matchers {
+  "stash" should "handle empty files" in {
+    stash(Set()) {}
+    assert(true)
   }
 
-  def checkRestore(seq: Seq[File]) = {
+  it should "move files during execution" in {
+    WithFiles(TestFiles: _*)(checkMove)
+  }
+
+  it should "restore files on exceptions but not errors" in {
+    WithFiles(TestFiles: _*)(checkRestore)
+  }
+
+  def checkRestore(seq: Seq[File]): Unit = {
     allCorrect(seq)
 
-    stash0(seq, throw new TestRuntimeException) must beFalse
+    stash0(seq, throw new TestRuntimeException) shouldBe false
     allCorrect(seq)
 
-    stash0(seq, throw new TestException) must beFalse
+    stash0(seq, throw new TestException) shouldBe false
     allCorrect(seq)
 
-    stash0(seq, throw new TestError) must beFalse
+    stash0(seq, throw new TestError) shouldBe false
     noneExist(seq)
   }
-  def checkMove(seq: Seq[File]) = {
+  def checkMove(seq: Seq[File]): Unit = {
     allCorrect(seq)
-    stash0(seq, ()) must beTrue
+    assert(stash0(seq, ()))
     noneExist(seq)
   }
   def stash0(seq: Seq[File], post: => Unit): Boolean =
@@ -54,13 +51,13 @@ object CheckStash extends Specification {
       case _: TestError | _: TestException | _: TestRuntimeException => false
     }
 
-  def allCorrect(s: Seq[File]) = (s.toList zip TestFiles.toList).foreach((correct _).tupled)
-  def correct(check: File, ref: (File, String)) =
+  def allCorrect(s: Seq[File]): Unit = (s.toList zip TestFiles.toList).foreach((correct _).tupled)
+  def correct(check: File, ref: (File, String)): Unit =
     {
-      check.exists must beTrue
-      read(check) must equalTo(ref._2)
+      assert(check.exists)
+      read(check) shouldBe ref._2
     }
-  def noneExist(s: Seq[File]) = s.forall(!_.exists) must beTrue
+  def noneExist(s: Seq[File]): Unit = s.forall(!_.exists) shouldBe true
 
   lazy val TestFiles =
     Seq(

@@ -7,6 +7,6 @@ object Dependencies {
 
   lazy val scalaCompiler = Def.setting { "org.scala-lang" % "scala-compiler" % scalaVersion.value }
 
-  val scalaCheck           = "org.scalacheck" %% "scalacheck" % "1.11.5"
-  val specs2               = "org.specs2" %% "specs2" % "2.3.11"
+  val scalaCheck           = "org.scalacheck" %% "scalacheck" % "1.12.4"
+  val scalatest            = "org.scalatest" %% "scalatest" % "2.2.4"
 }
