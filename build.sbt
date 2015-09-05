@@ -32,6 +32,7 @@ lazy val root = (project in file(".")).
       bintrayRepository := "maven-releases",
       bintrayPackage := "io"
     )),
+    name := "IO Root",
     publish := (),
     publishArtifact := false
   )

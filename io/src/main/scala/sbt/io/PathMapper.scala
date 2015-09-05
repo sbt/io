@@ -7,7 +7,7 @@ import java.io.File
 import scala.language.implicitConversions
 import sbt.internal.io.Alternatives
 
-trait Mapper {
+abstract class Mapper {
   type PathMap = File => Option[String]
   type FileMap = File => Option[File]
 
