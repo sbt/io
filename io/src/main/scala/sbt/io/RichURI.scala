@@ -9,7 +9,7 @@ import java.net.URI
 import scala.language.implicitConversions
 
 /** Extends `URI` with additional convenience methods. */
-class RichURI(uri: URI) {
+final class RichURI(uri: URI) {
   /**
    * Provides a case-class-like `copy` method for URI.
    * Note that this method simply passes the individual components of this URI to the URI constructor
@@ -48,10 +48,5 @@ class RichURI(uri: URI) {
       else
         uri
     }
-}
-
-object RichURI {
-  /** Provides additional convenience methods for `uri`. */
-  implicit def fromURI(uri: URI): RichURI = new RichURI(uri)
 }
 */

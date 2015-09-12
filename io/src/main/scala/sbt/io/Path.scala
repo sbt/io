@@ -50,16 +50,8 @@ final class RichFile(val asFile: File) {
 }
 import java.io.File
 import File.pathSeparator
-trait PathLow {
-  implicit def singleFileFinder(file: File): PathFinder = PathFinder(file)
-}
 
-trait PathExtra extends Alternatives with Mapper with PathLow {
-  implicit def richFile(file: File): RichFile = new RichFile(file)
-  implicit def filesToFinder(cc: Traversable[File]): PathFinder = PathFinder.strict(cc)
-}
-
-object Path extends PathExtra {
+object Path extends Mapper {
   def apply(f: File): RichFile = new RichFile(f)
   def apply(f: String): RichFile = new RichFile(new File(f))
   def fileProperty(name: String): File = new File(System.getProperty(name))
@@ -79,6 +71,7 @@ object Path extends PathExtra {
 
   def toURLs(files: Seq[File]): Array[URL] = files.map(_.toURI.toURL).toArray
 }
+
 object PathFinder {
   /** A <code>PathFinder</code> that always produces the empty set of <code>Path</code>s.*/
   val empty = new PathFinder { private[sbt] def addTo(fileSet: mutable.Set[File]) {} }
@@ -96,6 +89,7 @@ object PathFinder {
  */
 sealed abstract class PathFinder {
   import Path._
+  import syntax._
 
   /** The union of the paths found by this <code>PathFinder</code> with the paths found by 'paths'.*/
   def +++(paths: PathFinder): PathFinder = new Paths(this, paths)
