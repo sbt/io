@@ -6,6 +6,7 @@ import org.scalacheck._
 import Prop._
 import Arbitrary.arbLong
 import sbt.internal.io.Using
+import scala.annotation.tailrec
 
 object CopySpec extends Properties("Copy") {
   // set to 0.25 GB by default for success on most systems without running out of space.
@@ -21,7 +22,8 @@ object CopySpec extends Properties("Copy") {
     Gen.frequency(
       80 -> Gen.oneOf(derivedSize),
       8 -> randomSize,
-      1 -> Gen.const(0))
+      1 -> Gen.const(0)
+    )
 
   property("same contents") = forAll(fileSizeGen, arbLong.arbitrary) { (size: Long, seed: Long) =>
     IO.withTemporaryDirectory { dir =>
@@ -34,11 +36,11 @@ object CopySpec extends Properties("Copy") {
     }
   }
 
-  def generate(seed: Long, size: Long, file: File) {
+  def generate(seed: Long, size: Long, file: File) = {
     val rnd = new java.util.Random(seed)
 
     val buffer = new Array[Byte](BufferSize)
-    def loop(offset: Long) {
+    @tailrec def loop(offset: Long): Unit = {
       val len = math.min(size - offset, BufferSize)
       if (len > 0) {
         rnd.nextBytes(buffer)
@@ -48,14 +50,14 @@ object CopySpec extends Properties("Copy") {
     }
     if (size == 0L) IO.touch(file) else loop(0)
   }
-  def checkContentsSame(f1: File, f2: File) {
+  def checkContentsSame(f1: File, f2: File) = {
     val len = f1.length
     assert(len == f2.length, "File lengths differ: " + (len, f2.length).toString + " for " + (f1, f2).toString)
     Using.fileInputStream(f1) { in1 =>
       Using.fileInputStream(f2) { in2 =>
         val buffer1 = new Array[Byte](BufferSize)
         val buffer2 = new Array[Byte](BufferSize)
-        def loop(offset: Long): Unit = if (offset < len) {
+        @tailrec def loop(offset: Long): Unit = if (offset < len) {
           val read1 = in1.read(buffer1)
           val read2 = in2.read(buffer2)
           assert(read1 == read2, "Read " + (read1, read2).toString + " bytes from " + (f1, f2).toString)

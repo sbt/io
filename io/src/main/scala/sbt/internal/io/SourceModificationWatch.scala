@@ -30,7 +30,7 @@ private[sbt] object SourceModificationWatch {
       if (triggered)
         (true, newState)
       else {
-        Thread.sleep(pollDelayMillis)
+        Thread.sleep(pollDelayMillis.toLong)
         if (terminationCondition)
           (false, newState)
         else

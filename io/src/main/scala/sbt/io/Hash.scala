@@ -14,9 +14,9 @@ object Hash {
   def toHex(bytes: Array[Byte]): String =
     {
       val buffer = new StringBuilder(bytes.length * 2)
-      for (i <- 0 until bytes.length) {
+      for (i <- bytes.indices) {
         val b = bytes(i)
-        val bi: Int = if (b < 0) b + 256 else b
+        val bi: Int = if (b < 0) b + 256 else b.toInt
         buffer append toHex((bi >>> 4).asInstanceOf[Byte])
         buffer append toHex((bi & 0x0F).asInstanceOf[Byte])
       }
