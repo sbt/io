@@ -134,7 +134,7 @@ object IO {
    * If a file already exists, the last modified time is set to the current time.
    * It is not guaranteed that all files will have the same last modified time after this call.
    */
-  def touch(files: Traversable[File]): Unit = files.foreach(f => touch(f))
+  def touch(files: Traversable[File]): Unit = files foreach (f => { touch(f); () })
 
   /**
    * Creates a file at the given location if it doesn't exist.
@@ -324,7 +324,7 @@ object IO {
     {
       val file = File.createTempFile(prefix, postfix)
       try { action(file) }
-      finally { file.delete() }
+      finally { file.delete(); () }
     }
 
   private[sbt] def jars(dir: File): Iterable[File] = listFiles(dir, GlobFilter("*.jar"))
@@ -367,6 +367,7 @@ object IO {
       if (!deleted && file.isDirectory) {
         delete(listFiles(file))
         file.delete
+        ()
       }
     }
   }
@@ -574,8 +575,10 @@ object IO {
    * If `preserveLastModified` is `true`, the last modified times are transferred as well.
    * Any parent directories that do not exist are created.
    */
-  def copyDirectory(source: File, target: File, overwrite: Boolean = false, preserveLastModified: Boolean = false): Unit =
+  def copyDirectory(source: File, target: File, overwrite: Boolean = false, preserveLastModified: Boolean = false): Unit = {
     copy(PathFinder(source).allPaths pair Path.rebase(source, target), overwrite, preserveLastModified)
+    ()
+  }
 
   /**
    * Copies the contents of `sourceFile` to the location of `targetFile`, overwriting any existing content.
@@ -601,8 +604,10 @@ object IO {
           sys.error("Could not copy '" + sourceFile + "' to '" + targetFile + "' (" + copied + "/" + in.size + " bytes copied)")
       }
     }
-    if (preserveLastModified)
+    if (preserveLastModified) {
       copyLastModified(sourceFile, targetFile)
+      ()
+    }
   }
   /** Transfers the last modified time of `sourceFile` to `targetFile`. */
   def copyLastModified(sourceFile: File, targetFile: File) = {

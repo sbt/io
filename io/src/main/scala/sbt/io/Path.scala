@@ -77,7 +77,7 @@ object PathFinder {
   val empty = new PathFinder { private[sbt] def addTo(fileSet: mutable.Set[File]) = () }
   def strict(files: Traversable[File]): PathFinder = apply(files)
   def apply(files: => Traversable[File]): PathFinder = new PathFinder {
-    private[sbt] def addTo(fileSet: mutable.Set[File]) = fileSet ++= files
+    private[sbt] def addTo(fileSet: mutable.Set[File]) = { fileSet ++= files; () }
   }
   def apply(file: File): PathFinder = new SingleFile(file)
 }
@@ -184,7 +184,7 @@ sealed abstract class PathFinder {
   override def toString = get.mkString("\n   ", "\n   ", "")
 }
 private class SingleFile(asFile: File) extends PathFinder {
-  private[sbt] def addTo(fileSet: mutable.Set[File]): Unit = if (asFile.exists) fileSet += asFile
+  private[sbt] def addTo(fileSet: mutable.Set[File]): Unit = if (asFile.exists) { fileSet += asFile; () }
 }
 private abstract class FilterFiles extends PathFinder with FileFilter {
   def parent: PathFinder
@@ -230,5 +230,6 @@ private class ExcludeFiles(include: PathFinder, exclude: PathFinder) extends Pat
 
     includeSet --= excludeSet
     pathSet ++= includeSet
+    ()
   }
 }
