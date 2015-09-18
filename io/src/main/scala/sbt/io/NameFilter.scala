@@ -8,7 +8,7 @@ import java.util.regex.Pattern
 import scala.language.implicitConversions
 
 /** A `java.io.FileFilter` with additional methods for combining filters. */
-trait FileFilter extends java.io.FileFilter with NotNull {
+trait FileFilter extends java.io.FileFilter {
   /** Constructs a filter that accepts a `File` if it matches either this filter or the given `filter`. */
   def ||(filter: FileFilter): FileFilter = new SimpleFileFilter(file => accept(file) || filter.accept(file))
 
@@ -23,7 +23,7 @@ trait FileFilter extends java.io.FileFilter with NotNull {
 }
 
 /** A filter on Strings.  This also functions as a [[FileFilter]] by applying the String filter to the value of a File's `getName`. */
-trait NameFilter extends FileFilter with NotNull {
+trait NameFilter extends FileFilter {
   /** Returns `true` to include the `name`, `false` to exclude it. */
   def accept(name: String): Boolean
 

@@ -1,13 +1,23 @@
 import Dependencies._
 
+def baseVersion: String = "1.0.0-M3"
+
 def commonSettings: Seq[Setting[_]] = Seq(
-  scalaVersion := "2.10.5",
+  scalaVersion := scala211,
   javacOptions in compile ++= Seq("-Xlint", "-Xlint:-serial"),
-  scalacOptions ++= Seq("-feature", "-language:implicitConversions", "-deprecation", "-Xlint"),
+  scalacOptions ++= Seq("-encoding", "utf8"),
+  scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked", "-Xlint"),
+  scalacOptions  += "-language:higherKinds",
+  scalacOptions  += "-language:implicitConversions",
+  scalacOptions  += "-Xfuture",
+  scalacOptions  += "-Yinline-warnings",
+//scalacOptions  += "-Yfatal-warnings",
+  scalacOptions  += "-Yno-adapted-args",
+  scalacOptions  += "-Ywarn-dead-code",
+  scalacOptions  += "-Ywarn-numeric-widen",
+  scalacOptions  += "-Ywarn-value-discard",
   incOptions := incOptions.value.withNameHashing(true),
   crossScalaVersions := Seq(scala210, scala211),
-  bintrayPackage := (bintrayPackage in ThisBuild).value,
-  bintrayRepository := (bintrayRepository in ThisBuild).value,
   publishArtifact in Compile := true,
   publishArtifact in Test := true
 )
@@ -16,21 +26,11 @@ lazy val root = (project in file(".")).
   aggregate(io).
   settings(
     inThisBuild(Seq(
-      organization := "org.scala-sbt",
-      version := "1.0.0-SNAPSHOT",
+      git.baseVersion := baseVersion,
+      bintrayPackage := "io",
       homepage := Some(url("https://github.com/sbt/io")),
       description := "IO module for sbt",
-      licenses := List("BSD New" -> url("https://github.com/sbt/sbt/blob/0.13/LICENSE")),
-      scmInfo := Some(ScmInfo(url("https://github.com/sbt/io"), "git@github.com:sbt/io.git")),
-      developers := List(
-        Developer("harrah", "Mark Harrah", "@harrah", url("https://github.com/harrah")),
-        Developer("eed3si9n", "Eugene Yokota", "@eed3si9n", url("https://github.com/eed3si9n")),
-        Developer("jsuereth", "Josh Suereth", "@jsuereth", url("https://github.com/jsuereth"))
-      ),
-      bintrayReleaseOnPublish := false,
-      bintrayOrganization := Some("sbt"),
-      bintrayRepository := "maven-releases",
-      bintrayPackage := "io"
+      scmInfo := Some(ScmInfo(url("https://github.com/sbt/io"), "git@github.com:sbt/io.git"))
     )),
     name := "IO Root",
     publish := (),
@@ -45,6 +45,5 @@ lazy val io = (project in file("io")).
     // testedBaseSettings,
     // Util.crossBuild,
     name := "IO",
-    libraryDependencies ++= Seq(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test),
-    crossScalaVersions := Seq(scala210, scala211)
+    libraryDependencies ++= Seq(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test)
   )

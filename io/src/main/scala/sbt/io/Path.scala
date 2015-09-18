@@ -74,7 +74,7 @@ object Path extends Mapper {
 
 object PathFinder {
   /** A <code>PathFinder</code> that always produces the empty set of <code>Path</code>s.*/
-  val empty = new PathFinder { private[sbt] def addTo(fileSet: mutable.Set[File]) {} }
+  val empty = new PathFinder { private[sbt] def addTo(fileSet: mutable.Set[File]) = () }
   def strict(files: Traversable[File]): PathFinder = apply(files)
   def apply(files: => Traversable[File]): PathFinder = new PathFinder {
     private[sbt] def addTo(fileSet: mutable.Set[File]) = fileSet ++= files
@@ -170,7 +170,7 @@ sealed abstract class PathFinder {
   final def getURLs: Array[URL] = get.toArray.map(_.toURI.toURL)
   /** Evaluates this finder and converts the results to a distinct sequence of absolute path strings.*/
   final def getPaths: Seq[String] = get.map(_.absolutePath)
-  private[sbt] def addTo(fileSet: mutable.Set[File])
+  private[sbt] def addTo(fileSet: mutable.Set[File]): Unit
 
   /**
    * Create a PathFinder from this one where each path has a unique name.
@@ -196,14 +196,14 @@ private abstract class FilterFiles extends PathFinder with FileFilter {
       fileSet += new File(file, matchedFile.getName)
 }
 private class DescendantOrSelfPathFinder(val parent: PathFinder, val filter: FileFilter) extends FilterFiles {
-  private[sbt] def addTo(fileSet: mutable.Set[File]) {
+  private[sbt] def addTo(fileSet: mutable.Set[File]) = {
     for (file <- parent.get) {
       if (accept(file))
         fileSet += file
       handleFileDescendant(file, fileSet)
     }
   }
-  private def handleFileDescendant(file: File, fileSet: mutable.Set[File]) {
+  private def handleFileDescendant(file: File, fileSet: mutable.Set[File]): Unit = {
     handleFile(file, fileSet)
     for (childDirectory <- wrapNull(file listFiles DirectoryFilter))
       handleFileDescendant(new File(file, childDirectory.getName), fileSet)
@@ -215,13 +215,13 @@ private class ChildPathFinder(val parent: PathFinder, val filter: FileFilter) ex
       handleFile(file, fileSet)
 }
 private class Paths(a: PathFinder, b: PathFinder) extends PathFinder {
-  private[sbt] def addTo(fileSet: mutable.Set[File]) {
+  private[sbt] def addTo(fileSet: mutable.Set[File]) = {
     a.addTo(fileSet)
     b.addTo(fileSet)
   }
 }
 private class ExcludeFiles(include: PathFinder, exclude: PathFinder) extends PathFinder {
-  private[sbt] def addTo(pathSet: mutable.Set[File]) {
+  private[sbt] def addTo(pathSet: mutable.Set[File]) = {
     val includeSet = new mutable.LinkedHashSet[File]
     include.addTo(includeSet)
 
