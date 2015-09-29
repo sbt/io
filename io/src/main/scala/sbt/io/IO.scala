@@ -322,7 +322,10 @@ object IO {
     {
       val file = File.createTempFile(prefix, postfix)
       try { action(file) }
-      finally { file.delete(); () }
+      finally {
+        file.delete()
+        ()
+      }
     }
 
   private[sbt] def jars(dir: File): Iterable[File] = listFiles(dir, GlobFilter("*.jar"))
@@ -571,10 +574,11 @@ object IO {
    * If `preserveLastModified` is `true`, the last modified times are transferred as well.
    * Any parent directories that do not exist are created.
    */
-  def copyDirectory(source: File, target: File, overwrite: Boolean = false, preserveLastModified: Boolean = false): Unit = {
-    copy(PathFinder(source).allPaths pair Path.rebase(source, target), overwrite, preserveLastModified)
-    ()
-  }
+  def copyDirectory(source: File, target: File, overwrite: Boolean = false, preserveLastModified: Boolean = false): Unit =
+    {
+      copy(PathFinder(source).allPaths pair Path.rebase(source, target), overwrite, preserveLastModified)
+      ()
+    }
 
   /**
    * Copies the contents of `sourceFile` to the location of `targetFile`, overwriting any existing content.
