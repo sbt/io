@@ -11,7 +11,7 @@ private[sbt] object SourceModificationWatch {
     {
       import state._
 
-      val sourceFiles: Iterable[java.io.File] = sourcesFinder.get
+      val sourceFiles: Vector[java.io.File] = sourcesFinder.get
       val sourceFilesPath: Set[String] = sourceFiles.map(_.getCanonicalPath)(collection.breakOut)
       val lastModifiedTime =
         (0L /: sourceFiles) { (acc, file) => math.max(acc, file.lastModified) }

@@ -20,7 +20,7 @@ abstract class Mapper {
    */
   def relativeTo(base: File): PathMap = IO.relativize(base, _)
 
-  def relativeTo(bases: Iterable[File], zero: PathMap = transparent): PathMap = fold(zero, bases)(relativeTo)
+  def relativeTo(bases: Vector[File], zero: PathMap = transparent): PathMap = fold(zero, bases)(relativeTo)
 
   /**
    * A path mapper that pairs a descendent of `oldBase` with `newBase` prepended to the path relative to `oldBase`.
@@ -73,7 +73,7 @@ abstract class Mapper {
    */
   def resolve(newDirectory: File): FileMap = file => if (file.isAbsolute) None else Some(new File(newDirectory, file.getPath))
 
-  def rebase(oldBases: Iterable[File], newBase: File, zero: FileMap = transparent): FileMap =
+  def rebase(oldBases: Vector[File], newBase: File, zero: FileMap = transparent): FileMap =
     fold(zero, oldBases)(old => rebase(old, newBase))
 
   /**
@@ -100,16 +100,16 @@ abstract class Mapper {
    * Selects all descendants of `base` directory and maps them to a path relative to `base`.
    * `base` itself is not included.
    */
-  def allSubpaths(base: File): Traversable[(File, String)] =
+  def allSubpaths(base: File): Vector[(File, String)] =
     selectSubpaths(base, AllPassFilter)
 
   /**
    * Selects descendants of `base` directory matching `filter` and maps them to a path relative to `base`.
    * `base` itself is not included.
    */
-  def selectSubpaths(base: File, filter: FileFilter): Traversable[(File, String)] =
+  def selectSubpaths(base: File, filter: FileFilter): Vector[(File, String)] =
     (PathFinder(base) ** filter --- PathFinder(base)) pair (relativeTo(base) | flat)
 
-  private[this] def fold[A, B, T](zero: A => Option[B], in: Iterable[T])(f: T => A => Option[B]): A => Option[B] =
+  private[this] def fold[A, B, T](zero: A => Option[B], in: Vector[T])(f: T => A => Option[B]): A => Option[B] =
     (zero /: in)((mapper, base) => f(base) | mapper)
 }

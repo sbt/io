@@ -11,7 +11,7 @@ import Function.tupled
 
 class StashSpec extends FlatSpec with Matchers {
   "stash" should "handle empty files" in {
-    stash(Set()) {}
+    stash(Vector()) {}
     assert(true)
   }
 
@@ -42,7 +42,7 @@ class StashSpec extends FlatSpec with Matchers {
   }
   def stash0(seq: Seq[File], post: => Unit): Boolean =
     try {
-      stash(Set() ++ seq) {
+      stash(Vector() ++ seq) {
         noneExist(seq)
         post
       }

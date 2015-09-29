@@ -32,9 +32,9 @@ object IO {
   private[sbt] val FileScheme = "file"
 
   /** The newline string for this system, as obtained by the line.separator system property. */
-  val Newline = System.getProperty("line.separator")
+  val Newline: String = System.getProperty("line.separator")
 
-  val utf8 = Charset.forName("UTF-8")
+  val utf8: Charset = Charset.forName("UTF-8")
 
   /**
    * Returns a URL for the directory or jar containing the the class file `cl`.
@@ -133,7 +133,11 @@ object IO {
    * If a file already exists, the last modified time is set to the current time.
    * It is not guaranteed that all files will have the same last modified time after this call.
    */
-  def touch(files: Traversable[File]): Unit = files foreach (f => { touch(f); () })
+  def touch(files: Vector[File]): Unit =
+    files.foreach(f => {
+      touch(f)
+      ()
+    })
 
   /**
    * Creates a file at the given location if it doesn't exist.
@@ -150,7 +154,7 @@ object IO {
   }
 
   /** Creates directories `dirs` and all parent directories.  It tries to work around a race condition in `File.mkdirs()` by retrying up to a limit.*/
-  def createDirectories(dirs: Traversable[File]): Unit =
+  def createDirectories(dirs: Vector[File]): Unit =
     dirs.foreach(createDirectory)
 
   /** Creates directory `dir` and all parent directories.  It tries to work around a race condition in `File.mkdirs()` by retrying up to a limit.*/
@@ -328,7 +332,7 @@ object IO {
       }
     }
 
-  private[sbt] def jars(dir: File): Iterable[File] = listFiles(dir, GlobFilter("*.jar"))
+  private[sbt] def jars(dir: File): Vector[File] = listFiles(dir, GlobFilter("*.jar"))
 
   /** Deletes all empty directories in the set.  Any non-empty directories are ignored. */
   def deleteIfEmpty(dirs: collection.Set[File]): Unit =
@@ -341,10 +345,10 @@ object IO {
     }
 
   /** Deletes each file or directory (recursively) in `files`.*/
-  def delete(files: Iterable[File]): Unit = files.foreach(delete)
+  def delete(files: Vector[File]): Unit = files.foreach(delete)
 
   /** Deletes each file or directory in `files` recursively.  Any empty parent directories are deleted, recursively.*/
-  def deleteFilesEmptyDirs(files: Iterable[File]): Unit =
+  def deleteFilesEmptyDirs(files: Vector[File]): Unit =
     {
       def isEmptyDirectory(dir: File) = dir.isDirectory && listFiles(dir).isEmpty
       def parents(fs: Set[File]) = fs flatMap { f => Option(f.getParentFile) }
@@ -374,17 +378,17 @@ object IO {
   }
 
   /** Returns the children of directory `dir` that match `filter` in a non-null array.*/
-  def listFiles(filter: java.io.FileFilter)(dir: File): Array[File] = wrapNull(dir.listFiles(filter))
+  def listFiles(filter: java.io.FileFilter)(dir: File): Vector[File] = wrapNull(dir.listFiles(filter))
 
   /** Returns the children of directory `dir` that match `filter` in a non-null array.*/
-  def listFiles(dir: File, filter: java.io.FileFilter): Array[File] = wrapNull(dir.listFiles(filter))
+  def listFiles(dir: File, filter: java.io.FileFilter): Vector[File] = wrapNull(dir.listFiles(filter))
 
   /** Returns the children of directory `dir` in a non-null array.*/
-  def listFiles(dir: File): Array[File] = wrapNull(dir.listFiles())
+  def listFiles(dir: File): Vector[File] = wrapNull(dir.listFiles())
 
-  private[sbt] def wrapNull(a: Array[File]) =
-    if (Option(a).isEmpty) new Array[File](0)
-    else a
+  private[sbt] def wrapNull(a: Array[File]): Vector[File] =
+    if (Option(a).isEmpty) Vector.empty[File]
+    else a.toVector
 
   /**
    * Creates a jar file.
@@ -392,18 +396,18 @@ object IO {
    * @param outputJar The file to write the jar to.
    * @param manifest The manifest for the jar.
    */
-  def jar(sources: Traversable[(File, String)], outputJar: File, manifest: Manifest): Unit =
-    archive(sources.toSeq, outputJar, Some(manifest))
+  def jar(sources: Vector[(File, String)], outputJar: File, manifest: Manifest): Unit =
+    archive(sources.toVector, outputJar, Some(manifest))
 
   /**
    * Creates a zip file.
    * @param sources The files to include in the zip file paired with the entry name in the zip.  Only the pairs explicitly listed are included.
    * @param outputZip The file to write the zip to.
    */
-  def zip(sources: Traversable[(File, String)], outputZip: File): Unit =
-    archive(sources.toSeq, outputZip, None)
+  def zip(sources: Vector[(File, String)], outputZip: File): Unit =
+    archive(sources.toVector, outputZip, None)
 
-  private def archive(sources: Seq[(File, String)], outputFile: File, manifest: Option[Manifest]) = {
+  private def archive(sources: Vector[(File, String)], outputFile: File, manifest: Option[Manifest]) = {
     if (outputFile.isDirectory)
       sys.error("Specified output file " + outputFile + " is a directory.")
     else {
@@ -415,7 +419,7 @@ object IO {
       }
     }
   }
-  private def writeZip(sources: Seq[(File, String)], output: ZipOutputStream)(createEntry: String => ZipEntry) = {
+  private def writeZip(sources: Vector[(File, String)], output: ZipOutputStream)(createEntry: String => ZipEntry) = {
     val files = sources.flatMap { case (file, name) => if (file.isFile) (file, normalizeName(name)) :: Nil else Nil }
 
     val now = System.currentTimeMillis
@@ -459,19 +463,19 @@ object IO {
   }
 
   // map a path a/b/c to List("a", "b")
-  private def relativeComponents(path: String): List[String] =
-    path.split("/").toList.dropRight(1)
+  private def relativeComponents(path: String): Vector[String] =
+    path.split("/").toVector.dropRight(1)
 
   // map components List("a", "b", "c") to List("a/b/c/", "a/b/", "a/", "")
-  private def directories(path: List[String]): List[String] =
-    path.foldLeft(List(""))((e, l) => (e.head + l + "/") :: e)
+  private def directories(path: Vector[String]): Vector[String] =
+    (path.foldLeft(List(""))((e, l) => (e.head + l + "/") :: e)).toVector
 
   // map a path a/b/c to List("a/b/", "a/")
-  private def directoryPaths(path: String): List[String] =
+  private def directoryPaths(path: String): Vector[String] =
     directories(relativeComponents(path)).filter(_.length > 1)
 
   // produce a sorted list of all the subdirectories of all provided files
-  private def allDirectoryPaths(files: Iterable[(File, String)]) =
+  private def allDirectoryPaths(files: Vector[(File, String)]) =
     TreeSet[String]() ++ (files flatMap { case (file, name) => directoryPaths(name) })
 
   private def normalizeDirName(name: String) =
@@ -550,7 +554,7 @@ object IO {
    * Any parent directories that do not exist are created.
    * The set of all target files is returned, whether or not they were updated by this method.
    */
-  def copy(sources: Traversable[(File, File)], overwrite: Boolean = false, preserveLastModified: Boolean = false): Set[File] =
+  def copy(sources: Vector[(File, File)], overwrite: Boolean = false, preserveLastModified: Boolean = false): Set[File] =
     sources.map(tupled(copyImpl(overwrite, preserveLastModified))).toSet
 
   private def copyImpl(overwrite: Boolean, preserveLastModified: Boolean)(from: File, to: File): File =
@@ -689,16 +693,16 @@ object IO {
     fileOutputStream(append)(file) { _.write(bytes) }
 
   /** Reads all of the lines from `url` using the provided `charset` or UTF-8 if `charset` is not explicitly specified. */
-  def readLinesURL(url: URL, charset: Charset = defaultCharset): List[String] =
+  def readLinesURL(url: URL, charset: Charset = defaultCharset): Vector[String] =
     urlReader(charset)(url)(readLines)
 
   /** Reads all of the lines in `file` using the provided `charset` or UTF-8 if `charset` is not explicitly specified. */
-  def readLines(file: File, charset: Charset = defaultCharset): List[String] =
+  def readLines(file: File, charset: Charset = defaultCharset): Vector[String] =
     fileReader(charset)(file)(readLines)
 
   /** Reads all of the lines from `in`.  This method does not close `in`.*/
-  def readLines(in: BufferedReader): List[String] =
-    foldLines[List[String]](in, Nil)((accum, line) => line :: accum).reverse
+  def readLines(in: BufferedReader): Vector[String] =
+    foldLines[List[String]](in, Nil)((accum, line) => line :: accum).reverse.toVector
 
   /** Applies `f` to each line read from `in`. This method does not close `in`.*/
   def foreachLine(in: BufferedReader)(f: String => Unit): Unit =
@@ -725,13 +729,13 @@ object IO {
    * A newline is written after each line and NOT before the first line.
    * If any parent directories of `file` do not exist, they are first created.
    */
-  def writeLines(file: File, lines: Seq[String], charset: Charset = defaultCharset, append: Boolean = false): Unit =
+  def writeLines(file: File, lines: Vector[String], charset: Charset = defaultCharset, append: Boolean = false): Unit =
     writer(file, lines.headOption.getOrElse(""), charset, append) { w =>
       lines.foreach { line => w.write(line); w.newLine() }
     }
 
   /** Writes `lines` to `writer` using `writer`'s `println` method. */
-  def writeLines(writer: PrintWriter, lines: Seq[String]): Unit =
+  def writeLines(writer: PrintWriter, lines: Vector[String]): Unit =
     lines foreach writer.println
 
   /**
@@ -757,9 +761,9 @@ object IO {
    *   If 'f' returns normally, delete the files.
    *   If 'f' throws an Exception, return the files to their original location.
    */
-  def stash[T](files: Set[File])(f: => T): T =
+  def stash[T](files: Vector[File])(f: => T): T =
     withTemporaryDirectory { dir =>
-      val stashed = stashLocations(dir, files.toArray)
+      val stashed = stashLocations(dir, files.toVector)
       move(stashed)
 
       try { f } catch {
@@ -769,7 +773,7 @@ object IO {
       }
     }
 
-  private def stashLocations(dir: File, files: Array[File]) =
+  private def stashLocations(dir: File, files: Vector[File]) =
     for ((file, index) <- files.zipWithIndex) yield (file, new File(dir, index.toHexString))
 
   // TODO: the reference to the other move overload does not resolve, probably due to a scaladoc bug
@@ -777,7 +781,7 @@ object IO {
    * For each pair in `files`, moves the contents of the first File to the location of the second.
    * See [[move(File,File)]] for the behavior of the individual move operations.
    */
-  def move(files: Traversable[(File, File)]): Unit =
+  def move(files: Vector[(File, File)]): Unit =
     files.foreach(Function.tupled(move))
 
   /**
@@ -866,7 +870,7 @@ object IO {
   def assertAbsolute(uri: URI): Unit = assert(uri.isAbsolute, "Not absolute: " + uri)
 
   /** Parses a classpath String into File entries according to the current platform's path separator.*/
-  def parseClasspath(s: String): Seq[File] = IO.pathSplit(s).map(new File(_)).toSeq
+  def parseClasspath(s: String): Vector[File] = IO.pathSplit(s).map(new File(_)).toVector
 
   /**
    * Constructs an `ObjectInputStream` on `wrapped` that uses `loader` to load classes.

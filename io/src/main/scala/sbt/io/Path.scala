@@ -141,10 +141,13 @@ sealed abstract class PathFinder {
    * If the result is empty (None) and `errorIfNone` is true, an exception is thrown.
    * If `errorIfNone` is false, the path is dropped from the returned Traversable.
    */
-  def pair[T](mapper: File => Option[T], errorIfNone: Boolean = true): Seq[(File, T)] =
+  def pair[T](mapper: File => Option[T], errorIfNone: Boolean = true): Vector[(File, T)] =
     {
       val apply = if (errorIfNone) mapper | fail else mapper
-      for (file <- get; mapped <- apply(file)) yield (file, mapped)
+      for {
+        file <- get
+        mapped <- apply(file)
+      } yield (file, mapped)
     }
 
   /**
@@ -157,26 +160,26 @@ sealed abstract class PathFinder {
     (this ** include) --- (this ** intermediateExclude ** include)
 
   /**
-   * Evaluates this finder and converts the results to a `Seq` of distinct `File`s.
+   * Evaluates this finder and converts the results to a `Vector` of distinct `File`s.
    * The files returned by this method will reflect the underlying filesystem at the
    * time of calling.  If the filesystem changes, two calls to this method might be different.
    */
-  final def get: Seq[File] =
+  final def get: Vector[File] =
     {
       import collection.JavaConversions._
       val pathSet: mutable.Set[File] = new java.util.LinkedHashSet[File]
       addTo(pathSet)
-      pathSet.toSeq
+      pathSet.toVector
     }
 
   /** Only keeps paths for which `f` returns true.  It is non-strict, so it is not evaluated until the returned finder is evaluated.*/
   final def filter(f: File => Boolean): PathFinder = PathFinder(get filter f)
   /* Non-strict flatMap: no evaluation occurs until the returned finder is evaluated.*/
   final def flatMap(f: File => PathFinder): PathFinder = PathFinder(get.flatMap(p => f(p).get))
-  /** Evaluates this finder and converts the results to an `Array` of `URL`s..*/
-  final def getURLs: Array[URL] = get.toArray.map(_.toURI.toURL)
+  /** Evaluates this finder and converts the results to an `Vector` of `URL`s..*/
+  final def getURLs: Vector[URL] = get.map(_.toURI.toURL)
   /** Evaluates this finder and converts the results to a distinct sequence of absolute path strings.*/
-  final def getPaths: Seq[String] = get.map(_.absolutePath)
+  final def getPaths: Vector[String] = get.map(_.absolutePath)
   private[sbt] def addTo(fileSet: mutable.Set[File]): Unit
 
   /**
