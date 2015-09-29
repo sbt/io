@@ -8,11 +8,11 @@ import sbt.io.IO._
 import Resources.error
 
 private[sbt] object Resources {
-  def apply(basePath: String) =
+  def apply(basePath: String): Resources =
     {
       require(basePath.startsWith("/"))
       val resource = getClass.getResource(basePath)
-      if (resource == null)
+      if (Option(resource).isEmpty)
         error("Resource base directory '" + basePath + "' not on classpath.")
       else {
         val file = toFile(resource)
@@ -22,7 +22,7 @@ private[sbt] object Resources {
           error("Resource base directory '" + basePath + "' does not exist.")
       }
     }
-  def error(msg: String) = throw new ResourcesException(msg)
+  def error(msg: String): Nothing = throw new ResourcesException(msg)
   private val LoadErrorPrefix = "Error loading initial project: "
 }
 private[sbt] final class ResourcesException(msg: String) extends Exception(msg)

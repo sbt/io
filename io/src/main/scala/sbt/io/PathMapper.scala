@@ -57,7 +57,9 @@ abstract class Mapper {
   /** A mapper that ignores all inputs.*/
   def transparent: Any => Option[Nothing] = _ => None
 
-  def normalizeBase(base: String) = if (!base.isEmpty && !base.endsWith("/")) base + "/" else base
+  def normalizeBase(base: String): String =
+    if (!base.isEmpty && !base.endsWith("/")) base + "/"
+    else base
 
   /**
    * Pairs a File with the absolute File obtained by calling `getAbsoluteFile`.
@@ -75,7 +77,8 @@ abstract class Mapper {
     fold(zero, oldBases)(old => rebase(old, newBase))
 
   /**
-   * Produces a File mapper that pairs a descendant of `oldBase` with a file in `newBase` that preserving the relative path of the original file against `oldBase`.
+   * Produces a File mapper that pairs a descendant of `oldBase` with a file in `newBase`
+   * that preserving the relative path of the original file against `oldBase`.
    * For example, if `oldBase` is `/old/x/` and `newBase` is `/new/a/`, `/old/x/y/z.txt` gets paired with `/new/a/y/z.txt`.
    */
   def rebase(oldBase: File, newBase: File): FileMap =

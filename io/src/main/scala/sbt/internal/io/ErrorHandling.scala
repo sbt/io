@@ -6,7 +6,7 @@ package sbt.internal.io
 import java.io.IOException
 
 private[sbt] object ErrorHandling {
-  def translate[T](msg: => String)(f: => T) =
+  def translate[T](msg: => String)(f: => T): T =
     try { f }
     catch {
       case e: IOException => throw new TranslatedIOException(msg + e.toString, e)
@@ -28,11 +28,11 @@ private[sbt] object ErrorHandling {
   def reducedToString(e: Throwable): String =
     if (e.getClass == classOf[RuntimeException]) {
       val msg = e.getMessage
-      if (msg == null || msg.isEmpty) e.toString else msg
-    } else
-      e.toString
+      if (Option(msg).isEmpty || msg.isEmpty) e.toString
+      else msg
+    } else e.toString
 }
 private[sbt] sealed class TranslatedException private[sbt] (msg: String, cause: Throwable) extends RuntimeException(msg, cause) {
-  override def toString = msg
+  override def toString: String = msg
 }
 private[sbt] final class TranslatedIOException private[sbt] (msg: String, cause: IOException) extends TranslatedException(msg, cause)

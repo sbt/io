@@ -93,23 +93,22 @@ object IO {
     {
       val uri = new URI(uriString)
       assert(uri.getScheme == FileScheme, "Expected protocol to be '" + FileScheme + "' in URI " + uri)
-      if (uri.getAuthority eq null)
-        new File(uri)
+      if (Option(uri.getAuthority).isEmpty) new File(uri)
       else {
         /* https://github.com/sbt/sbt/issues/564
-			* http://blogs.msdn.com/b/ie/archive/2006/12/06/file-uris-in-windows.aspx
-			* http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=5086147
-			* The specific problem here is that `uri` will have a defined authority component for UNC names like //foo/bar/some/path.jar
-			* but the File constructor requires URIs with an undefined authority component.
-			*/
+         * http://blogs.msdn.com/b/ie/archive/2006/12/06/file-uris-in-windows.aspx
+         * http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=5086147
+         * The specific problem here is that `uri` will have a defined authority component for UNC names like //foo/bar/some/path.jar
+         * but the File constructor requires URIs with an undefined authority component.
+         */
         new File(uri.getSchemeSpecificPart)
       }
     }
 
-  def assertDirectory(file: File) =
+  def assertDirectory(file: File): Unit =
     assert(file.isDirectory, (if (file.exists) "Not a directory: " else "Directory not found: ") + file)
 
-  def assertDirectories(file: File*) = file.foreach(assertDirectory)
+  def assertDirectories(file: File*): Unit = file.foreach(assertDirectory)
 
   // "base.extension" -> (base, extension)
   /**
@@ -209,8 +208,7 @@ object IO {
       val set = new HashSet[File]
       @tailrec def next(): Unit = {
         val entry = from.getNextEntry
-        if (entry == null)
-          ()
+        if (Option(entry).isEmpty) ()
         else {
           val name = entry.getName
           if (filter.accept(name)) {
@@ -382,10 +380,8 @@ object IO {
   def listFiles(dir: File): Array[File] = wrapNull(dir.listFiles())
 
   private[sbt] def wrapNull(a: Array[File]) =
-    if (a == null)
-      new Array[File](0)
-    else
-      a
+    if (Option(a).isEmpty) new Array[File](0)
+    else a
 
   /**
    * Creates a jar file.
@@ -430,7 +426,7 @@ object IO {
 
     def makeDirectoryEntry(name: String) =
       {
-        //			log.debug("\tAdding directory " + relativePath + " ...")
+        //      log.debug("\tAdding directory " + relativePath + " ...")
         val e = createEntry(name)
         e setTime now
         e setSize 0
@@ -441,7 +437,7 @@ object IO {
 
     def makeFileEntry(file: File, name: String) =
       {
-        //			log.debug("\tAdding " + file + " as " + name + " ...")
+        //      log.debug("\tAdding " + file + " as " + name + " ...")
         val e = createEntry(name)
         e setTime file.lastModified
         e
@@ -610,14 +606,14 @@ object IO {
     }
   }
   /** Transfers the last modified time of `sourceFile` to `targetFile`. */
-  def copyLastModified(sourceFile: File, targetFile: File) = {
+  def copyLastModified(sourceFile: File, targetFile: File): Boolean = {
     val last = sourceFile.lastModified
     // lastModified can return a negative number, but setLastModified doesn't accept it
     // see Java bug #6791812
     targetFile.setLastModified(math.max(last, 0L))
   }
   /** The default Charset used when not specified: UTF-8. */
-  def defaultCharset = utf8
+  def defaultCharset: Charset = utf8
 
   /**
    * Writes `content` to `file` using `charset` or UTF-8 if `charset` is not explicitly specified.
@@ -711,9 +707,9 @@ object IO {
   def foldLines[T](in: BufferedReader, init: T)(f: (T, String) => T): T =
     {
       def readLine(accum: T): T =
-        {
-          val line = in.readLine()
-          if (line eq null) accum else readLine(f(accum, line))
+        Option(in.readLine()) match {
+          case None       => accum
+          case Some(line) => readLine(f(accum, line))
         }
       readLine(init)
     }
@@ -738,7 +734,7 @@ object IO {
    * Writes `properties` to the File `to`, using `label` as the comment on the first line.
    * If any parent directories of `to` do not exist, they are first created.
    */
-  def write(properties: Properties, label: String, to: File) =
+  def write(properties: Properties, label: String, to: File): Unit =
     fileOutputStream()(to) { output => properties.store(output, label) }
 
   /** Reads the properties in `from` into `properties`.  If `from` does not exist, `properties` is left unchanged.*/
@@ -750,7 +746,7 @@ object IO {
   private val PathSeparatorPattern = java.util.regex.Pattern.compile(File.pathSeparator)
 
   /** Splits a String around the platform's path separator characters. */
-  def pathSplit(s: String) = PathSeparatorPattern.split(s)
+  def pathSplit(s: String): List[String] = PathSeparatorPattern.split(s).toList
 
   /**
    * Move the provided files to a temporary location.
@@ -838,8 +834,8 @@ object IO {
    * it does not already end with a slash.
    */
   def directoryURI(uri: URI): URI =
-    {
-      if (!uri.isAbsolute) return uri; //assertAbsolute(uri)
+    if (!uri.isAbsolute) uri
+    else {
       val str = uri.toASCIIString
       val dirStr = if (str.endsWith("/") || uri.getScheme != FileScheme || Option(uri.getRawFragment).isDefined) str else str + "/"
       (new URI(dirStr)).normalize
@@ -847,7 +843,8 @@ object IO {
   /** Converts the given File to a URI.  If the File is relative, the URI is relative, unlike File.toURI*/
   def toURI(f: File): URI =
     // need to use the three argument URI constructor because the single argument version doesn't encode
-    if (f.isAbsolute) f.toURI else new URI(null, normalizeName(f.getPath), null)
+    if (f.isAbsolute) f.toURI
+    else new URI(None.orNull, normalizeName(f.getPath), None.orNull)
 
   /**
    * Resolves `f` against `base`, which must be an absolute directory.
@@ -861,8 +858,8 @@ object IO {
       assertAbsolute(fabs)
       fabs
     }
-  def assertAbsolute(f: File) = assert(f.isAbsolute, "Not absolute: " + f)
-  def assertAbsolute(uri: URI) = assert(uri.isAbsolute, "Not absolute: " + uri)
+  def assertAbsolute(f: File): Unit = assert(f.isAbsolute, "Not absolute: " + f)
+  def assertAbsolute(uri: URI): Unit = assert(uri.isAbsolute, "Not absolute: " + uri)
 
   /** Parses a classpath String into File entries according to the current platform's path separator.*/
   def parseClasspath(s: String): Seq[File] = IO.pathSplit(s).map(new File(_)).toSeq
@@ -873,9 +870,9 @@ object IO {
    */
   def objectInputStream(wrapped: InputStream, loader: ClassLoader): ObjectInputStream = new ObjectInputStream(wrapped) {
     override def resolveClass(osc: ObjectStreamClass): Class[_] =
-      {
-        val c = Class.forName(osc.getName, false, loader)
-        if (c eq null) super.resolveClass(osc) else c
+      Option(Class.forName(osc.getName, false, loader)) match {
+        case None    => super.resolveClass(osc)
+        case Some(c) => c
       }
   }
 }

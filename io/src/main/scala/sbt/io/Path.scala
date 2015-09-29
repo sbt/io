@@ -13,27 +13,27 @@ import scala.language.implicitConversions
 final class RichFile(val asFile: File) {
   def /(component: String): File = if (component == ".") asFile else new File(asFile, component)
   /** True if and only if the wrapped file exists.*/
-  def exists = asFile.exists
+  def exists: Boolean = asFile.exists
   /** True if and only if the wrapped file is a directory.*/
-  def isDirectory = asFile.isDirectory
+  def isDirectory: Boolean = asFile.isDirectory
   /** The last modified time of the wrapped file.*/
-  def lastModified = asFile.lastModified
+  def lastModified: Long = asFile.lastModified
   /* True if and only if the wrapped file `asFile` exists and the file 'other'
-	* does not exist or was modified before the `asFile`.*/
+   * does not exist or was modified before the `asFile`.*/
   def newerThan(other: File): Boolean = Path.newerThan(asFile, other)
   /* True if and only if the wrapped file `asFile` does not exist or the file `other`
-	* exists and was modified after `asFile`.*/
+   * exists and was modified after `asFile`.*/
   def olderThan(other: File): Boolean = Path.newerThan(other, asFile)
   /** The wrapped file converted to a <code>URL</code>.*/
-  def asURL = asFile.toURI.toURL
+  def asURL: URL = asFile.toURI.toURL
   def absolutePath: String = asFile.getAbsolutePath
 
   /** The last component of this path.*/
-  def name = asFile.getName
+  def name: String = asFile.getName
   /** The extension part of the name of this path.  This is the part of the name after the last period, or the empty string if there is no period.*/
-  def ext = baseAndExt._2
+  def ext: String = baseAndExt._2
   /** The base of the name of this path.  This is the part of the name before the last period, or the full name if there is no period.*/
-  def base = baseAndExt._1
+  def base: String = baseAndExt._1
   def baseAndExt: (String, String) =
     {
       val nme = name
@@ -151,7 +151,8 @@ sealed abstract class PathFinder {
     (this ** include) --- (this ** intermediateExclude ** include)
 
   /**
-   * Evaluates this finder and converts the results to a `Seq` of distinct `File`s.  The files returned by this method will reflect the underlying filesystem at the
+   * Evaluates this finder and converts the results to a `Seq` of distinct `File`s.
+   * The files returned by this method will reflect the underlying filesystem at the
    * time of calling.  If the filesystem changes, two calls to this method might be different.
    */
   final def get: Seq[File] =
@@ -178,10 +179,13 @@ sealed abstract class PathFinder {
    */
   def distinct: PathFinder = PathFinder { get.map(p => (p.asFile.getName, p)).toMap.values }
 
-  /** Constructs a string by evaluating this finder, converting the resulting Paths to absolute path strings, and joining them with the platform path separator.*/
-  final def absString = Path.makeString(get)
+  /**
+   * Constructs a string by evaluating this finder, converting the resulting Paths to absolute path strings,
+   * and joining them with the platform path separator.
+   */
+  final def absString: String = Path.makeString(get)
   /** Constructs a debugging string for this finder by evaluating it and separating paths by newlines.*/
-  override def toString = get.mkString("\n   ", "\n   ", "")
+  override def toString: String = get.mkString("\n   ", "\n   ", "")
 }
 private class SingleFile(asFile: File) extends PathFinder {
   private[sbt] def addTo(fileSet: mutable.Set[File]): Unit = if (asFile.exists) { fileSet += asFile; () }
@@ -189,7 +193,7 @@ private class SingleFile(asFile: File) extends PathFinder {
 private abstract class FilterFiles extends PathFinder with FileFilter {
   def parent: PathFinder
   def filter: FileFilter
-  final def accept(file: File) = filter.accept(file)
+  final def accept(file: File): Boolean = filter.accept(file)
 
   protected def handleFile(file: File, fileSet: mutable.Set[File]): Unit =
     for (matchedFile <- wrapNull(file.listFiles(this)))

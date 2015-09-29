@@ -45,52 +45,52 @@ trait NameFilter extends FileFilter {
 
 /** A [[FileFilter]] that selects files that are hidden according to `java.io.File.isHidden` or if they start with a dot (`.`). */
 object HiddenFileFilter extends FileFilter {
-  def accept(file: File) = file.isHidden && file.getName != "."
+  def accept(file: File): Boolean = file.isHidden && file.getName != "."
 }
 
 /** A [[FileFilter]] that selects files that exist according to `java.io.File.exists`. */
 object ExistsFileFilter extends FileFilter {
-  def accept(file: File) = file.exists
+  def accept(file: File): Boolean = file.exists
 }
 
 /** A [[FileFilter]] that selects files that are a directory according to `java.io.File.isDirectory`. */
 object DirectoryFilter extends FileFilter {
-  def accept(file: File) = file.isDirectory
+  def accept(file: File): Boolean = file.isDirectory
 }
 
 /** A [[FileFilter]] that selects files according the predicate `acceptFunction`. */
 final class SimpleFileFilter(val acceptFunction: File => Boolean) extends FileFilter {
-  def accept(file: File) = acceptFunction(file)
+  def accept(file: File): Boolean = acceptFunction(file)
 }
 
 /** A [[NameFilter]] that accepts a name if it is exactly equal to `matchName`. */
 final class ExactFilter(val matchName: String) extends NameFilter {
-  def accept(name: String) = matchName == name
+  def accept(name: String): Boolean = matchName == name
 }
 
 /** A [[NameFilter]] that accepts a name if the predicate `acceptFunction` accepts it. */
 final class SimpleFilter(val acceptFunction: String => Boolean) extends NameFilter {
-  def accept(name: String) = acceptFunction(name)
+  def accept(name: String): Boolean = acceptFunction(name)
 }
 
 /** A [[NameFilter]] that accepts a name if it matches the regular expression defined by `pattern`. */
 final class PatternFilter(val pattern: Pattern) extends NameFilter {
-  def accept(name: String) = pattern.matcher(name).matches
+  def accept(name: String): Boolean = pattern.matcher(name).matches
 }
 
 /** A [[NameFilter]] that accepts all names. That is, `accept` always returns `true`. */
 object AllPassFilter extends NameFilter {
-  def accept(name: String) = true
+  def accept(name: String): Boolean = true
 }
 
 /** A [[NameFilter]] that accepts nothing.  That is, `accept` always returns `false`. */
 object NothingFilter extends NameFilter {
-  def accept(name: String) = false
+  def accept(name: String): Boolean = false
 }
 
 object NameFilter {
   implicit def fnToNameFilter(f: String => Boolean): NameFilter = new NameFilter {
-    def accept(name: String) = f(name)
+    def accept(name: String): Boolean = f(name)
   }
 }
 object FileFilter {

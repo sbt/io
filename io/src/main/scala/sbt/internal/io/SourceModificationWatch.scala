@@ -43,5 +43,5 @@ private[sbt] final class WatchState(val lastCallbackCallTime: Long, val previous
 }
 
 private[sbt] object WatchState {
-  def empty = new WatchState(0L, Set.empty[String], false, 0)
+  def empty: WatchState = new WatchState(0L, Set.empty[String], false, 0)
 }

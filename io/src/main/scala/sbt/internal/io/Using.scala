@@ -39,7 +39,7 @@ private[sbt] trait OpenFile[T] extends Using[File, T] {
   protected final def open(file: File): T =
     {
       val parent = file.getParentFile
-      if (parent != null)
+      if (Option(parent).isDefined)
         IO.createDirectory(parent)
       openImpl(file)
     }
@@ -68,26 +68,30 @@ private[sbt] object Using {
     }
   private def closeCloseable[T <: Closeable]: T => Unit = _.close()
 
-  def bufferedOutputStream = wrap((out: OutputStream) => new BufferedOutputStream(out))
-  def bufferedInputStream = wrap((in: InputStream) => new BufferedInputStream(in))
-  def fileOutputStream(append: Boolean = false) = file(f => new BufferedOutputStream(new FileOutputStream(f, append)))
-  def fileInputStream = file(f => new BufferedInputStream(new FileInputStream(f)))
-  def urlInputStream = resource((u: URL) => translate("Error opening " + u + ": ")(new BufferedInputStream(u.openStream)))
-  def fileOutputChannel = file(f => new FileOutputStream(f).getChannel)
-  def fileInputChannel = file(f => new FileInputStream(f).getChannel)
-  def fileWriter(charset: Charset = IO.utf8, append: Boolean = false) =
+  private val gzipBufferSize = 8192
+  def bufferedOutputStream: Using[OutputStream, BufferedOutputStream] = wrap((out: OutputStream) => new BufferedOutputStream(out))
+  def bufferedInputStream: Using[InputStream, BufferedInputStream] = wrap((in: InputStream) => new BufferedInputStream(in))
+  def fileOutputStream(append: Boolean = false): OpenFile[BufferedOutputStream] = file(f => new BufferedOutputStream(new FileOutputStream(f, append)))
+  def fileInputStream: OpenFile[BufferedInputStream] = file(f => new BufferedInputStream(new FileInputStream(f)))
+  def urlInputStream: Using[URL, BufferedInputStream] = resource((u: URL) => translate("Error opening " + u + ": ")(new BufferedInputStream(u.openStream)))
+  def fileOutputChannel: OpenFile[FileChannel] = file(f => new FileOutputStream(f).getChannel)
+  def fileInputChannel: OpenFile[FileChannel] = file(f => new FileInputStream(f).getChannel)
+  def fileWriter(charset: Charset = IO.utf8, append: Boolean = false): OpenFile[BufferedWriter] =
     file(f => new BufferedWriter(new OutputStreamWriter(new FileOutputStream(f, append), charset)))
-  def fileReader(charset: Charset) = file(f => new BufferedReader(new InputStreamReader(new FileInputStream(f), charset)))
-  def urlReader(charset: Charset) = resource((u: URL) => new BufferedReader(new InputStreamReader(u.openStream, charset)))
-  def jarFile(verify: Boolean) = file(f => new JarFile(f, verify), (_: JarFile).close())
-  def zipFile = file(f => new ZipFile(f), (_: ZipFile).close())
-  def streamReader = wrap { (_: (InputStream, Charset)) match { case (in, charset) => new InputStreamReader(in, charset) } }
-  def gzipInputStream = wrap((in: InputStream) => new GZIPInputStream(in, 8192))
-  def zipInputStream = wrap((in: InputStream) => new ZipInputStream(in))
-  def zipOutputStream = wrap((out: OutputStream) => new ZipOutputStream(out))
-  def gzipOutputStream = wrap((out: OutputStream) => new GZIPOutputStream(out, 8192), (_: GZIPOutputStream).finish())
-  def jarOutputStream = wrap((out: OutputStream) => new JarOutputStream(out))
-  def jarInputStream = wrap((in: InputStream) => new JarInputStream(in))
-  def zipEntry(zip: ZipFile) = resource((entry: ZipEntry) =>
+  def fileReader(charset: Charset): OpenFile[BufferedReader] = file(f => new BufferedReader(new InputStreamReader(new FileInputStream(f), charset)))
+  def urlReader(charset: Charset): Using[URL, BufferedReader] = resource((u: URL) => new BufferedReader(new InputStreamReader(u.openStream, charset)))
+  def jarFile(verify: Boolean): OpenFile[JarFile] = file(f => new JarFile(f, verify), (_: JarFile).close())
+  def zipFile: OpenFile[ZipFile] = file(f => new ZipFile(f), (_: ZipFile).close())
+  def streamReader: Using[(InputStream, Charset), InputStreamReader] =
+    wrap { (_: (InputStream, Charset)) match { case (in, charset) => new InputStreamReader(in, charset) } }
+  def gzipInputStream: Using[InputStream, GZIPInputStream] =
+    wrap((in: InputStream) => new GZIPInputStream(in, gzipBufferSize))
+  def zipInputStream: Using[InputStream, ZipInputStream] = wrap((in: InputStream) => new ZipInputStream(in))
+  def zipOutputStream: Using[OutputStream, ZipOutputStream] = wrap((out: OutputStream) => new ZipOutputStream(out))
+  def gzipOutputStream: Using[OutputStream, GZIPOutputStream] =
+    wrap((out: OutputStream) => new GZIPOutputStream(out, gzipBufferSize), (_: GZIPOutputStream).finish())
+  def jarOutputStream: Using[OutputStream, JarOutputStream] = wrap((out: OutputStream) => new JarOutputStream(out))
+  def jarInputStream: Using[InputStream, JarInputStream] = wrap((in: InputStream) => new JarInputStream(in))
+  def zipEntry(zip: ZipFile): Using[ZipEntry, InputStream] = resource((entry: ZipEntry) =>
     translate("Error opening " + entry.getName + " in " + zip + ": ") { zip.getInputStream(entry) })
 }
