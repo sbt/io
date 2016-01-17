@@ -18,6 +18,7 @@ object IOSpecification extends Properties("IO") {
     Gen.oneOf(
       this.getClass,
       classOf[java.lang.Integer],
+      classOf[java.util.AbstractMap.SimpleEntry[String, String]],
       classOf[String],
       classOf[Thread],
       classOf[Properties]
