@@ -1,4 +1,5 @@
 import Dependencies._
+import com.typesafe.tools.mima.core._, ProblemFilters._
 
 def baseVersion: String = "1.0.0-M3"
 
@@ -18,6 +19,7 @@ def commonSettings: Seq[Setting[_]] = Seq(
   scalacOptions  += "-Ywarn-value-discard",
   incOptions := incOptions.value.withNameHashing(true),
   crossScalaVersions := Seq(scala210, scala211),
+  previousArtifact := None, // Some(organization.value %% moduleName.value % "1.0.0"),
   publishArtifact in Compile := true,
   publishArtifact in Test := true
 )
@@ -45,5 +47,7 @@ lazy val io = (project in file("io")).
     // testedBaseSettings,
     // Util.crossBuild,
     name := "IO",
-    libraryDependencies ++= Seq(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test)
+    libraryDependencies ++= Seq(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test),
+    binaryIssueFilters ++= Seq(
+    )
   )
