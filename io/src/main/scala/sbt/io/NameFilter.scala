@@ -94,7 +94,7 @@ object NameFilter {
   }
 }
 object FileFilter {
-  /** Allows a String to be used where a `NameFilter` is expected and any asterisks (`*`) will be interpreted as wildcards.  See [[sbt.GlobFilter]].*/
+  /** Allows a String to be used where a `NameFilter` is expected and any asterisks (`*`) will be interpreted as wildcards.  See [[sbt.io.GlobFilter]].*/
   implicit def globFilter(s: String): NameFilter = GlobFilter(s)
 }
 

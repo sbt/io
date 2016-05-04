@@ -796,7 +796,7 @@ object IO {
   // TODO: the reference to the other move overload does not resolve, probably due to a scaladoc bug
   /**
    * For each pair in `files`, moves the contents of the first File to the location of the second.
-   * See [[move(File,File)]] for the behavior of the individual move operations.
+   * See `sbt.io.IO$.move(java.io.File,java.io.File):Unit` for the behavior of the individual move operations.
    */
   def move(files: Traversable[(File, File)]): Unit =
     files.foreach(Function.tupled(move))

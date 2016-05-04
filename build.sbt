@@ -11,14 +11,14 @@ def commonSettings: Seq[Setting[_]] = Seq(
   scalacOptions  += "-language:higherKinds",
   scalacOptions  += "-language:implicitConversions",
   scalacOptions  += "-Xfuture",
-  scalacOptions  += "-Yinline-warnings",
+  scalacOptions  -= "-Yinline-warnings",
   scalacOptions  += "-Xfatal-warnings",
   scalacOptions  += "-Yno-adapted-args",
   scalacOptions  += "-Ywarn-dead-code",
   scalacOptions  += "-Ywarn-numeric-widen",
   scalacOptions  += "-Ywarn-value-discard",
   incOptions := incOptions.value.withNameHashing(true),
-  crossScalaVersions := Seq(scala210, scala211),
+  crossScalaVersions := Seq(scala210, scala211), // scala212
   previousArtifact := None, // Some(organization.value %% moduleName.value % "1.0.0"),
   publishArtifact in Compile := true,
   publishArtifact in Test := true
@@ -36,6 +36,7 @@ lazy val root = (project in file(".")).
     )),
     name := "IO Root",
     publish := (),
+    publishLocal := (),
     publishArtifact := false
   )
 

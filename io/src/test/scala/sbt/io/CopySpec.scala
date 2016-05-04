@@ -41,7 +41,7 @@ object CopySpec extends Properties("Copy") {
 
     val buffer = new Array[Byte](BufferSize)
     @tailrec def loop(offset: Long): Unit = {
-      val len = math.min(size - offset, BufferSize)
+      val len = math.min(size - offset, BufferSize.toLong)
       if (len > 0) {
         rnd.nextBytes(buffer)
         IO.append(file, buffer)
