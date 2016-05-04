@@ -3,7 +3,7 @@
  */
 package sbt.io
 
-import sbt.internal.io.Using, Using._
+import Using._
 import sbt.internal.io.ErrorHandling.translate
 
 import java.io.{ BufferedReader, ByteArrayOutputStream, BufferedWriter, File, FileInputStream, InputStream, OutputStream, PrintWriter }

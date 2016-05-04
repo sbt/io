@@ -5,7 +5,6 @@ package sbt.io
 
 import java.io.{ ByteArrayInputStream, File, InputStream }
 import java.net.{ URI, URL }
-import sbt.internal.io.Using
 
 object Hash {
   private val BufferSize = 8192

@@ -5,7 +5,6 @@ import java.util.Arrays
 import org.scalacheck._
 import Prop._
 import Arbitrary.arbLong
-import sbt.internal.io.Using
 import scala.annotation.tailrec
 
 object CopySpec extends Properties("Copy") {

@@ -1,7 +1,8 @@
 /* sbt
  * Copyright 2009-2015 Typesafe, Inc, Mark Harrah, and others
  */
-package sbt.internal.io
+package sbt
+package io
 
 import java.io.{ Closeable, File, FileInputStream, FileOutputStream, InputStream, OutputStream }
 import java.io.{ BufferedInputStream, BufferedOutputStream, ByteArrayOutputStream, InputStreamReader, OutputStreamWriter }
@@ -13,11 +14,10 @@ import java.nio.channels.FileChannel
 import java.util.jar.{ Attributes, JarEntry, JarFile, JarInputStream, JarOutputStream, Manifest }
 import java.util.zip.{ GZIPOutputStream, ZipEntry, ZipFile, ZipInputStream, ZipOutputStream }
 
-import sbt.io.IO
-import ErrorHandling.translate
+import sbt.internal.io.ErrorHandling.translate
 import Using._
 
-private[sbt] abstract class Using[Source, T] {
+abstract class Using[Source, T] {
   protected def open(src: Source): T
   def apply[R](src: Source)(f: T => R): R =
     {
@@ -27,6 +27,7 @@ private[sbt] abstract class Using[Source, T] {
     }
   protected def close(out: T): Unit
 }
+
 import scala.reflect.{ Manifest => SManifest }
 private[sbt] abstract class WrapUsing[Source, T](implicit srcMf: SManifest[Source], targetMf: SManifest[T]) extends Using[Source, T] {
   protected def label[S](m: SManifest[S]) = m.runtimeClass.getSimpleName
@@ -44,7 +45,8 @@ private[sbt] trait OpenFile[T] extends Using[File, T] {
       openImpl(file)
     }
 }
-private[sbt] object Using {
+
+object Using {
   def wrap[Source, T <: Closeable](openF: Source => T)(implicit srcMf: SManifest[Source], targetMf: SManifest[T]): Using[Source, T] =
     wrap(openF, closeCloseable)
   def wrap[Source, T](openF: Source => T, closeF: T => Unit)(implicit srcMf: SManifest[Source], targetMf: SManifest[T]): Using[Source, T] =
