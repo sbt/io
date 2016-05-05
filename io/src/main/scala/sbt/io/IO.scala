@@ -538,7 +538,7 @@ object IO {
    */
   def relativize(base: File, file: File): Option[String] =
     {
-      val pathString = file.getAbsolutePath
+      val pathString = file.getCanonicalPath
       baseFileString(base) flatMap
         {
           baseString =>
@@ -553,7 +553,7 @@ object IO {
   private def baseFileString(baseFile: File): Option[String] =
     {
       if (baseFile.isDirectory) {
-        val cp = baseFile.getAbsolutePath
+        val cp = baseFile.getCanonicalPath
         assert(cp.length > 0)
         val normalized = if (cp.charAt(cp.length - 1) == File.separatorChar) cp else cp + File.separatorChar
         Some(normalized)
