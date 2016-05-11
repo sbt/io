@@ -1,7 +1,7 @@
 import Dependencies._
 import com.typesafe.tools.mima.core._, ProblemFilters._
 
-def baseVersion: String = "1.0.0-M5"
+def baseVersion: String = "1.0.0-M6"
 
 def commonSettings: Seq[Setting[_]] = Seq(
   scalaVersion := scala211,
@@ -21,7 +21,7 @@ def commonSettings: Seq[Setting[_]] = Seq(
   crossScalaVersions := Seq(scala210, scala211), // scala212
   previousArtifact := None, // Some(organization.value %% moduleName.value % "1.0.0"),
   publishArtifact in Compile := true,
-  publishArtifact in Test := true
+  publishArtifact in Test := false
 )
 
 lazy val root = (project in file(".")).
