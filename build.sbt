@@ -18,7 +18,7 @@ def commonSettings: Seq[Setting[_]] = Seq(
   scalacOptions  += "-Ywarn-numeric-widen",
   scalacOptions  += "-Ywarn-value-discard",
   incOptions := incOptions.value.withNameHashing(true),
-  crossScalaVersions := Seq(scala210, scala211), // scala212
+  crossScalaVersions := Seq(scala210, scala211, scala212),
   previousArtifact := None, // Some(organization.value %% moduleName.value % "1.0.0"),
   publishArtifact in Compile := true,
   publishArtifact in Test := false
@@ -34,6 +34,7 @@ lazy val root = (project in file(".")).
       description := "IO module for sbt",
       scmInfo := Some(ScmInfo(url("https://github.com/sbt/io"), "git@github.com:sbt/io.git"))
     )),
+    commonSettings,
     name := "IO Root",
     publish := (),
     publishLocal := (),
