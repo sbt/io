@@ -156,8 +156,8 @@ sealed abstract class PathFinder {
    */
   final def get: Seq[File] =
     {
-      import collection.JavaConversions._
-      val pathSet: mutable.Set[File] = new java.util.LinkedHashSet[File]
+      import collection.JavaConverters._
+      val pathSet: mutable.Set[File] = (new java.util.LinkedHashSet[File]).asScala
       addTo(pathSet)
       pathSet.toSeq
     }
