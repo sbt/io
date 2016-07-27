@@ -56,8 +56,12 @@ class StashSpec extends FlatSpec with Matchers {
     {
       assert(check.exists)
       read(check) shouldBe ref._2
+      ()
     }
-  def noneExist(s: Seq[File]): Unit = s.forall(!_.exists) shouldBe true
+  def noneExist(s: Seq[File]): Unit = {
+    s.forall(!_.exists) shouldBe true
+    ()
+  }
 
   lazy val TestFiles =
     Seq(
