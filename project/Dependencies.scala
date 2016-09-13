@@ -2,12 +2,12 @@ import sbt._
 import Keys._
 
 object Dependencies {
-  lazy val scala210 = "2.10.6"
-  lazy val scala211 = "2.11.8"
-  lazy val scala212 = "2.12.0-M5"
+  val scala210 = "2.10.6"
+  val scala211 = "2.11.8"
+  val scala212 = "2.12.0-RC1"
 
-  lazy val scalaCompiler = Def.setting { "org.scala-lang" % "scala-compiler" % scalaVersion.value }
+  val scalaCompiler = Def.setting { "org.scala-lang" % "scala-compiler" % scalaVersion.value }
 
-  val scalaCheck = "org.scalacheck" %% "scalacheck" % "1.13.1"
-  val scalatest = "org.scalatest" %% "scalatest" % "3.0.0-RC4"
+  val scalaCheck = "org.scalacheck" %% "scalacheck" % "1.13.2"
+  val scalatest = "org.scalatest" %% "scalatest" % "3.0.0"
 }
