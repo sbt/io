@@ -7,7 +7,6 @@ import org.scalatest._
 
 import IO._
 import java.io.File
-import Function.tupled
 
 class StashSpec extends FlatSpec with Matchers {
   "stash" should "handle empty files" in {

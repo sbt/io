@@ -6,7 +6,7 @@ package sbt.io
 import org.scalacheck._
 import Prop._
 import Arbitrary.{ arbString => _, arbChar => _, _ }
-import java.io.{ File, IOException }
+import java.io.File
 
 object WriteContentSpecification extends Properties("Write content") {
   property("Roundtrip string") = forAll(writeAndCheckString _)
