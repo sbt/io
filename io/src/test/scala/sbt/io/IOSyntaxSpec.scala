@@ -14,6 +14,10 @@ class IOSyntaxSpec extends FlatSpec with Matchers {
   }
   "file(...) glob \"*.properties\"" should "create PathFinder" in {
     import sbt.io.syntax._
-    (file("project") glob "*.properties").get shouldBe Seq(new JFile(new JFile("project"), "build.properties"))
+    IO.withTemporaryDirectory { dir =>
+      IO.write(new JFile(dir, "foo.txt"), "foo")
+      IO.write(new JFile(dir, "bar.json"), "{}")
+      (dir glob "*.txt").get shouldBe Seq(new JFile(dir, "foo.txt"))
+    }
   }
 }
