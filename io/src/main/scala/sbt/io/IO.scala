@@ -496,11 +496,6 @@ object IO {
   private def allDirectoryPaths(files: Iterable[(File, String)]) =
     TreeSet[String]() ++ (files flatMap { case (file, name) => directoryPaths(name) })
 
-  private def normalizeDirName(name: String) =
-    {
-      val norm1 = normalizeName(name)
-      if (norm1.endsWith("/")) norm1 else s"$norm1/"
-    }
   private def normalizeName(name: String) =
     {
       val sep = File.separatorChar
@@ -509,7 +504,7 @@ object IO {
 
   private def withZipOutput(file: File, manifest: Option[Manifest])(f: ZipOutputStream => Unit) = {
     fileOutputStream(false)(file) { fileOut =>
-      val (zipOut, ext) =
+      val (zipOut, _) =
         manifest match {
           case Some(mf) =>
             {

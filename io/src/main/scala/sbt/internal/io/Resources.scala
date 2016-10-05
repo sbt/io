@@ -23,7 +23,6 @@ private[sbt] object Resources {
       }
     }
   def error(msg: String) = throw new ResourcesException(msg)
-  private val LoadErrorPrefix = "Error loading initial project: "
 }
 private[sbt] final class ResourcesException(msg: String) extends Exception(msg)
 

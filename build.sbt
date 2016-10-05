@@ -8,6 +8,7 @@ def commonSettings: Seq[Setting[_]] = Seq(
   javacOptions in compile ++= Seq("-Xlint", "-Xlint:-serial"),
   scalacOptions  -= "-Yinline-warnings",
   scalacOptions  += "-Xfatal-warnings",
+  scalacOptions ++= ifScala211Plus("-Ywarn-unused").value.toList,
   scalacOptions ++= ifScala211Plus("-Ywarn-unused-import").value.toList,
   crossScalaVersions := Seq(scala210, scala211, scala212),
   previousArtifact := None // Some(organization.value %% moduleName.value % "1.0.0"),
