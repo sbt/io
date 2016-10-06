@@ -6,13 +6,13 @@ package sbt.io
 import Using._
 import sbt.internal.io.ErrorHandling.translate
 
-import java.io.{ BufferedReader, ByteArrayOutputStream, BufferedWriter, File, FileInputStream, InputStream, OutputStream, PrintWriter }
+import java.io.{ BufferedReader, ByteArrayOutputStream, BufferedWriter, File, InputStream, OutputStream, PrintWriter }
 import java.io.{ ObjectInputStream, ObjectStreamClass }
 import java.net.{ URI, URISyntaxException, URL }
 import java.nio.charset.Charset
 import java.util.Properties
-import java.util.jar.{ Attributes, JarEntry, JarFile, JarInputStream, JarOutputStream, Manifest }
-import java.util.zip.{ CRC32, GZIPOutputStream, ZipEntry, ZipFile, ZipInputStream, ZipOutputStream }
+import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
+import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeSet
 import scala.collection.mutable.{ HashMap, HashSet }
@@ -496,11 +496,6 @@ object IO {
   private def allDirectoryPaths(files: Iterable[(File, String)]) =
     TreeSet[String]() ++ (files flatMap { case (file, name) => directoryPaths(name) })
 
-  private def normalizeDirName(name: String) =
-    {
-      val norm1 = normalizeName(name)
-      if (norm1.endsWith("/")) norm1 else s"$norm1/"
-    }
   private def normalizeName(name: String) =
     {
       val sep = File.separatorChar
@@ -509,7 +504,7 @@ object IO {
 
   private def withZipOutput(file: File, manifest: Option[Manifest])(f: ZipOutputStream => Unit) = {
     fileOutputStream(false)(file) { fileOut =>
-      val (zipOut, ext) =
+      val (zipOut, _) =
         manifest match {
           case Some(mf) =>
             {

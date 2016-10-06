@@ -3,12 +3,10 @@
  */
 package sbt.io
 
-import sbt.internal.io.Alternatives
-import IO.{ pathSplit, wrapNull }
+import IO.wrapNull
 import java.io.File
 import java.net.URL
-import scala.collection.{ generic, immutable, mutable }
-import scala.language.implicitConversions
+import scala.collection.mutable
 
 final class RichFile(val asFile: File) {
   def /(component: String): File = if (component == ".") asFile else new File(asFile, component)

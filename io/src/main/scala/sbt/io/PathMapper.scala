@@ -4,7 +4,6 @@
 package sbt.io
 
 import java.io.File
-import scala.language.implicitConversions
 import sbt.internal.io.Alternatives
 
 abstract class Mapper {

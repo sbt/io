@@ -5,17 +5,15 @@ package sbt
 package io
 
 import java.io.{ Closeable, File, FileInputStream, FileOutputStream, InputStream, OutputStream }
-import java.io.{ BufferedInputStream, BufferedOutputStream, ByteArrayOutputStream, InputStreamReader, OutputStreamWriter }
-import java.io.{ BufferedReader, BufferedWriter, FileReader, FileWriter, Reader, Writer }
-import java.util.zip.{ GZIPInputStream, GZIPOutputStream }
-import java.net.{ URL, URISyntaxException }
-import java.nio.charset.{ Charset, CharsetDecoder, CharsetEncoder }
-import java.nio.channels.FileChannel
-import java.util.jar.{ Attributes, JarEntry, JarFile, JarInputStream, JarOutputStream, Manifest }
+import java.io.{ BufferedInputStream, BufferedOutputStream, InputStreamReader, OutputStreamWriter }
+import java.io.{ BufferedReader, BufferedWriter }
+import java.util.zip.GZIPInputStream
+import java.net.URL
+import java.nio.charset.Charset
+import java.util.jar.{ JarFile, JarInputStream, JarOutputStream }
 import java.util.zip.{ GZIPOutputStream, ZipEntry, ZipFile, ZipInputStream, ZipOutputStream }
 
 import sbt.internal.io.ErrorHandling.translate
-import Using._
 
 abstract class Using[Source, T] {
   protected def open(src: Source): T
