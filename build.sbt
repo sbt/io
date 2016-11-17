@@ -14,7 +14,7 @@ def commonSettings: Seq[Setting[_]] = Seq(
   previousArtifact := None // Some(organization.value %% moduleName.value % "1.0.0"),
 )
 
-lazy val root = (project in file(".")).
+lazy val ioRoot = (project in file(".")).
   aggregate(io).
   settings(
     inThisBuild(Seq(
