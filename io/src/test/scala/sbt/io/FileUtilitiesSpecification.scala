@@ -3,14 +3,12 @@
  */
 package sbt.io
 
-import org.scalacheck._
-import Prop._
-import Arbitrary.{ arbString => _, arbChar => _, _ }
 import java.io.File
+import org.scalacheck._, Arbitrary.arbitrary, Prop._
 
 object WriteContentSpecification extends Properties("Write content") {
-  property("Roundtrip string") = forAll(writeAndCheckString _)
-  property("Roundtrip bytes") = forAll(writeAndCheckBytes _)
+  property("Round trip string") = forAll(writeAndCheckString _)
+  property("Round trip bytes") = forAll(writeAndCheckBytes _)
   property("Write string overwrites") = forAll(overwriteAndCheckStrings _)
   property("Write bytes overwrites") = forAll(overwriteAndCheckBytes _)
   property("Append string appends") = forAll(appendAndCheckStrings _)
@@ -26,52 +24,53 @@ object WriteContentSpecification extends Properties("Write content") {
       testUnzip[scala.tools.nsc.Global]
       true
     }
-  private def testUnzip[T](implicit mf: scala.reflect.Manifest[T]) =
-    unzipFile(IO.classLocationFile(mf.runtimeClass))
-  private def unzipFile(jar: File) =
-    IO.withTemporaryDirectory { tmp =>
-      IO.unzip(jar, tmp)
-    }
+
+  private def testUnzip[T](implicit mf: Manifest[T]) = unzipFile(IO.classLocationFile(mf.runtimeClass))
+
+  private def unzipFile(jar: File) = IO.withTemporaryDirectory(tmp => IO.unzip(jar, tmp))
 
   // make the test independent of underlying platform and allow any unicode character in Strings to be encoded
   val charset = IO.utf8
 
-  import IO._
   private def writeAndCheckString(s: String) =
     withTemporaryFile { file =>
-      write(file, s, charset)
-      read(file, charset) == s
-    }
-  private def writeAndCheckBytes(b: Array[Byte]) =
-    withTemporaryFile { file =>
-      write(file, b)
-      readBytes(file) sameElements b
-    }
-  private def overwriteAndCheckStrings(a: String, b: String) =
-    withTemporaryFile { file =>
-      write(file, a, charset)
-      write(file, b, charset)
-      read(file, charset) == b
-    }
-  private def overwriteAndCheckBytes(a: Array[Byte], b: Array[Byte]) =
-    withTemporaryFile { file =>
-      write(file, a)
-      write(file, b)
-      readBytes(file) sameElements b
-    }
-  private def appendAndCheckStrings(a: String, b: String) =
-    withTemporaryFile { file =>
-      append(file, a, charset)
-      append(file, b, charset)
-      read(file, charset) == (a + b)
-    }
-  private def appendAndCheckBytes(a: Array[Byte], b: Array[Byte]) =
-    withTemporaryFile { file =>
-      append(file, a)
-      append(file, b)
-      readBytes(file) sameElements (a ++ b)
+      IO.write(file, s, charset)
+      IO.read(file, charset) == s
     }
 
-  private def withTemporaryFile[T](f: File => T): T =
-    withTemporaryDirectory { dir => f(new java.io.File(dir, "out")) }
+  private def writeAndCheckBytes(b: Array[Byte]) =
+    withTemporaryFile { file =>
+      IO.write(file, b)
+      IO.readBytes(file) sameElements b
+    }
+
+  private def overwriteAndCheckStrings(a: String, b: String) =
+    withTemporaryFile { file =>
+      IO.write(file, a, charset)
+      IO.write(file, b, charset)
+      IO.read(file, charset) == b
+    }
+
+  private def overwriteAndCheckBytes(a: Array[Byte], b: Array[Byte]) =
+    withTemporaryFile { file =>
+      IO.write(file, a)
+      IO.write(file, b)
+      IO.readBytes(file) sameElements b
+    }
+
+  private def appendAndCheckStrings(a: String, b: String) =
+    withTemporaryFile { file =>
+      IO.append(file, a, charset)
+      IO.append(file, b, charset)
+      IO.read(file, charset) == (a + b)
+    }
+
+  private def appendAndCheckBytes(a: Array[Byte], b: Array[Byte]) =
+    withTemporaryFile { file =>
+      IO.append(file, a)
+      IO.append(file, b)
+      IO.readBytes(file) sameElements (a ++ b)
+    }
+
+  private def withTemporaryFile[T](f: File => T): T = IO.withTemporaryDirectory(dir => f(new File(dir, "out")))
 }
