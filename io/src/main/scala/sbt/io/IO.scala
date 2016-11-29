@@ -534,27 +534,22 @@ object IO {
   def relativize(base: File, file: File): Option[String] =
     {
       val pathString = file.getCanonicalPath
-      baseFileString(base) flatMap
-        {
-          baseString =>
-            {
-              if (pathString.startsWith(baseString))
-                Some(pathString.substring(baseString.length))
-              else
-                None
-            }
-        }
+      baseFileString(base) flatMap (baseString =>
+        if (pathString.startsWith(baseString))
+          Some(pathString.substring(baseString.length))
+        else
+          None
+      )
     }
+
   private def baseFileString(baseFile: File): Option[String] =
-    {
-      if (baseFile.isDirectory) {
-        val cp = baseFile.getCanonicalPath
-        assert(cp.length > 0)
-        val normalized = if (cp.charAt(cp.length - 1) == File.separatorChar) cp else cp + File.separatorChar
-        Some(normalized)
-      } else
-        None
-    }
+    if (baseFile.isDirectory) {
+      val cp = baseFile.getCanonicalPath
+      assert(cp.length > 0)
+      val normalized = if (cp.charAt(cp.length - 1) == File.separatorChar) cp else cp + File.separatorChar
+      Some(normalized)
+    } else
+      None
 
   /**
    * For each pair in `sources`, copies the contents of the first File (the source) to the location of the second File (the target).
@@ -592,7 +587,8 @@ object IO {
    * Any parent directories that do not exist are created.
    */
   def copyDirectory(source: File, target: File, overwrite: Boolean = false, preserveLastModified: Boolean = false): Unit = {
-    copy(PathFinder(source).allPaths pair Path.rebase(source, target), overwrite, preserveLastModified)
+    val sources = PathFinder(source).allPaths pair Path.rebase(source, target)
+    copy(sources, overwrite, preserveLastModified)
     ()
   }
 

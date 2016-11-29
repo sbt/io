@@ -82,7 +82,7 @@ abstract class Mapper {
       if (file == oldBase)
         Some(newBase)
       else
-        IO.relativize(oldBase, file) map { r => new File(newBase, r) }
+        IO.relativize(oldBase, file) map (r => new File(newBase, r))
 
   /**
    * Constructs a File mapper that pairs a file with a file with the same name in `newDirectory`.
