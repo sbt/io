@@ -17,6 +17,7 @@ import scala.annotation.tailrec
 import scala.collection.immutable.TreeSet
 import scala.collection.mutable.{ HashMap, HashSet }
 import scala.reflect.{ Manifest => SManifest }
+import scala.util.control.Exception._
 import Function.tupled
 
 /** A collection of File, URL, and I/O utility methods.*/
@@ -531,30 +532,12 @@ object IO {
    * Returns the path for `file` relative to directory `base` or None if `base` is not a parent of `file`.
    * If `file` or `base` are not absolute, they are first resolved against the current working directory.
    */
-  def relativize(base: File, file: File): Option[String] =
-    {
-      val pathString = file.getCanonicalPath
-      baseFileString(base) flatMap
-        {
-          baseString =>
-            {
-              if (pathString.startsWith(baseString))
-                Some(pathString.substring(baseString.length))
-              else
-                None
-            }
-        }
-    }
-  private def baseFileString(baseFile: File): Option[String] =
-    {
-      if (baseFile.isDirectory) {
-        val cp = baseFile.getCanonicalPath
-        assert(cp.length > 0)
-        val normalized = if (cp.charAt(cp.length - 1) == File.separatorChar) cp else cp + File.separatorChar
-        Some(normalized)
-      } else
-        None
-    }
+  def relativize(base: File, file: File): Option[String] = {
+    val basePath = base.toPath
+    val filePath = file.toPath
+    val relativePath = catching(classOf[IllegalArgumentException]) opt (basePath relativize filePath)
+    relativePath map (_.toString)
+  }
 
   /**
    * For each pair in `sources`, copies the contents of the first File (the source) to the location of the second File (the target).
@@ -592,7 +575,8 @@ object IO {
    * Any parent directories that do not exist are created.
    */
   def copyDirectory(source: File, target: File, overwrite: Boolean = false, preserveLastModified: Boolean = false): Unit = {
-    copy(PathFinder(source).allPaths pair Path.rebase(source, target), overwrite, preserveLastModified)
+    val sources = PathFinder(source).allPaths pair Path.rebase(source, target)
+    copy(sources, overwrite, preserveLastModified)
     ()
   }
 
