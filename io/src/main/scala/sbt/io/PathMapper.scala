@@ -25,16 +25,19 @@ abstract class Mapper {
    * A path mapper that pairs a descendent of `oldBase` with `newBase` prepended to the path relative to `oldBase`.
    * For example, if `oldBase = /old/x/` and `newBase = new/a/`, then `/old/x/y/z.txt` gets paired with `new/a/y/z.txt`.
    */
-  def rebase(oldBase: File, newBase: String): PathMap =
-    {
-      val normNewBase = normalizeBase(newBase)
-      (file: File) =>
-        if (file == oldBase)
-          Some(if (normNewBase.isEmpty) "." else normNewBase)
-        else
-          IO.relativize(oldBase, file).map(normNewBase + _)
-    }
-  /** A mapper that throws an exception for any input.  This is useful as the last mapper in a pipeline to ensure every input gets mapped.*/
+  def rebase(oldBase: File, newBase: String): PathMap = {
+    val normNewBase = normalizeBase(newBase)
+    (file: File) =>
+      if (file == oldBase)
+        Some(if (normNewBase.isEmpty) "." else normNewBase)
+      else
+        IO.relativize(oldBase, file).map(normNewBase + _)
+  }
+
+  /**
+   * A mapper that throws an exception for any input.
+   * This is useful as the last mapper in a pipeline to ensure every input gets mapped.
+   */
   def fail: Any => Nothing = f => sys.error("No mapping for " + f)
 
   /** A path mapper that pairs a File with its name.  For example, `/x/y/z.txt` gets paired with `z.txt`.*/
@@ -65,10 +68,12 @@ abstract class Mapper {
   def abs: FileMap = f => Some(f.getAbsoluteFile)
 
   /**
-   * Returns a File mapper that resolves a relative File against `newDirectory` and pairs the original File with the resolved File.
+   * Returns a FileMap that resolves a relative File against `newDirectory`
+   * and pairs the original File with the resolved File.
    * The mapper ignores absolute files.
    */
-  def resolve(newDirectory: File): FileMap = file => if (file.isAbsolute) None else Some(new File(newDirectory, file.getPath))
+  def resolve(newDirectory: File): FileMap =
+    file => if (file.isAbsolute) None else Some(new File(newDirectory, file.getPath))
 
   def rebase(oldBases: Iterable[File], newBase: File, zero: FileMap = transparent): FileMap =
     fold(zero, oldBases)(old => rebase(old, newBase))
@@ -85,7 +90,7 @@ abstract class Mapper {
         IO.relativize(oldBase, file) map (r => new File(newBase, r))
 
   /**
-   * Constructs a File mapper that pairs a file with a file with the same name in `newDirectory`.
+   * Constructs a FileMap that pairs a file with a file with the same name in `newDirectory`.
    * For example, if `newDirectory` is `/a/b`, then `/r/s/t/d.txt` will be paired with `/a/b/d.txt`
    */
   def flat(newDirectory: File): FileMap = file => Some(new File(newDirectory, file.getName))
