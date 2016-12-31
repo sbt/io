@@ -403,15 +403,13 @@ object IO {
   /** Returns the children of directory `dir` in a non-null array.*/
   def listFiles(dir: File): Array[File] = wrapNull(dir.listFiles())
 
-  private[sbt] def wrapNull(a: Array[File]) =
-    if (a == null)
-      new Array[File](0)
-    else
-      a
+  private[sbt] def wrapNull(a: Array[File]) = if (a == null) new Array[File](0) else a
 
   /**
    * Creates a jar file.
-   * @param sources The files to include in the jar file paired with the entry name in the jar.  Only the pairs explicitly listed are included.
+   *
+   * @param sources The files to include in the jar file paired with the entry name in the jar.
+   *                Only the pairs explicitly listed are included.
    * @param outputJar The file to write the jar to.
    * @param manifest The manifest for the jar.
    */
@@ -420,7 +418,8 @@ object IO {
 
   /**
    * Creates a zip file.
-   * @param sources The files to include in the zip file paired with the entry name in the zip.  Only the pairs explicitly listed are included.
+   * @param sources The files to include in the zip file paired with the entry name in the zip.
+   *                Only the pairs explicitly listed are included.
    * @param outputZip The file to write the zip to.
    */
   def zip(sources: Traversable[(File, String)], outputZip: File): Unit =
@@ -535,8 +534,10 @@ object IO {
   def relativize(base: File, file: File): Option[String] = {
     val basePath = base.toPath
     val filePath = file.toPath
-    val relativePath = catching(classOf[IllegalArgumentException]) opt (basePath relativize filePath)
-    relativePath map (_.toString)
+    if (filePath.normalize() startsWith basePath.normalize()) {
+      val relativePath = catching(classOf[IllegalArgumentException]) opt (basePath relativize filePath)
+      relativePath map (_.toString)
+    } else None
   }
 
   /**
