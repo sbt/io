@@ -85,6 +85,60 @@ object Path extends Mapper {
   val sep: Char = java.io.File.separatorChar
 
   def toURLs(files: Seq[File]): Array[URL] = files.map(_.toURI.toURL).toArray
+
+  /**
+   * return a Seq of mappings which effect is to add a whole directory in the generated package
+   *
+   * @example In order to create mappings for a static directory "extra" add
+   * {{{
+   * mappings in Universal ++= directory(baseDirectory.value / "extra")
+   * }}}
+   *
+   * The resulting mappings sequence will look something like this
+   *
+   * {{{
+   * File(extras/file1) -> "extras/file1"
+   * File(extras/file2) -> "extras/"file2"
+   * ...
+   * }}}
+   *
+   *
+   * @param baseDirectory The directory that should be turned into a mappings sequence.
+   * @return mappings The `baseDirectory` and all of its contents
+   */
+  def directory(baseDirectory: File): Seq[(File, String)] =
+    Option(baseDirectory.getParentFile)
+      .map(parent => PathFinder(baseDirectory).allPaths pair relativeTo(parent))
+      .getOrElse(PathFinder(baseDirectory).allPaths pair basic)
+
+  /**
+   * return a Seq of mappings  excluding the directory itself.
+   *
+   * @example In order to create mappings for a static directory "extra" add
+   * {{{
+   * mappings in Universal ++= contentOf(baseDirectory.value / "extra")
+   * }}}
+   *
+   * The resulting mappings sequence will look something like this
+   *
+   * {{{
+   * File(extras/file1) -> "file1"
+   * File(extras/file2) -> "file2"
+   * ...
+   * }}}
+   *
+   * @example Add a static directory "extra" and re-map the destination to a different path
+   * {{{
+   * mappings in Universal ++= contentOf(baseDirectory.value / "extra").map {
+   *   case (src, destination => src -> s"new/path/$destination"
+   * }
+   * }}}
+   *
+   * @param baseDirectory The directory that should be turned into a mappings sequence.
+   * @return mappings - The `basicDirectory`'s contents exlcuding `basicDirectory` itself
+   */
+  def contentOf(baseDirectory: File): Seq[(File, String)] =
+    (PathFinder(baseDirectory).allPaths --- PathFinder(baseDirectory)) pair relativeTo(baseDirectory)
 }
 
 object PathFinder {
