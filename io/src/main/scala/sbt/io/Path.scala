@@ -91,14 +91,14 @@ object Path extends Mapper {
    *
    * @example In order to create mappings for a static directory "extra" add
    * {{{
-   * mappings in Universal ++= directory(baseDirectory.value / "extra")
+   * mappings ++= directory(baseDirectory.value / "extra")
    * }}}
    *
    * The resulting mappings sequence will look something like this
    *
    * {{{
-   * File(extras/file1) -> "extras/file1"
-   * File(extras/file2) -> "extras/"file2"
+   * File($baseDirectory/extras/file1) -> "extras/file1"
+   * File($baseDirectory/extras/file2) -> "extras/"file2"
    * ...
    * }}}
    *
@@ -116,20 +116,20 @@ object Path extends Mapper {
    *
    * @example In order to create mappings for a static directory "extra" add
    * {{{
-   * mappings in Universal ++= contentOf(baseDirectory.value / "extra")
+   * mappings ++= contentOf(baseDirectory.value / "extra")
    * }}}
    *
    * The resulting mappings sequence will look something like this
    *
    * {{{
-   * File(extras/file1) -> "file1"
-   * File(extras/file2) -> "file2"
+   * File($baseDirectory/extras/file1) -> "file1"
+   * File($baseDirectory/extras/file2) -> "file2"
    * ...
    * }}}
    *
    * @example Add a static directory "extra" and re-map the destination to a different path
    * {{{
-   * mappings in Universal ++= contentOf(baseDirectory.value / "extra").map {
+   * mappings ++= contentOf(baseDirectory.value / "extra").map {
    *   case (src, destination => src -> s"new/path/$destination"
    * }
    * }}}
