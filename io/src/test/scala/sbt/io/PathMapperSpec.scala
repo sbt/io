@@ -29,7 +29,6 @@ class PathMapperSpec extends fixture.FlatSpec with Matchers {
   }
 
   "directory" should "create mappings including the baseDirectory" in { tempDirectory =>
-
     val nestedFile1 = Files.createFile(tempDirectory resolve "file1").toFile
     val nestedFile2 = Files.createFile(tempDirectory resolve "file2").toFile
     val nestedDir = Files.createDirectory(tempDirectory resolve "dir1")
@@ -44,6 +43,21 @@ class PathMapperSpec extends fixture.FlatSpec with Matchers {
       nestedDir.toFile -> s"${tempDirectory.getFileName}/dir1",
       nestedDirFile -> s"${tempDirectory.getFileName}/dir1/dir1-file1"
     )
+  }
+
+  it should "create one mapping entry for an empty directory" in { tempDirectory =>
+    val mappings = Path.directory(tempDirectory.toFile)
+
+    mappings should contain theSameElementsAs List[(File, String)](
+      tempDirectory.toFile -> s"${tempDirectory.getFileName}"
+    )
+  }
+
+  it should "create an empty mappings sequence for a non-existing directory" in { tempDirectory =>
+    val nonExistingDirectory = tempDirectory.resolve("imaginary")
+    val mappings = Path.directory(nonExistingDirectory.toFile)
+
+    mappings should be(empty)
   }
 
   "contentOf" should "create mappings excluding the baseDirectory" in { tempDirectory =>
@@ -61,6 +75,19 @@ class PathMapperSpec extends fixture.FlatSpec with Matchers {
       nestedDir.toFile -> s"dir1",
       nestedDirFile -> s"dir1/dir1-file1"
     )
+  }
+
+  it should "create an empty mappings sequence for an empty directory" in { tempDirectory =>
+    val mappings = Path.contentOf(tempDirectory.toFile)
+
+    mappings should be(empty)
+  }
+
+  it should "create an empty mappings sequence for a non-existing directory" in { tempDirectory =>
+    val nonExistingDirectory = tempDirectory.resolve("imaginary")
+    val mappings = Path.contentOf(nonExistingDirectory.toFile)
+
+    mappings should be(empty)
   }
 
   override protected def withFixture(test: OneArgTest): Outcome = {
