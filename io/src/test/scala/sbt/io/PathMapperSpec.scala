@@ -34,6 +34,11 @@ class PathMapperSpec extends fixture.FlatSpec with Matchers {
     val nestedDir = Files.createDirectory(tempDirectory resolve "dir1")
     val nestedDirFile = Files.createDirectory(nestedDir resolve "dir1-file1").toFile
 
+    IO.touch(nestedFile1)
+    IO.touch(nestedFile2)
+    IO.createDirectory(nestedDir.toFile)
+    IO.touch(nestedDirFile)
+
     val mappings = Path.directory(tempDirectory.toFile)
 
     mappings should contain theSameElementsAs List[(File, String)](
@@ -60,12 +65,28 @@ class PathMapperSpec extends fixture.FlatSpec with Matchers {
     mappings should be(empty)
   }
 
+  it should "create one mapping entry if the directory is a file" in { tempDirectory =>
+    val file = tempDirectory.resolve("file").toFile
+    IO.touch(file)
+    val mappings = Path.directory(file)
+
+    mappings should contain theSameElementsAs List[(File, String)](
+      file -> s"${file.getName}"
+    )
+  }
+
   "contentOf" should "create mappings excluding the baseDirectory" in { tempDirectory =>
 
     val nestedFile1 = Files.createFile(tempDirectory resolve "file1").toFile
     val nestedFile2 = Files.createFile(tempDirectory resolve "file2").toFile
     val nestedDir = Files.createDirectory(tempDirectory resolve "dir1")
     val nestedDirFile = Files.createDirectory(nestedDir resolve "dir1-file1").toFile
+
+    IO.touch(nestedFile1)
+    IO.touch(nestedFile2)
+    IO.createDirectory(nestedDir.toFile)
+    IO.touch(nestedDirFile)
+
 
     val mappings = Path.contentOf(tempDirectory.toFile)
 
@@ -86,6 +107,13 @@ class PathMapperSpec extends fixture.FlatSpec with Matchers {
   it should "create an empty mappings sequence for a non-existing directory" in { tempDirectory =>
     val nonExistingDirectory = tempDirectory.resolve("imaginary")
     val mappings = Path.contentOf(nonExistingDirectory.toFile)
+
+    mappings should be(empty)
+  }
+
+  it should "create an empty mappings sequence if the directory is a file" in { tempDirectory =>
+    val file = tempDirectory.resolve("file").toFile
+    val mappings = Path.contentOf(file)
 
     mappings should be(empty)
   }
