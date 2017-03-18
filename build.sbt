@@ -11,7 +11,17 @@ def commonSettings: Seq[Setting[_]] = Seq(
   scalacOptions ++= ifScala211Plus("-Ywarn-unused").value.toList,
   scalacOptions ++= ifScala211Plus("-Ywarn-unused-import").value.toList,
   crossScalaVersions := Seq(scala210, scala211, scala212),
-  previousArtifact := None // Some(organization.value %% moduleName.value % "1.0.0"),
+  mimaPreviousArtifacts := Set.empty // Set(organization.value %% moduleName.value % "1.0.0"),
+) ++ relaxNon212
+
+def relaxNon212: Seq[Setting[_]] = Seq(
+  scalacOptions := {
+      val old = scalacOptions.value
+      scalaBinaryVersion.value match {
+        case "2.12" => old
+        case _      => old filterNot Set("-Xfatal-warnings", "-deprecation", "-Ywarn-unused", "-Ywarn-unused-import")
+      }
+    }
 )
 
 lazy val ioRoot = (project in file(".")).
