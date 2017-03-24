@@ -122,8 +122,9 @@ abstract class Mapper {
    * The resulting mappings sequence will look something like this
    *
    * {{{
+   * File($baseDirectory/extras) -> "extras"
    * File($baseDirectory/extras/file1) -> "extras/file1"
-   * File($baseDirectory/extras/file2) -> "extras/"file2"
+   * File($baseDirectory/extras/file2) -> "extras/file2"
    * ...
    * }}}
    *
@@ -155,7 +156,7 @@ abstract class Mapper {
    * @example Add a static directory "extra" and re-map the destination to a different path
    * {{{
    * mappings ++= contentOf(baseDirectory.value / "extra").map {
-   *   case (src, destination => src -> s"new/path/$destination"
+   *   case (src, destination) => src -> s"new/path/$destination"
    * }
    * }}}
    *
