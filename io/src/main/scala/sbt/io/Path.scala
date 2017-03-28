@@ -85,6 +85,7 @@ object Path extends Mapper {
   val sep: Char = java.io.File.separatorChar
 
   def toURLs(files: Seq[File]): Array[URL] = files.map(_.toURI.toURL).toArray
+
 }
 
 object PathFinder {
