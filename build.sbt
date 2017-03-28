@@ -6,22 +6,9 @@ def baseVersion: String = "1.0.0-M8"
 def commonSettings: Seq[Setting[_]] = Seq(
   scalaVersion := scala211,
   javacOptions in compile ++= Seq("-Xlint", "-Xlint:-serial"),
-  scalacOptions  -= "-Yinline-warnings",
-  scalacOptions  += "-Xfatal-warnings",
-  scalacOptions ++= ifScala211Plus("-Ywarn-unused").value.toList,
-  scalacOptions ++= ifScala211Plus("-Ywarn-unused-import").value.toList,
+  scalacOptions in Compile in compile += "-Xfatal-warnings",
   crossScalaVersions := Seq(scala210, scala211, scala212),
-  mimaPreviousArtifacts := Set.empty // Set(organization.value %% moduleName.value % "1.0.0"),
-) ++ relaxNon212
-
-def relaxNon212: Seq[Setting[_]] = Seq(
-  scalacOptions := {
-      val old = scalacOptions.value
-      scalaBinaryVersion.value match {
-        case "2.12" => old
-        case _      => old filterNot Set("-Xfatal-warnings", "-deprecation", "-Ywarn-unused", "-Ywarn-unused-import")
-      }
-    }
+  mimaPreviousArtifacts := Set.empty // Set(organization.value %% moduleName.value % "1.0.0")
 )
 
 lazy val ioRoot = (project in file(".")).
@@ -46,9 +33,6 @@ lazy val io = (project in file("io")).
   settings(
     commonSettings,
     name := "IO",
-    libraryDependencies ++= Seq(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test)
+    libraryDependencies ++= Seq(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test),
+    initialCommands += "\nimport sbt.io._, syntax._"
   )
-
-def ifScala211Plus[T](x: T) = Def.setting(
-  PartialFunction.condOpt(CrossVersion.partialVersion(scalaVersion.value)){ case Some((2, v)) if v >= 11 => x }
-)
