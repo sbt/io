@@ -34,5 +34,5 @@ lazy val io = (project in file("io")).
     commonSettings,
     name := "IO",
     libraryDependencies ++= Seq(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test),
-    initialCommands += "\nimport sbt.io._, syntax._"
+    initialCommands in console += "\nimport sbt.io._, syntax._"
   )
