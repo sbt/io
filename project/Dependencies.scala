@@ -3,7 +3,7 @@ import Keys._
 
 object Dependencies {
   val scala210 = "2.10.6"
-  val scala211 = "2.11.8"
+  val scala211 = "2.11.9"
   val scala212 = "2.12.1"
 
   val scalaCompiler = Def.setting { "org.scala-lang" % "scala-compiler" % scalaVersion.value }
