@@ -323,14 +323,20 @@ object IO {
 
   /**
    * Creates a temporary directory and provides its location to the given function.  The directory
-   * is deleted after the function returns.
+   * is deleted after the function returns if `keepDirectory` is set to false.
    */
-  def withTemporaryDirectory[T](action: File => T): T =
+  def withTemporaryDirectory[T](action: File => T, keepDirectory: Boolean): T =
     {
       val dir = createTemporaryDirectory
       try { action(dir) }
-      finally { delete(dir) }
+      finally { if (!keepDirectory) delete(dir) }
     }
+
+  /**
+   * Overload of `withTemporaryDirectory` with `keepDirectory` set to false.
+   */
+  def withTemporaryDirectory[T](action: File => T): T =
+    withTemporaryDirectory(action, keepDirectory = false)
 
   /** Creates a directory in the default temporary directory with a name generated from a random integer. */
   def createTemporaryDirectory: File = createUniqueDirectory(temporaryDirectory)
@@ -353,15 +359,24 @@ object IO {
       create(0)
     }
   /**
-   * Creates a file in the default temporary directory, calls `action` with the file, deletes the file, and returns the result of calling `action`.
-   * The name of the file will begin with `prefix`, which must be at least three characters long, and end with `postfix`, which has no minimum length.
+   * Creates a file in the default temporary directory, calls `action` with the
+   * file, deletes the file if `keepFile` is set to true, and returns the
+   * result of calling `action`. The name of the file will begin with `prefix`,
+   * which must be at least three characters long, and end with `postfix`, which
+   * has no minimum length.
    */
-  def withTemporaryFile[T](prefix: String, postfix: String)(action: File => T): T =
+  def withTemporaryFile[T](prefix: String, postfix: String, keepFile: Boolean)(action: File => T): T =
     {
       val file = File.createTempFile(prefix, postfix)
       try { action(file) }
-      finally { file.delete(); () }
+      finally { if (!keepFile) file.delete(); () }
     }
+
+  /**
+   * Overload of `withTemporaryFile` with `keepFile` set to false.
+   */
+  def withTemporaryFile[T](prefix: String, postfix: String)(action: File => T): T =
+    withTemporaryFile(prefix, postfix, keepFile = false)(action)
 
   private[sbt] def jars(dir: File): Iterable[File] = listFiles(dir, GlobFilter("*.jar"))
 
