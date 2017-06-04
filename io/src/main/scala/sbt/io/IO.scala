@@ -38,7 +38,7 @@ object IO {
   val utf8 = Charset.forName("UTF-8")
 
   /**
-   * Returns the directory or jar file containing the the class file `cl`.
+   * Returns the directory or jar file containing the class file `cl`.
    * If the location cannot be determined or it is not a file, an error is generated.
    * Note that Java standard library classes typically do not have a location associated with them.
    */
@@ -60,7 +60,7 @@ object IO {
     }
 
   /**
-   * Returns the directory or jar file containing the the class file for type `T` (as determined by an implicit Manifest).
+   * Returns the directory or jar file containing the class file for type `T` (as determined by an implicit Manifest).
    * If the location cannot be determined, an error is generated.
    * Note that Java standard library classes typically do not have a location associated with them.
    */
