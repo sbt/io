@@ -1,1 +1,1 @@
-addSbtPlugin("org.scala-sbt" % "sbt-houserules" % "0.3.2")
+addSbtPlugin("org.scala-sbt" % "sbt-houserules" % "0.3.3")
