@@ -17,6 +17,7 @@ import scala.annotation.tailrec
 import scala.collection.immutable.TreeSet
 import scala.collection.mutable.{ HashMap, HashSet }
 import scala.reflect.{ Manifest => SManifest }
+import scala.util.control.NonFatal
 import scala.util.control.Exception._
 import Function.tupled
 
@@ -347,7 +348,7 @@ object IO {
             val f = new File(baseDirectory, randomName)
 
             try { createDirectory(f); f }
-            catch { case e: Exception => create(tries + 1) }
+            catch { case NonFatal(_) => create(tries + 1) }
           }
         }
       create(0)
@@ -508,7 +509,7 @@ object IO {
 
   // produce a sorted list of all the subdirectories of all provided files
   private def allDirectoryPaths(files: Iterable[(File, String)]) =
-    TreeSet[String]() ++ (files flatMap { case (file, name) => directoryPaths(name) })
+    TreeSet[String]() ++ (files flatMap { case (_, name) => directoryPaths(name) })
 
   private def normalizeName(name: String) =
     {
