@@ -4,7 +4,7 @@
 package sbt
 package io
 
-import java.io.{ Closeable, File, FileInputStream, FileOutputStream, InputStream, OutputStream }
+import java.io.{ File, FileInputStream, FileOutputStream, InputStream, OutputStream }
 import java.io.{ BufferedInputStream, BufferedOutputStream, InputStreamReader, OutputStreamWriter }
 import java.io.{ BufferedReader, BufferedWriter }
 import java.util.zip.GZIPInputStream
@@ -45,7 +45,7 @@ private[sbt] trait OpenFile[T] extends Using[File, T] {
 }
 
 object Using {
-  def wrap[Source, T <: Closeable](openF: Source => T)(implicit srcMf: SManifest[Source], targetMf: SManifest[T]): Using[Source, T] =
+  def wrap[Source, T <: AutoCloseable](openF: Source => T)(implicit srcMf: SManifest[Source], targetMf: SManifest[T]): Using[Source, T] =
     wrap(openF, closeCloseable)
   def wrap[Source, T](openF: Source => T, closeF: T => Unit)(implicit srcMf: SManifest[Source], targetMf: SManifest[T]): Using[Source, T] =
     new WrapUsing[Source, T] {
@@ -53,20 +53,20 @@ object Using {
       def close(t: T) = closeF(t)
     }
 
-  def resource[Source, T <: Closeable](openF: Source => T): Using[Source, T] =
+  def resource[Source, T <: AutoCloseable](openF: Source => T): Using[Source, T] =
     resource(openF, closeCloseable)
   def resource[Source, T](openF: Source => T, closeF: T => Unit): Using[Source, T] =
     new Using[Source, T] {
       def open(s: Source) = openF(s)
       def close(s: T) = closeF(s)
     }
-  def file[T <: Closeable](openF: File => T): OpenFile[T] = file(openF, closeCloseable)
+  def file[T <: AutoCloseable](openF: File => T): OpenFile[T] = file(openF, closeCloseable)
   def file[T](openF: File => T, closeF: T => Unit): OpenFile[T] =
     new OpenFile[T] {
       def openImpl(file: File) = openF(file)
       def close(t: T) = closeF(t)
     }
-  private def closeCloseable[T <: Closeable]: T => Unit = _.close()
+  private def closeCloseable[T <: AutoCloseable]: T => Unit = _.close()
 
   def bufferedOutputStream = wrap((out: OutputStream) => new BufferedOutputStream(out))
   def bufferedInputStream = wrap((in: InputStream) => new BufferedInputStream(in))
