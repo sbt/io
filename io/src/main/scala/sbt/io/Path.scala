@@ -8,7 +8,7 @@ import java.net.URL
 import scala.collection.mutable
 import IO.wrapNull
 
-final class RichFile(val asFile: File) {
+final class RichFile(val asFile: File) extends AnyVal {
   def /(component: String): File = if (component == ".") asFile else new File(asFile, component)
 
   /** True if and only if the wrapped file exists.*/
