@@ -9,7 +9,7 @@ def commonSettings: Seq[Setting[_]] = Seq(
   scalacOptions in Compile in compile += "-Xfatal-warnings",
   scalacOptions --= ifScala210Minus("-Ywarn-unused").value.toList,        // WORKAROUND sbt/sbt-houserules#14
   scalacOptions --= ifScala210Minus("-Ywarn-unused-import").value.toList, // WORKAROUND sbt/sbt-houserules#14
-  crossScalaVersions := Seq(scala210, scala211, scala212),
+  crossScalaVersions := Seq(scala210, scala211, scala212, scala213),
   // mimaPreviousArtifacts := Set.empty // Set(organization.value %% moduleName.value % "1.0.0")
 )
 
