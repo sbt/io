@@ -3,9 +3,10 @@ package sbt.io
 import java.nio.file.{ ClosedWatchServiceException, WatchEvent, WatchKey, Path => JPath, WatchService => JWatchService }
 import java.util.concurrent.TimeUnit
 
+import scala.annotation.tailrec
 import scala.collection.mutable
-
 import scala.collection.JavaConverters._
+import scala.concurrent.duration.Duration
 
 object WatchService {
 
@@ -27,9 +28,16 @@ object WatchService {
         else Some((k, events.asScala.asInstanceOf[Seq[WatchEvent[JPath]]]))
       }.toMap
 
-    override def poll(timeoutMs: Long): WatchKey = {
-      service.poll(timeoutMs, TimeUnit.MILLISECONDS)
-    }
+    @tailrec
+    override def poll(timeout: Duration): WatchKey =
+      if (timeout.isFinite) {
+        service.poll(timeout.toMillis, TimeUnit.MILLISECONDS)
+      } else {
+        service.poll(1000L, TimeUnit.MILLISECONDS) match {
+          case null => poll(timeout)
+          case key  => key
+        }
+      }
 
     override def register(path: JPath, events: WatchEvent.Kind[JPath]*): WatchKey = {
       if (closed) throw new ClosedWatchServiceException
@@ -69,11 +77,12 @@ trait WatchService {
 
   /**
    * Retrieves the next `WatchKey` that has a `WatchEvent` waiting. Waits
-   * up to `timeoutMs` milliseconds if no such key exists.
-   * @param timeoutMs Maximum time to wait, in milliseconds.
-   * @return The next `WatchKey` that received an event.
+   * until the `timeout` is expired is no such key exists.
+   * @param timeout Maximum time to wait
+   * @return The next `WatchKey` that received an event, or null if no such
+   *         key exists.
    */
-  def poll(timeoutMs: Long): WatchKey
+  def poll(timeout: Duration): WatchKey
 
   /**
    * Registers a path to be monitored.

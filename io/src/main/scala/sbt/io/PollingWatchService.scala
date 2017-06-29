@@ -6,11 +6,12 @@ import java.util.{List => JList}
 
 import sbt.io.syntax._
 import scala.collection.mutable
+import scala.concurrent.duration.{Duration, FiniteDuration}
 
-/** A `WatchService` that polls the filesystem every `delayMs` milliseconds. */
-class PollingWatchService(delayMs: Long) extends WatchService {
+/** A `WatchService` that polls the filesystem every `delay`. */
+class PollingWatchService(delay: FiniteDuration) extends WatchService {
   private var closed: Boolean       = false
-  private val thread: PollingThread = new PollingThread(delayMs)
+  private val thread: PollingThread = new PollingThread(delay)
   private val keys: mutable.Map[JPath, PollingWatchKey] = mutable.Map.empty
   private val pathLengthOrdering: Ordering[JPath] =
     Ordering.fromLessThan {
@@ -33,8 +34,13 @@ class PollingWatchService(delayMs: Long) extends WatchService {
     }
   }
 
-  override def poll(timeoutMs: Long): WatchKey = thread.keysWithEvents.synchronized {
+  override def poll(timeout: Duration): WatchKey = thread.keysWithEvents.synchronized {
     ensureNotClosed()
+    thread.keysWithEvents.synchronized {
+      if (thread.keysWithEvents.isEmpty) {
+        thread.keysWithEvents.wait(timeout.toMillis)
+      }
+    }
     thread.keysWithEvents.headOption.map { k =>
       thread.keysWithEvents -= k
       k
@@ -62,7 +68,7 @@ class PollingWatchService(delayMs: Long) extends WatchService {
   private def ensureNotClosed(): Unit =
     if (closed) throw new ClosedWatchServiceException
 
-  private class PollingThread(delayMs: Long) extends Thread {
+  private class PollingThread(delay: FiniteDuration) extends Thread {
     private var fileTimes: Map[JPath, Long] = Map.empty
     var initDone = false
     val keysWithEvents = mutable.LinkedHashSet.empty[WatchKey]
@@ -71,7 +77,7 @@ class PollingWatchService(delayMs: Long) extends WatchService {
       while (!closed) {
         populateEvents()
         initDone = true
-        Thread.sleep(delayMs)
+        Thread.sleep(delay.toMillis)
       }
 
     def getFileTimes(): Map[JPath, Long] = {
@@ -88,6 +94,7 @@ class PollingWatchService(delayMs: Long) extends WatchService {
       keys.get(path).foreach { k =>
         keysWithEvents += k
         k.events.add(ev)
+        keysWithEvents.notifyAll()
       }
     }
 

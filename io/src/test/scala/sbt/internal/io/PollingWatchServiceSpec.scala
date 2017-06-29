@@ -2,5 +2,9 @@ package sbt.internal.io
 
 import sbt.io.PollingWatchService
 
-class PollingWatchServiceSpec extends SourceModificationWatchSpec(new PollingWatchService(500L), 500L, 3000L)
+import scala.concurrent.duration._
+
+class PollingWatchServiceSpec extends SourceModificationWatchSpec(new PollingWatchService(500.milliseconds),
+                                                                  500.milliseconds,
+                                                                  3.seconds)
 

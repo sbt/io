@@ -10,6 +10,7 @@ import sbt.io.{ DirectoryFilter, FileFilter, WatchService }
 import sbt.io.syntax._
 
 import scala.annotation.tailrec
+import scala.concurrent.duration.FiniteDuration
 
 private[sbt] object SourceModificationWatch {
 
@@ -18,7 +19,7 @@ private[sbt] object SourceModificationWatch {
    * until changes are detected or `terminationCondition` evaluates to `true`.
    */
   @tailrec
-  def watch(delayMillis: Long, state: WatchState)(terminationCondition: => Boolean): (Boolean, WatchState) = {
+  def watch(delay: FiniteDuration, state: WatchState)(terminationCondition: => Boolean): (Boolean, WatchState) = {
     if (state.count == 0) (true, state.withCount(1))
     else {
       val events =
@@ -28,8 +29,8 @@ private[sbt] object SourceModificationWatch {
         if (terminationCondition) {
           (false, state)
         } else {
-          Thread.sleep(delayMillis)
-          watch(delayMillis, state)(terminationCondition)
+          Thread.sleep(delay.toMillis)
+          watch(delay, state)(terminationCondition)
         }
       } else {
         val previousFiles = state.registered.keySet
@@ -54,8 +55,8 @@ private[sbt] object SourceModificationWatch {
         if (filteredCreated.nonEmpty || filteredDeleted.nonEmpty || filteredModified.nonEmpty) {
           (true, newState.withCount(newState.count + 1))
         } else {
-          Thread.sleep(delayMillis)
-          watch(delayMillis, newState)(terminationCondition)
+          Thread.sleep(delay.toMillis)
+          watch(delay, newState)(terminationCondition)
         }
       }
     }
@@ -72,7 +73,7 @@ private[sbt] object SourceModificationWatch {
 }
 
 /** The state of the file watch. */
-final class WatchState private (
+private[sbt] final class WatchState private (
   val count: Int,
   private[sbt] val sources: Seq[Source],
   service: WatchService,
@@ -150,7 +151,7 @@ final class Source(base: File, includeFilter: FileFilter, excludeFilter: FileFil
     base.allPaths.get.map(_.toPath)
 }
 
-object WatchState {
+private[sbt] object WatchState {
   /** What events should be monitored */
   val events: Array[WatchEvent.Kind[Path]] = Array(ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY)
 

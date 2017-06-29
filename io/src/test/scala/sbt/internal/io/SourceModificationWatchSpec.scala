@@ -6,7 +6,9 @@ import org.scalatest.{ Assertion, FlatSpec, Matchers }
 import sbt.io.syntax._
 import sbt.io.{ IO, SimpleFilter, WatchService }
 
-abstract class SourceModificationWatchSpec(getService: => WatchService, pollDelayMs: Long, maxWaitMs: Long) extends FlatSpec with Matchers {
+import scala.concurrent.duration._
+
+abstract class SourceModificationWatchSpec(getService: => WatchService, pollDelay: FiniteDuration, maxWait: FiniteDuration) extends FlatSpec with Matchers {
 
   it should "watch a directory for file creation" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
@@ -14,7 +16,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
 
     IO.createDirectory(parentDir)
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs) {
+    watchTest(parentDir)(pollDelay, maxWait) {
       IO.write(created, "foo")
     }
   }
@@ -25,7 +27,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
 
     IO.createDirectory(parentDir)
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs, expectedTrigger = false) {
+    watchTest(parentDir)(pollDelay, maxWait, expectedTrigger = false) {
       IO.createDirectory(created)
     }
   }
@@ -36,7 +38,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
 
     IO.createDirectory(parentDir)
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs, expectedTrigger = false) {
+    watchTest(parentDir)(pollDelay, maxWait, expectedTrigger = false) {
       IO.touch(created)
     }
   }
@@ -47,7 +49,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
 
     IO.createDirectory(parentDir)
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs, expectedTrigger = false) {
+    watchTest(parentDir)(pollDelay, maxWait, expectedTrigger = false) {
       IO.touch(created)
     }
   }
@@ -58,7 +60,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
 
     IO.createDirectory(parentDir)
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs, expectedTrigger = false) {
+    watchTest(parentDir)(pollDelay, maxWait, expectedTrigger = false) {
       IO.createDirectory(created)
     }
   }
@@ -70,7 +72,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
 
     IO.createDirectory(subDir)
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs) {
+    watchTest(parentDir)(pollDelay, maxWait) {
       IO.write(created, "foo")
     }
   }
@@ -82,7 +84,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
 
     IO.createDirectory(subDir)
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs, expectedTrigger = false) {
+    watchTest(parentDir)(pollDelay, maxWait, expectedTrigger = false) {
       IO.touch(created)
     }
   }
@@ -94,7 +96,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
 
     IO.createDirectory(subDir)
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs, expectedTrigger = false) {
+    watchTest(parentDir)(pollDelay, maxWait, expectedTrigger = false) {
       IO.touch(created)
     }
   }
@@ -106,7 +108,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
 
     IO.createDirectory(subDir)
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs, expectedTrigger = false) {
+    watchTest(parentDir)(pollDelay, maxWait, expectedTrigger = false) {
       IO.createDirectory(created)
     }
   }
@@ -116,7 +118,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
     val file = parentDir / "WillBeDeleted.scala"
     IO.write(file, "foo")
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs) {
+    watchTest(parentDir)(pollDelay, maxWait) {
       IO.delete(file)
     }
   }
@@ -126,7 +128,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
     val file = parentDir / "ignoreme"
     IO.write(file, "foo")
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs, expectedTrigger = false) {
+    watchTest(parentDir)(pollDelay, maxWait, expectedTrigger = false) {
       IO.delete(file)
     }
   }
@@ -136,7 +138,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
     val file = parentDir / ".hidden.scala"
     IO.write(file, "foo")
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs, expectedTrigger = false) {
+    watchTest(parentDir)(pollDelay, maxWait, expectedTrigger = false) {
       IO.delete(file)
     }
   }
@@ -146,7 +148,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
     val subDir = parentDir / "ignoreme"
     IO.createDirectory(subDir)
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs, expectedTrigger = false) {
+    watchTest(parentDir)(pollDelay, maxWait, expectedTrigger = false) {
       IO.delete(subDir)
     }
   }
@@ -157,7 +159,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
     val willBeDeleted = subDir / "WillBeDeleted.scala"
     IO.write(willBeDeleted, "foo")
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs) {
+    watchTest(parentDir)(pollDelay, maxWait) {
       IO.delete(willBeDeleted)
     }
   }
@@ -168,7 +170,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
     val willBeDeleted = subDir / "ignoreme"
     IO.write(willBeDeleted, "foo")
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs, expectedTrigger = false) {
+    watchTest(parentDir)(pollDelay, maxWait, expectedTrigger = false) {
       IO.delete(willBeDeleted)
     }
   }
@@ -179,7 +181,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
     val willBeDeleted = subDir / ".hidden.scala"
     IO.write(willBeDeleted, "foo")
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs, expectedTrigger = false) {
+    watchTest(parentDir)(pollDelay, maxWait, expectedTrigger = false) {
       IO.delete(willBeDeleted)
     }
   }
@@ -190,7 +192,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
     val willBeDeleted = subDir / "ignoreme"
     IO.createDirectory(willBeDeleted)
 
-    watchTest(parentDir)(pollDelayMs, maxWaitMs, expectedTrigger = false) {
+    watchTest(parentDir)(pollDelay, maxWait, expectedTrigger = false) {
       IO.delete(willBeDeleted)
     }
   }
@@ -203,13 +205,13 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
 
     try {
       val initState = emptyState(service, parentDir)
-      val (triggered0, newState0) = watchTest(initState)(pollDelayMs, maxWaitMs) {
+      val (triggered0, newState0) = watchTest(initState)(pollDelay, maxWait) {
         IO.createDirectory(subDir)
       }
       triggered0 shouldBe false
       newState0.count shouldBe 1
 
-      val (triggered1, newState1) = watchTest(newState0)(pollDelayMs, maxWaitMs) {
+      val (triggered1, newState1) = watchTest(newState0)(pollDelay, maxWait) {
         IO.delete(subDir)
       }
       triggered1 shouldBe false
@@ -227,14 +229,14 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
 
     try {
       val initState = emptyState(service, parentDir)
-      val (triggered0, newState0) = watchTest(initState)(pollDelayMs, maxWaitMs) {
+      val (triggered0, newState0) = watchTest(initState)(pollDelay, maxWait) {
         IO.createDirectory(subDir)
         IO.touch(src)
       }
       triggered0 shouldBe true
       newState0.count shouldBe 2
 
-      val (triggered1, newState1) = watchTest(newState0)(pollDelayMs, maxWaitMs) {
+      val (triggered1, newState1) = watchTest(newState0)(pollDelay, maxWait) {
         IO.delete(subDir)
       }
       triggered1 shouldBe true
@@ -245,7 +247,7 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
   "WatchService.poll" should "throw a `ClosedWatchServiceException` if used after `close`" in {
     val service = getService
     service.close()
-    assertThrows[ClosedWatchServiceException](service.poll(1000L))
+    assertThrows[ClosedWatchServiceException](service.poll(1.second))
   }
 
   "WatchService.register" should "throw a `ClosedWatchServiceException` if used after `close`" in {
@@ -260,28 +262,28 @@ abstract class SourceModificationWatchSpec(getService: => WatchService, pollDela
     service.close()
   }
 
-  private def watchTest(initState: WatchState)(pollDelayMs: Long, maxWaitMs: Long)(modifier: => Unit): (Boolean, WatchState) = {
+  private def watchTest(initState: WatchState)(pollDelay: FiniteDuration, maxWait: FiniteDuration)(modifier: => Unit): (Boolean, WatchState) = {
     var started   = false
-    val startTime = System.currentTimeMillis()
+    val deadline  = maxWait.fromNow
     val modThread = new Thread {
       override def run(): Unit = {
         modifier
       }
     }
-    SourceModificationWatch.watch(pollDelayMs, initState) {
+    SourceModificationWatch.watch(pollDelay, initState) {
       if (!started) {
         started = true
         modThread.start()
       }
-      System.currentTimeMillis() - startTime > maxWaitMs
+      deadline.isOverdue()
     }
   }
 
-  private def watchTest(base: File)(pollDelayMs: Long, maxWaitMs: Long, expectedTrigger: Boolean = true)(modifier: => Unit): Assertion = {
+  private def watchTest(base: File)(pollDelay: FiniteDuration, maxWait: FiniteDuration, expectedTrigger: Boolean = true)(modifier: => Unit): Assertion = {
     val service = getService
     try {
     val initState = emptyState(service, base)
-    val (triggered, _) = watchTest(initState)(pollDelayMs, maxWaitMs)(modifier)
+    val (triggered, _) = watchTest(initState)(pollDelay, maxWait)(modifier)
       triggered shouldBe expectedTrigger
     } finally service.close()
   }
