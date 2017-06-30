@@ -571,10 +571,12 @@ object IO {
   }
 
   /**
-   * For each pair in `sources`, copies the contents of the first File (the source) to the location of the second File (the target).
+   * For each pair in `sources`, copies the contents of the first File (the source) to the location
+   * of the second File (the target).
    *
    * A source file is always copied if `overwrite` is true.
-   * If `overwrite` is false, the source is only copied if the target is missing or is older than the source file according to last modified times.
+   * If `overwrite` is false, the source is only copied if the target is missing or is older than
+   * the source file according to last modified times.
    * If the source is a directory, the corresponding directory is created.
    *
    * If `preserveLastModified` is `true`, the last modified times are transferred as well.
@@ -598,9 +600,14 @@ object IO {
     }
 
   /**
-   * Copies the contents of each file in the `source` directory to the corresponding file in the `target` directory.
+   * Copies the contents of each file in the `source` directory to the corresponding file in the
+   * `target` directory.
+   *
    * A source file is always copied if `overwrite` is true.
-   * If `overwrite` is false, the source is only copied if the target is missing or is older than the source file according to last modified times.
+   *
+   * If `overwrite` is false, the source is only copied if the target is missing or is older than
+   * the source file according to last modified times.
+   *
    * Files in `target` without a corresponding file in `source` are left unmodified in any case.
    * If `preserveLastModified` is `true`, the last modified times are transferred as well.
    * Any parent directories that do not exist are created.
