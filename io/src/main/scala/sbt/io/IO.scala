@@ -570,52 +570,86 @@ object IO {
     } else None
   }
 
+  def copy(sources: Traversable[(File, File)]): Set[File] = copy(sources, CopyOptions())
+
   /**
-   * For each pair in `sources`, copies the contents of the first File (the source) to the location of the second File (the target).
+   * For each pair in `sources`, copies the contents of the first File (the source) to the location
+   * of the second File (the target).
    *
-   * A source file is always copied if `overwrite` is true.
-   * If `overwrite` is false, the source is only copied if the target is missing or is older than the source file according to last modified times.
-   * If the source is a directory, the corresponding directory is created.
+   * See [[sbt.io.CopyOptions]] for docs on the options available.
    *
-   * If `preserveLastModified` is `true`, the last modified times are transferred as well.
    * Any parent directories that do not exist are created.
    * The set of all target files is returned, whether or not they were updated by this method.
    */
-  def copy(sources: Traversable[(File, File)], overwrite: Boolean = false, preserveLastModified: Boolean = false): Set[File] =
-    sources.map(tupled(copyImpl(overwrite, preserveLastModified))).toSet
+  def copy(sources: Traversable[(File, File)], options: CopyOptions): Set[File] =
+    copy(sources, options.overwrite, options.preserveLastModified, options.preserveExecutable)
 
-  private def copyImpl(overwrite: Boolean, preserveLastModified: Boolean)(from: File, to: File): File =
-    {
-      if (overwrite || !to.exists || from.lastModified > to.lastModified) {
-        if (from.isDirectory)
-          createDirectory(to)
-        else {
-          createDirectory(to.getParentFile)
-          copyFile(from, to, preserveLastModified)
-        }
+  def copy(
+      sources: Traversable[(File, File)],
+      overwrite: Boolean,
+      preserveLastModified: Boolean,
+      preserveExecutable: Boolean
+  ): Set[File] =
+    sources.map(tupled(copyImpl(overwrite, preserveLastModified, preserveExecutable))).toSet
+
+  private def copyImpl(overwrite: Boolean, preserveLastModified: Boolean, preserveExecutable: Boolean)(
+      from: File,
+      to: File
+  ): File = {
+    if (overwrite || !to.exists || from.lastModified > to.lastModified) {
+      if (from.isDirectory)
+        createDirectory(to)
+      else {
+        createDirectory(to.getParentFile)
+        copyFile(from, to, preserveLastModified, preserveExecutable)
       }
-      to
     }
+    to
+  }
+
+  def copyDirectory(source: File, target: File): Unit = copyDirectory(source, target, CopyOptions())
 
   /**
-   * Copies the contents of each file in the `source` directory to the corresponding file in the `target` directory.
-   * A source file is always copied if `overwrite` is true.
-   * If `overwrite` is false, the source is only copied if the target is missing or is older than the source file according to last modified times.
+   * Copies the contents of each file in the `source` directory to the corresponding file in the
+   * `target` directory.
+   *
+   * See [[sbt.io.CopyOptions]] for docs on the options available.
+   *
    * Files in `target` without a corresponding file in `source` are left unmodified in any case.
-   * If `preserveLastModified` is `true`, the last modified times are transferred as well.
    * Any parent directories that do not exist are created.
    */
-  def copyDirectory(source: File, target: File, overwrite: Boolean = false, preserveLastModified: Boolean = false): Unit = {
+  def copyDirectory(source: File, target: File, options: CopyOptions): Unit =
+    copyDirectory(source, target, options.overwrite, options.preserveLastModified, options.preserveExecutable)
+
+  def copyDirectory(
+      source: File,
+      target: File,
+      overwrite: Boolean = false,
+      preserveLastModified: Boolean = false,
+      preserveExecutable: Boolean = true
+  ): Unit = {
     val sources = PathFinder(source).allPaths pair Path.rebase(source, target)
-    copy(sources, overwrite, preserveLastModified)
+    copy(sources, overwrite, preserveLastModified, preserveExecutable)
     ()
   }
 
+  def copyFile(sourceFile: File, targetFile: File): Unit =
+    copyFile(sourceFile, targetFile, CopyOptions())
+
   /**
    * Copies the contents of `sourceFile` to the location of `targetFile`, overwriting any existing content.
-   * If `preserveLastModified` is `true`, the last modified time is transferred as well.
+   *
+   * See [[sbt.io.CopyOptions]] for docs on the options available.
    */
-  def copyFile(sourceFile: File, targetFile: File, preserveLastModified: Boolean = false): Unit = {
+  def copyFile(sourceFile: File, targetFile: File, options: CopyOptions): Unit =
+    copyFile(sourceFile, targetFile, options.preserveLastModified, options.preserveExecutable)
+
+  def copyFile(
+      sourceFile: File,
+      targetFile: File,
+      preserveLastModified: Boolean = false,
+      preserveExecutable: Boolean = true
+  ): Unit = {
     // NOTE: when modifying this code, test with larger values of CopySpec.MaxFileSizeBits than default
 
     require(sourceFile.exists, "Source file '" + sourceFile.getAbsolutePath + "' does not exist.")
@@ -639,7 +673,12 @@ object IO {
       copyLastModified(sourceFile, targetFile)
       ()
     }
+    if (preserveExecutable) {
+      copyExecutable(sourceFile, targetFile)
+      ()
+    }
   }
+
   /** Transfers the last modified time of `sourceFile` to `targetFile`. */
   def copyLastModified(sourceFile: File, targetFile: File) = {
     val last = sourceFile.lastModified
@@ -647,6 +686,13 @@ object IO {
     // see Java bug #6791812
     targetFile.setLastModified(math.max(last, 0L))
   }
+
+  /** Transfers the executable property of `sourceFile` to `targetFile`. */
+  def copyExecutable(sourceFile: File, targetFile: File) = {
+    val executable = sourceFile.canExecute
+    if (executable) targetFile.setExecutable(true)
+  }
+
   /** The default Charset used when not specified: UTF-8. */
   def defaultCharset = utf8
 

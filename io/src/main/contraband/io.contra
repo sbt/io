@@ -1,0 +1,19 @@
+package sbt.io
+@target(Scala)
+
+## The options for the copy operation in `IO`.
+type CopyOptions {
+
+  ## A source file is always copied if `overwrite` is true.
+  ## If `overwrite` is false, the source is only copied if the target is missing or is older than the
+  ## source file according to last modified times.
+  ## If the source is a directory, the corresponding directory is created.
+  overwrite: boolean! = false @since("0.0.1")
+
+  ## If `true` the last modified times are copied.
+  preserveLastModified: boolean! = false @since("0.0.1")
+
+  ## If `true` the executable properties are copied.
+  preserveExecutable: boolean! = true @since("0.0.1")
+
+}
