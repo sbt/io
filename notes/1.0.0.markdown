@@ -1,0 +1,31 @@
+### Features, fixes, changes with compatibility implications
+
+- IO uses the package name `sbt.io`, but it will be imported under `sbt` in sbt/sbt.
+- `Path.relativizeFile(baseFile, file)` is renamed to `IO.relativizeFile(baseFile, file)`.
+- `PathFinder.x_!(mapper)` moved to `def pair` on `PathFinder`.
+- `PathFinder`'s `***` method is moved to `allPaths` method.
+
+### Improvements
+
+- `Path.directory` and `Path.contentOf` are donated from sbt-native-packager #38 by @muuki88.
+- `WatchService` that abstracts `PollingWatchService` and Java NIO. #47 by @Duhemm on behalf of The Scala Center.
+- Adds variants of `IO.copyFile` and `IO.copyDirectory` that accept `sbt.io.CopyOptions()`. See below for details.
+
+### CopyOptions
+
+sbt IO 1.0 add variant of `IO.copyFile` and `IO.copyDirectory` that accept `sbt.io.CopyOptions()`.
+`CopyOptions()` is an example of pseudo case class similar to the builder pattern.
+
+```scala
+import sbt.io.{ IO, CopyOptions }
+
+IO.copyDirectory(source, target)
+
+// The above is same as the following
+IO.copyDirectory(source, target, CopyOptions()
+  .withOverwrite(false)
+  .withPreserveLastModified(true)
+  .withPreserveExecutable(true))
+```
+
+sbt/io#53 by @dwijnand
