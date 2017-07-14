@@ -25,7 +25,7 @@ final class CopyOptions private (
     case _ => false
   }
   override def hashCode: Int = {
-    37 * (37 * (37 * (37 * (17 + "CopyOptions".##) + overwrite.##) + preserveLastModified.##) + preserveExecutable.##)
+    37 * (37 * (37 * (37 * (17 + "sbt.io.CopyOptions".##) + overwrite.##) + preserveLastModified.##) + preserveExecutable.##)
   }
   override def toString: String = {
     "CopyOptions(" + overwrite + ", " + preserveLastModified + ", " + preserveExecutable + ")"
