@@ -1,5 +1,6 @@
 language: scala
 jdk: oraclejdk8
+script: sbt ++$TRAVIS_SCALA_VERSION mimaReportBinaryIssues test
 
 scala:
    - 2.10.6
