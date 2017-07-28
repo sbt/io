@@ -33,5 +33,8 @@ val io = (project in file("io"))
     libraryDependencies ++= Seq(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test),
     sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",
     initialCommands in console += "\nimport sbt.io._, syntax._",
-    mimaPreviousArtifacts := Set(organization.value %% moduleName.value % "1.0.0-M12")
+    mimaPreviousArtifacts := (scalaVersion.value match {
+      case "2.13.0-M2" => Set.empty // no release for 2.13.0-M2 yet
+      case _           => Set(organization.value %% moduleName.value % "1.0.0-M12")
+    })
   )
