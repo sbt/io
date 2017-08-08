@@ -9,7 +9,8 @@ class IOSyntaxSpec extends FlatSpec with Matchers {
     file(".") shouldBe (new JFile("."))
   }
   "file(...) / \"a\"" should "create File" in {
-    (file("project") / "build.properties") shouldBe (new JFile(new JFile("project"), "build.properties"))
+    (file("project") / "build.properties") shouldBe
+      new JFile(new JFile("project"), "build.properties")
   }
   "file(...) glob \"*.properties\"" should "create PathFinder" in {
     IO.withTemporaryDirectory { dir =>

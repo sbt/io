@@ -13,7 +13,10 @@ object DefaultWatchServiceSpec {
       case _                => (50.milliseconds, 3.seconds)
     }
 }
-class DefaultWatchServiceSpec extends SourceModificationWatchSpec(FileSystems.getDefault.newWatchService,
-                                                                  DefaultWatchServiceSpec.pollDelay,
-                                                                  DefaultWatchServiceSpec.maxWaitTime)
 
+class DefaultWatchServiceSpec
+    extends SourceModificationWatchSpec(
+      FileSystems.getDefault.newWatchService,
+      DefaultWatchServiceSpec.pollDelay,
+      DefaultWatchServiceSpec.maxWaitTime
+    )

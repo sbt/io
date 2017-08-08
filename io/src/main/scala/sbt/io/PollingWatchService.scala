@@ -1,16 +1,23 @@
 package sbt.io
 
-import java.nio.file.{ClosedWatchServiceException, Files, Path => JPath, Watchable, WatchKey, WatchEvent}
+import java.nio.file.{
+  ClosedWatchServiceException,
+  Files,
+  Path => JPath,
+  Watchable,
+  WatchKey,
+  WatchEvent
+}
 import java.nio.file.StandardWatchEventKinds._
-import java.util.{List => JList}
+import java.util.{ List => JList }
 
 import sbt.io.syntax._
 import scala.collection.mutable
-import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.duration.{ Duration, FiniteDuration }
 
 /** A `WatchService` that polls the filesystem every `delay`. */
 class PollingWatchService(delay: FiniteDuration) extends WatchService {
-  private var closed: Boolean       = false
+  private var closed: Boolean = false
   private val thread: PollingThread = new PollingThread(delay)
   private val keys: mutable.Map[JPath, PollingWatchKey] = mutable.Map.empty
   private val pathLengthOrdering: Ordering[JPath] =
@@ -47,15 +54,16 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
     }.orNull
   }
 
-  override def pollEvents(): Map[WatchKey, Seq[WatchEvent[JPath]]] = thread.keysWithEvents.synchronized {
-    import scala.collection.JavaConverters._
-    ensureNotClosed()
-    val events = thread.keysWithEvents.map { k =>
-      k -> k.pollEvents().asScala.asInstanceOf[Seq[WatchEvent[JPath]]]
+  override def pollEvents(): Map[WatchKey, Seq[WatchEvent[JPath]]] =
+    thread.keysWithEvents.synchronized {
+      import scala.collection.JavaConverters._
+      ensureNotClosed()
+      val events = thread.keysWithEvents.map { k =>
+        k -> k.pollEvents().asScala.asInstanceOf[Seq[WatchEvent[JPath]]]
+      }
+      thread.keysWithEvents.clear()
+      events.toMap
     }
-    thread.keysWithEvents.clear()
-    events.toMap
-  }
 
   override def register(path: JPath, events: WatchEvent.Kind[JPath]*): WatchKey = {
     ensureNotClosed()
@@ -100,11 +108,11 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
 
     private def populateEvents(): Unit = {
       val newFileTimes = getFileTimes()
-      val newFiles     = newFileTimes.keySet
-      val oldFiles     = fileTimes.keySet
+      val newFiles = newFileTimes.keySet
+      val oldFiles = fileTimes.keySet
 
-      val deletedFiles  = (oldFiles -- newFiles).toSeq
-      val createdFiles  = (newFiles -- oldFiles).toSeq
+      val deletedFiles = (oldFiles -- newFiles).toSeq
+      val createdFiles = (newFiles -- oldFiles).toSeq
 
       val modifiedFiles = fileTimes.collect {
         case (p, oldTime) if newFileTimes.getOrElse(p, 0L) > oldTime => p
@@ -149,24 +157,27 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
 
   }
 
-  private class PollingWatchKey(origin: PollingThread,
-    override val watchable: Watchable,
-    val events: JList[WatchEvent[_]]) extends WatchKey {
-      override def cancel(): Unit = ()
-      override def isValid(): Boolean = true
-      override def pollEvents(): java.util.List[WatchEvent[_]] = origin.keysWithEvents.synchronized {
-        origin.keysWithEvents -= this
-        val evs = new java.util.ArrayList[WatchEvent[_]](events)
-        events.clear()
-        evs
-      }
-      override def reset(): Boolean = true
+  private class PollingWatchKey(
+      origin: PollingThread,
+      override val watchable: Watchable,
+      val events: JList[WatchEvent[_]]
+  ) extends WatchKey {
+    override def cancel(): Unit = ()
+    override def isValid(): Boolean = true
+    override def pollEvents(): java.util.List[WatchEvent[_]] = origin.keysWithEvents.synchronized {
+      origin.keysWithEvents -= this
+      val evs = new java.util.ArrayList[WatchEvent[_]](events)
+      events.clear()
+      evs
     }
+    override def reset(): Boolean = true
+  }
 
 }
 
-private class PollingWatchEvent(override val context: JPath,
-                                override val kind: WatchEvent.Kind[JPath]) extends WatchEvent[JPath] {
+private class PollingWatchEvent(
+    override val context: JPath,
+    override val kind: WatchEvent.Kind[JPath]
+) extends WatchEvent[JPath] {
   override val count: Int = 1
 }
-

@@ -19,7 +19,9 @@ private[sbt] object SourceModificationWatch {
    * until changes are detected or `terminationCondition` evaluates to `true`.
    */
   @tailrec
-  def watch(delay: FiniteDuration, state: WatchState)(terminationCondition: => Boolean): (Boolean, WatchState) = {
+  def watch(delay: FiniteDuration, state: WatchState)(
+      terminationCondition: => Boolean
+  ): (Boolean, WatchState) = {
     if (state.count == 0) (true, state.withCount(1))
     else {
       val events =
@@ -34,9 +36,9 @@ private[sbt] object SourceModificationWatch {
         }
       } else {
         val previousFiles = state.registered.keySet
-        val newFiles      = state.sources.flatMap(_.getUnfilteredPaths()).toSet
-        val createdFiles  = newFiles -- previousFiles
-        val deletedFiles  = previousFiles -- newFiles
+        val newFiles = state.sources.flatMap(_.getUnfilteredPaths()).toSet
+        val createdFiles = newFiles -- previousFiles
+        val deletedFiles = previousFiles -- newFiles
 
         // We may have events that are not relevant (e.g., created an empty directory.)
         // We filter out those changes, so that we don't trigger unnecessarily.
@@ -66,7 +68,7 @@ private[sbt] object SourceModificationWatch {
     event match {
       case (base, ev) =>
         val fullPath = base.resolve(ev.context().asInstanceOf[Path])
-        val kind     = ev.kind().asInstanceOf[WatchEvent.Kind[Path]]
+        val kind = ev.kind().asInstanceOf[WatchEvent.Kind[Path]]
         (fullPath, kind)
     }
   }
@@ -74,16 +76,19 @@ private[sbt] object SourceModificationWatch {
 
 /** The state of the file watch. */
 private[sbt] final class WatchState private (
-  val count: Int,
-  private[sbt] val sources: Seq[Source],
-  service: WatchService,
-  private[sbt] val registered: Map[Path, WatchKey]
+    val count: Int,
+    private[sbt] val sources: Seq[Source],
+    service: WatchService,
+    private[sbt] val registered: Map[Path, WatchKey]
 ) {
+
   /** Removes all of `fs` from the watched paths. */
   private[sbt] def --(fs: Iterable[Path]): WatchState = {
-    for { f  <- fs;
-          wk <- registered.get(f);
-          if (registered.values.count(_ == wk)) <= 1 } wk.cancel()
+    for {
+      f <- fs;
+      wk <- registered.get(f);
+      if (registered.values.count(_ == wk)) <= 1
+    } wk.cancel()
     withRegistered(registered -- fs)
   }
 
@@ -127,6 +132,7 @@ private[sbt] final class WatchState private (
  * @param excludeFilter Filter to apply to determine whether to ignore a file.
  */
 final class Source(base: File, includeFilter: FileFilter, excludeFilter: FileFilter) {
+
   /**
    * Determine whether `p` should be included in this source.
    * @param p           The path to test.
@@ -138,9 +144,7 @@ final class Source(base: File, includeFilter: FileFilter, excludeFilter: FileFil
       if (includeDirs) DirectoryFilter || includeFilter
       else includeFilter
 
-    p.startsWith(base.toPath) &&
-      inc.accept(p.toFile) &&
-      !excludeFilter.accept(p.toFile)
+    p.startsWith(base.toPath) && inc.accept(p.toFile) && !excludeFilter.accept(p.toFile)
   }
 
   /**
@@ -149,9 +153,11 @@ final class Source(base: File, includeFilter: FileFilter, excludeFilter: FileFil
    */
   private[sbt] def getUnfilteredPaths(): Seq[Path] =
     base.allPaths.get.map(_.toPath)
+
 }
 
 private[sbt] object WatchState {
+
   /** What events should be monitored */
   val events: Array[WatchEvent.Kind[Path]] = Array(ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY)
 

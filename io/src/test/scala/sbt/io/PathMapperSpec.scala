@@ -76,7 +76,6 @@ class PathMapperSpec extends fixture.FlatSpec with Matchers {
   }
 
   "contentOf" should "create mappings excluding the baseDirectory" in { tempDirectory =>
-
     val nestedFile1 = Files.createFile(tempDirectory resolve "file1").toFile
     val nestedFile2 = Files.createFile(tempDirectory resolve "file2").toFile
     val nestedDir = Files.createDirectory(tempDirectory resolve "dir1")
@@ -86,7 +85,6 @@ class PathMapperSpec extends fixture.FlatSpec with Matchers {
     IO.touch(nestedFile2)
     IO.createDirectory(nestedDir.toFile)
     IO.touch(nestedDirFile)
-
 
     val mappings = Path.contentOf(tempDirectory.toFile)
 

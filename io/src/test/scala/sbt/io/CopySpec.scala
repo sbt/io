@@ -30,7 +30,7 @@ object CopySpec extends Properties("Copy") {
       IO.copyFile(f1, f2)
       checkContentsSame(f1, f2)
       true
-    })
+  })
 
   def generate(seed: Long, size: Long, file: File) = {
     val rnd = new java.util.Random(seed)
@@ -49,7 +49,10 @@ object CopySpec extends Properties("Copy") {
 
   def checkContentsSame(f1: File, f2: File) = {
     val len = f1.length
-    assert(len == f2.length, "File lengths differ: " + (len, f2.length).toString + " for " + (f1, f2).toString)
+    assert(
+      len == f2.length,
+      "File lengths differ: " + (len, f2.length).toString + " for " + (f1, f2).toString
+    )
     Using.fileInputStream(f1) { in1 =>
       Using.fileInputStream(f2) { in2 =>
         val buffer1 = new Array[Byte](BufferSize)
@@ -57,7 +60,10 @@ object CopySpec extends Properties("Copy") {
         @tailrec def loop(offset: Long): Unit = if (offset < len) {
           val read1 = in1.read(buffer1)
           val read2 = in2.read(buffer2)
-          assert(read1 == read2, "Read " + (read1, read2).toString + " bytes from " + (f1, f2).toString)
+          assert(
+            read1 == read2,
+            "Read " + (read1, read2).toString + " bytes from " + (f1, f2).toString
+          )
           assert(Arrays.equals(buffer1, buffer2), "Contents differed.")
           loop(offset + read1)
         }

@@ -46,12 +46,11 @@ class StashSpec extends FlatSpec with Matchers {
 
   def allCorrect(s: Seq[File]): Unit = (s.toList zip TestFiles.toList).foreach((correct _).tupled)
 
-  def correct(check: File, ref: (File, String)): Unit =
-    {
-      assert(check.exists)
-      IO.read(check) shouldBe ref._2
-      ()
-    }
+  def correct(check: File, ref: (File, String)): Unit = {
+    assert(check.exists)
+    IO.read(check) shouldBe ref._2
+    ()
+  }
 
   def noneExist(s: Seq[File]): Unit = {
     s.forall(!_.exists) shouldBe true

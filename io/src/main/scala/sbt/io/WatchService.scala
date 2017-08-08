@@ -1,6 +1,12 @@
 package sbt.io
 
-import java.nio.file.{ ClosedWatchServiceException, WatchEvent, WatchKey, Path => JPath, WatchService => JWatchService }
+import java.nio.file.{
+  ClosedWatchServiceException,
+  WatchEvent,
+  WatchKey,
+  Path => JPath,
+  WatchService => JWatchService
+}
 import java.util.concurrent.TimeUnit
 
 import scala.annotation.tailrec

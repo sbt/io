@@ -9,16 +9,19 @@ def commonSettings: Seq[Setting[_]] = Seq(
   crossScalaVersions := Seq(scala210, scala211, scala212, scala213),
 )
 
-lazy val ioRoot = (project in file(".")).
-  aggregate(io).
-  settings(
-    inThisBuild(Seq(
-      git.baseVersion := baseVersion,
-      bintrayPackage := "io",
-      homepage := Some(url("https://github.com/sbt/io")),
-      description := "IO module for sbt",
-      scmInfo := Some(ScmInfo(url("https://github.com/sbt/io"), "git@github.com:sbt/io.git"))
-    )),
+lazy val ioRoot = (project in file("."))
+  .aggregate(io)
+  .settings(
+    inThisBuild(
+      Seq(
+        git.baseVersion := baseVersion,
+        bintrayPackage := "io",
+        homepage := Some(url("https://github.com/sbt/io")),
+        description := "IO module for sbt",
+        scmInfo := Some(ScmInfo(url("https://github.com/sbt/io"), "git@github.com:sbt/io.git")),
+        scalafmtOnCompile := true,
+        scalafmtVersion := "1.1.0",
+      )),
     commonSettings,
     name := "IO Root",
     skip in publish := true

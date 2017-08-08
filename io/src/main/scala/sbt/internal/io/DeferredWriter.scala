@@ -19,7 +19,10 @@ private[sbt] final class DeferredWriter(make: => Writer) extends Writer {
 
   override def append(c: Char): Writer = delegate.append(c)
   override def append(csq: CharSequence): Writer = delegate.append(csq)
-  override def append(csq: CharSequence, start: Int, end: Int): Writer = delegate.append(csq, start, end)
+
+  override def append(csq: CharSequence, start: Int, end: Int): Writer =
+    delegate.append(csq, start, end)
+
   override def flush() = delegate.flush()
   override def write(cbuf: Array[Char]) = delegate.write(cbuf)
   override def write(cbuf: Array[Char], off: Int, len: Int): Unit = delegate.write(cbuf, off, len)

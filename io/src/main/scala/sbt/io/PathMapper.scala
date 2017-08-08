@@ -19,7 +19,8 @@ abstract class Mapper {
    */
   def relativeTo(base: File): PathMap = IO.relativize(base, _)
 
-  def relativeTo(bases: Iterable[File], zero: PathMap = transparent): PathMap = fold(zero, bases)(relativeTo)
+  def relativeTo(bases: Iterable[File], zero: PathMap = transparent): PathMap =
+    fold(zero, bases)(relativeTo)
 
   /**
    * A path mapper that pairs a descendent of `oldBase` with `newBase` prepended to the path relative to `oldBase`.
@@ -47,11 +48,10 @@ abstract class Mapper {
    * A path mapper that pairs a File with a path constructed from `newBase` and the file's name.
    * For example, if `newBase = /new/a/`, then `/old/x/z.txt` gets paired with `/new/a/z.txt`.
    */
-  def flatRebase(newBase: String): PathMap =
-    {
-      val newBase0 = normalizeBase(newBase)
-      f => Some(newBase0 + f.getName)
-    }
+  def flatRebase(newBase: String): PathMap = {
+    val newBase0 = normalizeBase(newBase)
+    (f => Some(newBase0 + f.getName))
+  }
 
   /** A mapper that is defined on all inputs by the function `f`.*/
   def total[A, B](f: A => B): A => Some[B] = x => Some(f(x))
@@ -163,9 +163,13 @@ abstract class Mapper {
    * @param baseDirectory The directory that should be turned into a mappings sequence.
    * @return mappings - The `basicDirectory`'s contents exlcuding `basicDirectory` itself
    */
-  def contentOf(baseDirectory: File): Seq[(File, String)] =
-    (PathFinder(baseDirectory).allPaths --- PathFinder(baseDirectory)) pair relativeTo(baseDirectory)
+  def contentOf(baseDirectory: File): Seq[(File, String)] = (
+    (PathFinder(baseDirectory).allPaths --- PathFinder(baseDirectory))
+      pair relativeTo(baseDirectory)
+  )
 
-  private[this] def fold[A, B, T](zero: A => Option[B], in: Iterable[T])(f: T => A => Option[B]): A => Option[B] =
+  private[this] def fold[A, B, T](zero: A => Option[B], in: Iterable[T])(
+      f: T => A => Option[B]
+  ): A => Option[B] =
     (zero /: in)((mapper, base) => f(base) | mapper)
 }
