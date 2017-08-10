@@ -7,7 +7,6 @@ def commonSettings: Seq[Setting[_]] = Seq(
   scalaVersion := scala212,
   javacOptions in compile ++= Seq("-Xlint", "-Xlint:-serial"),
   crossScalaVersions := Seq(scala210, scala211, scala212, scala213),
-  // mimaPreviousArtifacts := Set.empty // Set(organization.value %% moduleName.value % "1.0.0")
 )
 
 lazy val ioRoot = (project in file(".")).
@@ -33,5 +32,6 @@ val io = (project in file("io"))
     name := "IO",
     libraryDependencies ++= Seq(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test),
     sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",
-    initialCommands in console += "\nimport sbt.io._, syntax._"
+    initialCommands in console += "\nimport sbt.io._, syntax._",
+    mimaPreviousArtifacts := Set(organization.value %% moduleName.value % "1.0.0-RC3")
   )
