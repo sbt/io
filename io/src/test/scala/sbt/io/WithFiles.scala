@@ -3,6 +3,7 @@ package sbt.io
 import java.io.File
 
 object WithFiles {
+
   /**
    * Takes the relative path -> content pairs and writes the content to a file in a temporary directory.
    * The written file path is the relative path resolved against the temporary directory path.
@@ -19,4 +20,5 @@ object WithFiles {
         }
       f(sourceFiles)
     }
+
 }

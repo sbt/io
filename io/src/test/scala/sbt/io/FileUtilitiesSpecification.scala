@@ -15,17 +15,20 @@ object WriteContentSpecification extends Properties("Write content") {
   property("Append bytes appends") = forAll(appendAndCheckBytes _)
   property("Unzip doesn't stack overflow") = largeUnzip()
 
-  implicit lazy val validChar: Arbitrary[Char] = Arbitrary(for (i <- Gen.choose(0, 0xd7ff)) yield i.toChar)
-  implicit lazy val validString: Arbitrary[String] = Arbitrary(arbitrary[List[Char]] map (_.mkString))
+  implicit lazy val validChar: Arbitrary[Char] = Arbitrary(
+    for (i <- Gen.choose(0, 0xd7ff)) yield i.toChar)
 
-  private def largeUnzip() =
-    {
-      testUnzip[Product]
-      testUnzip[scala.tools.nsc.Global]
-      true
-    }
+  implicit lazy val validString: Arbitrary[String] = Arbitrary(
+    arbitrary[List[Char]] map (_.mkString))
 
-  private def testUnzip[T](implicit mf: Manifest[T]) = unzipFile(IO.classLocationFile(mf.runtimeClass))
+  private def largeUnzip() = {
+    testUnzip[Product]
+    testUnzip[scala.tools.nsc.Global]
+    true
+  }
+
+  private def testUnzip[T](implicit mf: Manifest[T]) =
+    unzipFile(IO.classLocationFile(mf.runtimeClass))
 
   private def unzipFile(jar: File) = IO.withTemporaryDirectory(tmp => IO.unzip(jar, tmp))
 
@@ -72,5 +75,6 @@ object WriteContentSpecification extends Properties("Write content") {
       IO.readBytes(file) sameElements (a ++ b)
     }
 
-  private def withTemporaryFile[T](f: File => T): T = IO.withTemporaryDirectory(dir => f(new File(dir, "out")))
+  private def withTemporaryFile[T](f: File => T): T =
+    IO.withTemporaryDirectory(dir => f(new File(dir, "out")))
 }

@@ -6,7 +6,15 @@ package sbt.io
 import Using._
 import sbt.internal.io.ErrorHandling.translate
 
-import java.io.{ BufferedReader, ByteArrayOutputStream, BufferedWriter, File, InputStream, OutputStream, PrintWriter }
+import java.io.{
+  BufferedReader,
+  ByteArrayOutputStream,
+  BufferedWriter,
+  File,
+  InputStream,
+  OutputStream,
+  PrintWriter
+}
 import java.io.{ ObjectInputStream, ObjectStreamClass }
 import java.net.{ URI, URISyntaxException, URL }
 import java.nio.charset.Charset
@@ -23,13 +31,17 @@ import Function.tupled
 
 /** A collection of File, URL, and I/O utility methods.*/
 object IO {
+
   /** The maximum number of times a unique temporary filename is attempted to be created.*/
   private val MaximumTries = 10
+
   /** The producer of randomness for unique name generation.*/
   private lazy val random = new java.util.Random
   val temporaryDirectory = new File(System.getProperty("java.io.tmpdir"))
+
   /** The size of the byte or char buffer used in various methods.*/
   private val BufferSize = 8192
+
   /** File scheme name */
   private[sbt] val FileScheme = "file"
 
@@ -53,11 +65,8 @@ object IO {
         // jars. It assumes that `urlAsFile` will truncate to the containing jar file.
         val clsfile = s"${cl.getName.replace('.', '/')}.class"
         Option(ClassLoader.getSystemClassLoader.getResource(clsfile))
-          .flatMap {
-            urlAsFile
-          }.getOrElse {
-            sys.error("No class location for " + cl)
-          }
+          .flatMap(urlAsFile)
+          .getOrElse(sys.error("No class location for " + cl))
     }
 
   /**
@@ -80,11 +89,10 @@ object IO {
   def classfileLocation(cl: Class[_]): URL = {
     val clsfile = s"${cl.getName.replace('.', '/')}.class"
     try {
-      Stream(Option(cl.getClassLoader), Some(ClassLoader.getSystemClassLoader)).flatten.flatMap { classLoader =>
-        Option(classLoader.getResource(clsfile))
-      }.headOption.getOrElse {
-        sys.error("No class location for " + cl)
-      }
+      Stream(Option(cl.getClassLoader), Some(ClassLoader.getSystemClassLoader)).flatten
+        .flatMap(classLoader => Option(classLoader.getResource(clsfile)))
+        .headOption
+        .getOrElse(sys.error("No class location for " + cl))
     } catch {
       case e: Throwable =>
         e.printStackTrace()
@@ -105,8 +113,7 @@ object IO {
    * `val u4 = new URL("file:////unc/Users/foo/.sbt/preloaded")`.
    */
   def toFile(url: URL): File =
-    try { uriToFile(url.toURI) }
-    catch { case _: URISyntaxException => new File(url.getPath) }
+    try { uriToFile(url.toURI) } catch { case _: URISyntaxException => new File(url.getPath) }
 
   /** Converts the given URL to a File.  If the URL is for an entry in a jar, the File for the jar is returned. */
   def asFile(url: URL): File = urlAsFile(url) getOrElse sys.error("URL is not a file: " + url)
@@ -125,26 +132,31 @@ object IO {
   /**
    * Converts the given file URI to a File.
    */
-  private[this] def uriToFile(uri: URI): File =
-    {
-      assert(uri.getScheme == FileScheme, "Expected protocol to be '" + FileScheme + "' in URI " + uri)
-      val part = uri.getSchemeSpecificPart
-      Option(uri.getAuthority) match {
-        case None if part startsWith "/" => new File(uri)
-        case _ =>
-          // https://github.com/sbt/sbt/issues/564
-          // https://github.com/sbt/sbt/issues/3086
-          // http://blogs.msdn.com/b/ie/archive/2006/12/06/file-uris-in-windows.aspx
-          // http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=5086147
-          // The specific problem here is that `uri` will have a defined authority component for UNC names like //foo/bar/some/path.jar
-          // but the File constructor requires URIs with an undefined authority component.
-          if (part startsWith "/") new File(part)
-          else new File("//" + part)
-      }
+  private[this] def uriToFile(uri: URI): File = {
+    assert(
+      uri.getScheme == FileScheme,
+      "Expected protocol to be '" + FileScheme + "' in URI " + uri
+    )
+    val part = uri.getSchemeSpecificPart
+    Option(uri.getAuthority) match {
+      case None if part startsWith "/" => new File(uri)
+      case _                           =>
+        // https://github.com/sbt/sbt/issues/564
+        // https://github.com/sbt/sbt/issues/3086
+        // http://blogs.msdn.com/b/ie/archive/2006/12/06/file-uris-in-windows.aspx
+        // http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=5086147
+        // The specific problem here is that `uri` will have a defined authority component for UNC names like //foo/bar/some/path.jar
+        // but the File constructor requires URIs with an undefined authority component.
+        if (part startsWith "/") new File(part)
+        else new File("//" + part)
     }
+  }
 
   def assertDirectory(file: File) =
-    assert(file.isDirectory, (if (file.exists) "Not a directory: " else "Directory not found: ") + file)
+    assert(
+      file.isDirectory,
+      (if (file.exists) "Not a directory: " else "Directory not found: ") + file
+    )
 
   def assertDirectories(file: File*) = file.foreach(assertDirectory)
 
@@ -157,14 +169,13 @@ object IO {
    *
    * For example, `split("Build.scala") == ("Build", "scala")`
    */
-  def split(name: String): (String, String) =
-    {
-      val lastDot = name.lastIndexOf('.')
-      if (lastDot >= 0)
-        (name.substring(0, lastDot), name.substring(lastDot + 1))
-      else
-        (name, "")
-    }
+  def split(name: String): (String, String) = {
+    val lastDot = name.lastIndexOf('.')
+    if (lastDot >= 0)
+      (name.substring(0, lastDot), name.substring(lastDot + 1))
+    else
+      (name, "")
+  }
 
   /**
    * Each input file in `files` is created if it doesn't exist.
@@ -192,19 +203,18 @@ object IO {
     dirs.foreach(createDirectory)
 
   /** Creates directory `dir` and all parent directories.  It tries to work around a race condition in `File.mkdirs()` by retrying up to a limit.*/
-  def createDirectory(dir: File): Unit =
-    {
-      def failBase = "Could not create directory " + dir
-      // Need a retry because mkdirs() has a race condition
-      var tryCount = 0
-      while (!dir.exists && !dir.mkdirs() && tryCount < 100) { tryCount += 1 }
-      if (dir.isDirectory)
-        ()
-      else if (dir.exists) {
-        sys.error(failBase + ": file exists and is not a directory.")
-      } else
-        sys.error(failBase)
-    }
+  def createDirectory(dir: File): Unit = {
+    def failBase = "Could not create directory " + dir
+    // Need a retry because mkdirs() has a race condition
+    var tryCount = 0
+    while (!dir.exists && !dir.mkdirs() && tryCount < 100) { tryCount += 1 }
+    if (dir.isDirectory)
+      ()
+    else if (dir.exists) {
+      sys.error(failBase + ": file exists and is not a directory.")
+    } else
+      sys.error(failBase)
+  }
 
   /** Gzips the file 'in' and writes it to 'out'.  'in' cannot be the same file as 'out'. */
   def gzip(in: File, out: File): Unit = {
@@ -215,9 +225,10 @@ object IO {
       }
     }
   }
+
   /** Gzips the InputStream 'in' and writes it to 'output'.  Neither stream is closed.*/
   def gzip(input: InputStream, output: OutputStream): Unit =
-    gzipOutputStream(output) { gzStream => transfer(input, gzStream) }
+    gzipOutputStream(output)(gzStream => transfer(input, gzStream))
 
   /** Gunzips the file 'in' and writes it to 'out'.  'in' cannot be the same file as 'out'. */
   def gunzip(in: File, out: File): Unit = {
@@ -228,51 +239,73 @@ object IO {
       }
     }
   }
+
   /** Gunzips the InputStream 'input' and writes it to 'output'.  Neither stream is closed.*/
   def gunzip(input: InputStream, output: OutputStream): Unit =
-    gzipInputStream(input) { gzStream => transfer(gzStream, output) }
+    gzipInputStream(input)(gzStream => transfer(gzStream, output))
 
-  def unzip(from: File, toDirectory: File, filter: NameFilter = AllPassFilter, preserveLastModified: Boolean = true): Set[File] =
+  def unzip(
+      from: File,
+      toDirectory: File,
+      filter: NameFilter = AllPassFilter,
+      preserveLastModified: Boolean = true
+  ): Set[File] =
     fileInputStream(from)(in => unzipStream(in, toDirectory, filter, preserveLastModified))
-  def unzipURL(from: URL, toDirectory: File, filter: NameFilter = AllPassFilter, preserveLastModified: Boolean = true): Set[File] =
+
+  def unzipURL(
+      from: URL,
+      toDirectory: File,
+      filter: NameFilter = AllPassFilter,
+      preserveLastModified: Boolean = true
+  ): Set[File] =
     urlInputStream(from)(in => unzipStream(in, toDirectory, filter, preserveLastModified))
-  def unzipStream(from: InputStream, toDirectory: File, filter: NameFilter = AllPassFilter, preserveLastModified: Boolean = true): Set[File] =
-    {
-      createDirectory(toDirectory)
-      zipInputStream(from) { zipInput => extract(zipInput, toDirectory, filter, preserveLastModified) }
-    }
-  private def extract(from: ZipInputStream, toDirectory: File, filter: NameFilter, preserveLastModified: Boolean) =
-    {
-      val set = new HashSet[File]
-      @tailrec def next(): Unit = {
-        val entry = from.getNextEntry
-        if (entry == null)
-          ()
-        else {
-          val name = entry.getName
-          if (filter.accept(name)) {
-            val target = new File(toDirectory, name)
-            //log.debug("Extracting zip entry '" + name + "' to '" + target + "'")
-            if (entry.isDirectory)
-              createDirectory(target)
-            else {
-              set += target
-              translate("Error extracting zip entry '" + name + "' to '" + target + "': ") {
-                fileOutputStream(false)(target) { out => transfer(from, out) }
-              }
+
+  def unzipStream(
+      from: InputStream,
+      toDirectory: File,
+      filter: NameFilter = AllPassFilter,
+      preserveLastModified: Boolean = true
+  ): Set[File] = {
+    createDirectory(toDirectory)
+    zipInputStream(from)(zipInput => extract(zipInput, toDirectory, filter, preserveLastModified))
+  }
+
+  private def extract(
+      from: ZipInputStream,
+      toDirectory: File,
+      filter: NameFilter,
+      preserveLastModified: Boolean
+  ) = {
+    val set = new HashSet[File]
+    @tailrec def next(): Unit = {
+      val entry = from.getNextEntry
+      if (entry == null)
+        ()
+      else {
+        val name = entry.getName
+        if (filter.accept(name)) {
+          val target = new File(toDirectory, name)
+          //log.debug("Extracting zip entry '" + name + "' to '" + target + "'")
+          if (entry.isDirectory)
+            createDirectory(target)
+          else {
+            set += target
+            translate("Error extracting zip entry '" + name + "' to '" + target + "': ") {
+              fileOutputStream(false)(target)(out => transfer(from, out))
             }
-            if (preserveLastModified)
-              target.setLastModified(entry.getTime)
-          } else {
-            //log.debug("Ignoring zip entry '" + name + "'")
           }
-          from.closeEntry()
-          next()
+          if (preserveLastModified)
+            target.setLastModified(entry.getTime)
+        } else {
+          //log.debug("Ignoring zip entry '" + name + "'")
         }
+        from.closeEntry()
+        next()
       }
-      next()
-      Set() ++ set
     }
+    next()
+    Set() ++ set
+  }
 
   // TODO: provide a better API to download things.
   // /** Retrieves the content of the given URL and writes it to the given File. */
@@ -283,14 +316,14 @@ object IO {
 
   /** Copies the contents of `in` to `out`.*/
   def transfer(in: File, out: File): Unit =
-    fileInputStream(in) { in => transfer(in, out) }
+    fileInputStream(in)(in => transfer(in, out))
 
   /**
    * Copies the contents of the input file `in` to the `out` stream.
    * The output stream is not closed by this method.
    */
   def transfer(in: File, out: OutputStream): Unit =
-    fileInputStream(in) { in => transfer(in, out) }
+    fileInputStream(in)(in => transfer(in, out))
 
   /** Copies all bytes from the given input stream to the given File.  The input stream is not closed by this method.*/
   def transfer(in: InputStream, to: File): Unit =
@@ -303,6 +336,7 @@ object IO {
    * Neither stream is closed.
    */
   def transfer(in: InputStream, out: OutputStream): Unit = transferImpl(in, out, false)
+
   /**
    * Copies all bytes from the given input stream to the given output stream.  The
    * input stream is closed after the method completes.
@@ -326,12 +360,10 @@ object IO {
    * Creates a temporary directory and provides its location to the given function.  The directory
    * is deleted after the function returns if `keepDirectory` is set to false.
    */
-  def withTemporaryDirectory[T](action: File => T, keepDirectory: Boolean): T =
-    {
-      val dir = createTemporaryDirectory
-      try { action(dir) }
-      finally { if (!keepDirectory) delete(dir) }
-    }
+  def withTemporaryDirectory[T](action: File => T, keepDirectory: Boolean): T = {
+    val dir = createTemporaryDirectory
+    try { action(dir) } finally { if (!keepDirectory) delete(dir) }
+  }
 
   /**
    * Overload of `withTemporaryDirectory` with `keepDirectory` set to false.
@@ -343,22 +375,20 @@ object IO {
   def createTemporaryDirectory: File = createUniqueDirectory(temporaryDirectory)
 
   /** Creates a directory in `baseDirectory` with a name generated from a random integer */
-  def createUniqueDirectory(baseDirectory: File): File =
-    {
-      def create(tries: Int): File =
-        {
-          if (tries > MaximumTries)
-            sys.error("Could not create temporary directory.")
-          else {
-            val randomName = "sbt_" + java.lang.Integer.toHexString(random.nextInt)
-            val f = new File(baseDirectory, randomName)
+  def createUniqueDirectory(baseDirectory: File): File = {
+    def create(tries: Int): File = {
+      if (tries > MaximumTries)
+        sys.error("Could not create temporary directory.")
+      else {
+        val randomName = "sbt_" + java.lang.Integer.toHexString(random.nextInt)
+        val f = new File(baseDirectory, randomName)
 
-            try { createDirectory(f); f }
-            catch { case NonFatal(_) => create(tries + 1) }
-          }
-        }
-      create(0)
+        try { createDirectory(f); f } catch { case NonFatal(_) => create(tries + 1) }
+      }
     }
+    create(0)
+  }
+
   /**
    * Creates a file in the default temporary directory, calls `action` with the
    * file, deletes the file if `keepFile` is set to true, and returns the
@@ -366,12 +396,12 @@ object IO {
    * which must be at least three characters long, and end with `postfix`, which
    * has no minimum length.
    */
-  def withTemporaryFile[T](prefix: String, postfix: String, keepFile: Boolean)(action: File => T): T =
-    {
-      val file = File.createTempFile(prefix, postfix)
-      try { action(file) }
-      finally { if (!keepFile) file.delete(); () }
-    }
+  def withTemporaryFile[T](prefix: String, postfix: String, keepFile: Boolean)(
+      action: File => T
+  ): T = {
+    val file = File.createTempFile(prefix, postfix)
+    try { action(file) } finally { if (!keepFile) file.delete(); () }
+  }
 
   /**
    * Overload of `withTemporaryFile` with `keepFile` set to false.
@@ -382,35 +412,34 @@ object IO {
   private[sbt] def jars(dir: File): Iterable[File] = listFiles(dir, GlobFilter("*.jar"))
 
   /** Deletes all empty directories in the set.  Any non-empty directories are ignored. */
-  def deleteIfEmpty(dirs: collection.Set[File]): Unit =
-    {
-      val isEmpty = new HashMap[File, Boolean]
-      def visit(f: File): Boolean = isEmpty.getOrElseUpdate(f, dirs(f) && f.isDirectory && (f.listFiles forall visit))
+  def deleteIfEmpty(dirs: collection.Set[File]): Unit = {
+    val isEmpty = new HashMap[File, Boolean]
+    def visit(f: File): Boolean =
+      isEmpty.getOrElseUpdate(f, dirs(f) && f.isDirectory && (f.listFiles forall visit))
 
-      dirs foreach visit
-      for ((f, true) <- isEmpty) f.delete
-    }
+    dirs foreach visit
+    for ((f, true) <- isEmpty) f.delete
+  }
 
   /** Deletes each file or directory (recursively) in `files`.*/
   def delete(files: Iterable[File]): Unit = files.foreach(delete)
 
   /** Deletes each file or directory in `files` recursively.  Any empty parent directories are deleted, recursively.*/
-  def deleteFilesEmptyDirs(files: Iterable[File]): Unit =
-    {
-      def isEmptyDirectory(dir: File) = dir.isDirectory && listFiles(dir).isEmpty
-      def parents(fs: Set[File]) = fs flatMap { f => Option(f.getParentFile) }
-      @tailrec def deleteEmpty(dirs: Set[File]): Unit = {
-        val empty = dirs filter isEmptyDirectory
-        if (empty.nonEmpty) // looks funny, but this is true if at least one of `dirs` is an empty directory
+  def deleteFilesEmptyDirs(files: Iterable[File]): Unit = {
+    def isEmptyDirectory(dir: File) = dir.isDirectory && listFiles(dir).isEmpty
+    def parents(fs: Set[File]) = fs flatMap (f => Option(f.getParentFile))
+    @tailrec def deleteEmpty(dirs: Set[File]): Unit = {
+      val empty = dirs filter isEmptyDirectory
+      if (empty.nonEmpty) // looks funny, but this is true if at least one of `dirs` is an empty directory
         {
           empty foreach { _.delete() }
           deleteEmpty(parents(empty))
         }
-      }
-
-      delete(files)
-      deleteEmpty(parents(files.toSet))
     }
+
+    delete(files)
+    deleteEmpty(parents(files.toSet))
+  }
 
   /** Deletes `file`, recursively if it is a directory. */
   def delete(file: File): Unit = {
@@ -425,10 +454,12 @@ object IO {
   }
 
   /** Returns the children of directory `dir` that match `filter` in a non-null array.*/
-  def listFiles(filter: java.io.FileFilter)(dir: File): Array[File] = wrapNull(dir.listFiles(filter))
+  def listFiles(filter: java.io.FileFilter)(dir: File): Array[File] =
+    wrapNull(dir.listFiles(filter))
 
   /** Returns the children of directory `dir` that match `filter` in a non-null array.*/
-  def listFiles(dir: File, filter: java.io.FileFilter): Array[File] = wrapNull(dir.listFiles(filter))
+  def listFiles(dir: File, filter: java.io.FileFilter): Array[File] =
+    wrapNull(dir.listFiles(filter))
 
   /** Returns the children of directory `dir` in a non-null array.*/
   def listFiles(dir: File): Array[File] = wrapNull(dir.listFiles())
@@ -462,13 +493,18 @@ object IO {
       val outputDir = outputFile.getParentFile
       createDirectory(outputDir)
       withZipOutput(outputFile, manifest) { output =>
-        val createEntry: (String => ZipEntry) = if (manifest.isDefined) new JarEntry(_) else new ZipEntry(_)
+        val createEntry: (String => ZipEntry) =
+          if (manifest.isDefined) new JarEntry(_) else new ZipEntry(_)
         writeZip(sources, output)(createEntry)
       }
     }
   }
-  private def writeZip(sources: Seq[(File, String)], output: ZipOutputStream)(createEntry: String => ZipEntry) = {
-    val files = sources.flatMap { case (file, name) => if (file.isFile) (file, normalizeName(name)) :: Nil else Nil }
+  private def writeZip(sources: Seq[(File, String)], output: ZipOutputStream)(
+      createEntry: String => ZipEntry
+  ) = {
+    val files = sources.flatMap {
+      case (file, name) => if (file.isFile) (file, normalizeName(name)) :: Nil else Nil
+    }
 
     val now = System.currentTimeMillis
     // The CRC32 for an empty value, needed to store directories in zip files
@@ -479,24 +515,22 @@ object IO {
       output.closeEntry()
     }
 
-    def makeDirectoryEntry(name: String) =
-      {
-        //			log.debug("\tAdding directory " + relativePath + " ...")
-        val e = createEntry(name)
-        e setTime now
-        e setSize 0
-        e setMethod ZipEntry.STORED
-        e setCrc emptyCRC
-        e
-      }
+    def makeDirectoryEntry(name: String) = {
+      //			log.debug("\tAdding directory " + relativePath + " ...")
+      val e = createEntry(name)
+      e setTime now
+      e setSize 0
+      e setMethod ZipEntry.STORED
+      e setCrc emptyCRC
+      e
+    }
 
-    def makeFileEntry(file: File, name: String) =
-      {
-        //			log.debug("\tAdding " + file + " as " + name + " ...")
-        val e = createEntry(name)
-        e setTime file.lastModified
-        e
-      }
+    def makeFileEntry(file: File, name: String) = {
+      //			log.debug("\tAdding " + file + " as " + name + " ...")
+      val e = createEntry(name)
+      e setTime file.lastModified
+      e
+    }
     def addFileEntry(file: File, name: String) = {
       output putNextEntry makeFileEntry(file, name)
       transfer(file, output)
@@ -526,28 +560,24 @@ object IO {
   private def allDirectoryPaths(files: Iterable[(File, String)]) =
     TreeSet[String]() ++ (files flatMap { case (_, name) => directoryPaths(name) })
 
-  private def normalizeName(name: String) =
-    {
-      val sep = File.separatorChar
-      if (sep == '/') name else name.replace(sep, '/')
-    }
+  private def normalizeName(name: String) = {
+    val sep = File.separatorChar
+    if (sep == '/') name else name.replace(sep, '/')
+  }
 
   private def withZipOutput(file: File, manifest: Option[Manifest])(f: ZipOutputStream => Unit) = {
     fileOutputStream(false)(file) { fileOut =>
       val (zipOut, _) =
         manifest match {
           case Some(mf) =>
-            {
-              import Attributes.Name.MANIFEST_VERSION
-              val main = mf.getMainAttributes
-              if (!main.containsKey(MANIFEST_VERSION))
-                main.put(MANIFEST_VERSION, "1.0")
-              (new JarOutputStream(fileOut, mf), "jar")
-            }
+            import Attributes.Name.MANIFEST_VERSION
+            val main = mf.getMainAttributes
+            if (!main.containsKey(MANIFEST_VERSION))
+              main.put(MANIFEST_VERSION, "1.0")
+            (new JarOutputStream(fileOut, mf), "jar")
           case None => (new ZipOutputStream(fileOut), "zip")
         }
-      try { f(zipOut) }
-      finally { zipOut.close }
+      try { f(zipOut) } finally { zipOut.close }
     }
   }
 
@@ -555,7 +585,8 @@ object IO {
    * Returns the relative file for `file` relative to directory `base` or None if `base` is not a parent of `file`.
    * If `file` or `base` are not absolute, they are first resolved against the current working directory.
    */
-  def relativizeFile(base: File, file: File): Option[File] = relativize(base, file).map { path => new File(path) }
+  def relativizeFile(base: File, file: File): Option[File] =
+    relativize(base, file).map(path => new File(path))
 
   /**
    * Returns the path for `file` relative to directory `base` or None if `base` is not a parent of `file`.
@@ -592,10 +623,11 @@ object IO {
   ): Set[File] =
     sources.map(tupled(copyImpl(overwrite, preserveLastModified, preserveExecutable))).toSet
 
-  private def copyImpl(overwrite: Boolean, preserveLastModified: Boolean, preserveExecutable: Boolean)(
-      from: File,
-      to: File
-  ): File = {
+  private def copyImpl(
+      overwrite: Boolean,
+      preserveLastModified: Boolean,
+      preserveExecutable: Boolean
+  )(from: File, to: File): File = {
     if (overwrite || !to.exists || from.lastModified > to.lastModified) {
       if (from.isDirectory)
         createDirectory(to)
@@ -619,7 +651,13 @@ object IO {
    * Any parent directories that do not exist are created.
    */
   def copyDirectory(source: File, target: File, options: CopyOptions): Unit =
-    copyDirectory(source, target, options.overwrite, options.preserveLastModified, options.preserveExecutable)
+    copyDirectory(
+      source,
+      target,
+      options.overwrite,
+      options.preserveLastModified,
+      options.preserveExecutable
+    )
 
   def copyDirectory(
       source: File,
@@ -653,7 +691,10 @@ object IO {
     // NOTE: when modifying this code, test with larger values of CopySpec.MaxFileSizeBits than default
 
     require(sourceFile.exists, "Source file '" + sourceFile.getAbsolutePath + "' does not exist.")
-    require(!sourceFile.isDirectory, "Source file '" + sourceFile.getAbsolutePath + "' is a directory.")
+    require(
+      !sourceFile.isDirectory,
+      "Source file '" + sourceFile.getAbsolutePath + "' is a directory."
+    )
     fileInputChannel(sourceFile) { in =>
       fileOutputChannel(targetFile) { out =>
         // maximum bytes per transfer according to  from http://dzone.com/snippets/java-filecopy-using-nio
@@ -666,7 +707,9 @@ object IO {
             offset
         val copied = loop(0)
         if (copied != in.size)
-          sys.error("Could not copy '" + sourceFile + "' to '" + targetFile + "' (" + copied + "/" + in.size + " bytes copied)")
+          sys.error(
+            "Could not copy '" + sourceFile + "' to '" + targetFile + "' (" + copied + "/" + in.size + " bytes copied)"
+          )
       }
     }
     if (preserveLastModified) {
@@ -702,12 +745,19 @@ object IO {
    * If `append` is `true`, the new `content` is appended to the existing contents.
    * If `file` or any parent directories do not exist, they are created.
    */
-  def write(file: File, content: String, charset: Charset = defaultCharset, append: Boolean = false): Unit =
+  def write(
+      file: File,
+      content: String,
+      charset: Charset = defaultCharset,
+      append: Boolean = false
+  ): Unit =
     writer(file, content, charset, append) { _.write(content) }
 
-  def writer[T](file: File, content: String, charset: Charset, append: Boolean = false)(f: BufferedWriter => T): T =
+  def writer[T](file: File, content: String, charset: Charset, append: Boolean = false)(
+      f: BufferedWriter => T
+  ): T =
     if (charset.newEncoder.canEncode(content))
-      fileWriter(charset, append)(file) { f }
+      fileWriter(charset, append)(file)(f)
     else
       sys.error("String cannot be encoded by charset " + charset.name)
 
@@ -715,31 +765,28 @@ object IO {
     fileReader(charset)(file) { f }
 
   /** Reads the full contents of `file` into a String using `charset` or UTF-8 if `charset` is not explicitly specified. */
-  def read(file: File, charset: Charset = defaultCharset): String =
-    {
-      val out = new ByteArrayOutputStream(file.length.toInt)
-      transfer(file, out)
-      out.toString(charset.name)
-    }
+  def read(file: File, charset: Charset = defaultCharset): String = {
+    val out = new ByteArrayOutputStream(file.length.toInt)
+    transfer(file, out)
+    out.toString(charset.name)
+  }
 
   /** Reads the full contents of `in` into a byte array.  This method does not close `in`.*/
-  def readStream(in: InputStream, charset: Charset = defaultCharset): String =
-    {
-      val out = new ByteArrayOutputStream
-      transfer(in, out)
-      out.toString(charset.name)
-    }
+  def readStream(in: InputStream, charset: Charset = defaultCharset): String = {
+    val out = new ByteArrayOutputStream
+    transfer(in, out)
+    out.toString(charset.name)
+  }
 
   /** Reads the full contents of `in` into a byte array. */
   def readBytes(file: File): Array[Byte] = fileInputStream(file)(readBytes)
 
   /** Reads the full contents of `in` into a byte array.  This method does not close `in`. */
-  def readBytes(in: InputStream): Array[Byte] =
-    {
-      val out = new ByteArrayOutputStream
-      transfer(in, out)
-      out.toByteArray
-    }
+  def readBytes(in: InputStream): Array[Byte] = {
+    val out = new ByteArrayOutputStream
+    transfer(in, out)
+    out.toByteArray
+  }
 
   /**
    * Appends `content` to the existing contents of `file` using `charset` or UTF-8 if `charset` is not explicitly specified.
@@ -785,15 +832,13 @@ object IO {
    * Applies `f` to each line read from `in` and the accumulated value of type `T`, with initial value `init`.
    * This method does not close `in`.
    */
-  def foldLines[T](in: BufferedReader, init: T)(f: (T, String) => T): T =
-    {
-      def readLine(accum: T): T =
-        {
-          val line = in.readLine()
-          if (line eq null) accum else readLine(f(accum, line))
-        }
-      readLine(init)
+  def foldLines[T](in: BufferedReader, init: T)(f: (T, String) => T): T = {
+    def readLine(accum: T): T = {
+      val line = in.readLine()
+      if (line eq null) accum else readLine(f(accum, line))
     }
+    readLine(init)
+  }
 
   /**
    * Writes `lines` to `file` using the given `charset` or UTF-8 if `charset` is not explicitly specified.
@@ -802,9 +847,14 @@ object IO {
    * A newline is written after each line and NOT before the first line.
    * If any parent directories of `file` do not exist, they are first created.
    */
-  def writeLines(file: File, lines: Seq[String], charset: Charset = defaultCharset, append: Boolean = false): Unit =
+  def writeLines(
+      file: File,
+      lines: Seq[String],
+      charset: Charset = defaultCharset,
+      append: Boolean = false
+  ): Unit =
     writer(file, lines.headOption.getOrElse(""), charset, append) { w =>
-      lines.foreach { line => w.write(line); w.newLine() }
+      lines.foreach(line => { w.write(line); w.newLine() })
     }
 
   /** Writes `lines` to `writer` using `writer`'s `println` method. */
@@ -816,12 +866,12 @@ object IO {
    * If any parent directories of `to` do not exist, they are first created.
    */
   def write(properties: Properties, label: String, to: File) =
-    fileOutputStream()(to) { output => properties.store(output, label) }
+    fileOutputStream()(to)(output => properties.store(output, label))
 
   /** Reads the properties in `from` into `properties`.  If `from` does not exist, `properties` is left unchanged.*/
   def load(properties: Properties, from: File): Unit =
     if (from.exists)
-      fileInputStream(from) { input => properties.load(input) }
+      fileInputStream(from)(input => properties.load(input))
 
   /** A pattern used to split a String by path separator characters.*/
   private val PathSeparatorPattern = java.util.regex.Pattern.compile(File.pathSeparator)
@@ -841,8 +891,7 @@ object IO {
 
       try { f } catch {
         case e: Exception =>
-          try { move(stashed.map(_.swap)); throw e }
-          catch { case _: Exception => throw e }
+          try { move(stashed.map(_.swap)); throw e } catch { case _: Exception => throw e }
       }
     }
 
@@ -863,16 +912,15 @@ object IO {
    * It will first try `File.renameTo` and if that fails, resort to copying and then deleting the original file.
    * In either case, the original File will not exist on successful completion of this method.
    */
-  def move(a: File, b: File): Unit =
-    {
-      if (b.exists)
-        delete(b)
-      createDirectory(b.getParentFile)
-      if (!a.renameTo(b)) {
-        copyFile(a, b, true)
-        delete(a)
-      }
+  def move(a: File, b: File): Unit = {
+    if (b.exists)
+      delete(b)
+    createDirectory(b.getParentFile)
+    if (!a.renameTo(b)) {
+      copyFile(a, b, true)
+      delete(a)
     }
+  }
 
   /**
    * Applies `f` to a buffered gzip `OutputStream` for `file`.
@@ -903,24 +951,26 @@ object IO {
    * normalized (normalize), encoded (toASCIIString), and a forward slash ('/') is appended to the path component if
    * it does not already end with a slash.
    */
-  def directoryURI(dir: File): URI =
-    {
-      assertAbsolute(dir)
-      directoryURI(dir.toURI.normalize)
-    }
+  def directoryURI(dir: File): URI = {
+    assertAbsolute(dir)
+    directoryURI(dir.toURI.normalize)
+  }
 
   /**
    * Converts an absolute File to a URI.  The File is converted to a URI (toURI),
    * normalized (normalize), encoded (toASCIIString), and a forward slash ('/') is appended to the path component if
    * it does not already end with a slash.
    */
-  def directoryURI(uri: URI): URI =
-    {
-      if (!uri.isAbsolute) return uri; //assertAbsolute(uri)
-      val str = uri.toASCIIString
-      val dirStr = if (str.endsWith("/") || uri.getScheme != FileScheme || Option(uri.getRawFragment).isDefined) str else str + "/"
-      (new URI(dirStr)).normalize
-    }
+  def directoryURI(uri: URI): URI = {
+    if (!uri.isAbsolute) return uri; //assertAbsolute(uri)
+    val str = uri.toASCIIString
+    val dirStr =
+      if (str.endsWith("/") || uri.getScheme != FileScheme || Option(uri.getRawFragment).isDefined)
+        str
+      else str + "/"
+    (new URI(dirStr)).normalize
+  }
+
   /** Converts the given File to a URI.  If the File is relative, the URI is relative, unlike File.toURI*/
   def toURI(f: File): URI =
     // need to use the three argument URI constructor because the single argument version doesn't encode
@@ -931,13 +981,12 @@ object IO {
    * The result is guaranteed to be absolute.
    * If `f` is absolute, it is returned without changes.
    */
-  def resolve(base: File, f: File): File =
-    {
-      assertAbsolute(base)
-      val fabs = if (f.isAbsolute) f else new File(directoryURI(new File(base, f.getPath)))
-      assertAbsolute(fabs)
-      fabs
-    }
+  def resolve(base: File, f: File): File = {
+    assertAbsolute(base)
+    val fabs = if (f.isAbsolute) f else new File(directoryURI(new File(base, f.getPath)))
+    assertAbsolute(fabs)
+    fabs
+  }
   def assertAbsolute(f: File) = assert(f.isAbsolute, "Not absolute: " + f)
   def assertAbsolute(uri: URI) = assert(uri.isAbsolute, "Not absolute: " + uri)
 
@@ -948,11 +997,12 @@ object IO {
    * Constructs an `ObjectInputStream` on `wrapped` that uses `loader` to load classes.
    * See also [[https://github.com/sbt/sbt/issues/136 issue 136]].
    */
-  def objectInputStream(wrapped: InputStream, loader: ClassLoader): ObjectInputStream = new ObjectInputStream(wrapped) {
-    override def resolveClass(osc: ObjectStreamClass): Class[_] =
-      {
+  def objectInputStream(wrapped: InputStream, loader: ClassLoader): ObjectInputStream =
+    new ObjectInputStream(wrapped) {
+      override def resolveClass(osc: ObjectStreamClass): Class[_] = {
         val c = Class.forName(osc.getName, false, loader)
         if (c eq null) super.resolveClass(osc) else c
       }
-  }
+    }
+
 }

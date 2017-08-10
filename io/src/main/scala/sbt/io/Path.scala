@@ -79,7 +79,8 @@ object Path extends Mapper {
     separated.find(_ contains sep).foreach(p => sys.error(s"Path '$p' contains separator '$sep'"))
     separated.mkString(sep)
   }
-  def newerThan(a: File, b: File): Boolean = a.exists && (!b.exists || a.lastModified > b.lastModified)
+  def newerThan(a: File, b: File): Boolean =
+    a.exists && (!b.exists || a.lastModified > b.lastModified)
 
   /** The separator character of the platform.*/
   val sep: Char = java.io.File.separatorChar
@@ -89,6 +90,7 @@ object Path extends Mapper {
 }
 
 object PathFinder {
+
   /** A <code>PathFinder</code> that always produces the empty set of <code>Path</code>s.*/
   val empty: PathFinder = new PathFinder { def addTo(fileSet: mutable.Set[File]) = () }
 
@@ -99,6 +101,7 @@ object PathFinder {
   }
 
   def strict(files: Traversable[File]): PathFinder = apply(files)
+
 }
 
 /**
@@ -228,7 +231,8 @@ private abstract class FilterFiles extends PathFinder with FileFilter {
       fileSet += new File(file, matchedFile.getName)
 }
 
-private class DescendantOrSelfPathFinder(val parent: PathFinder, val filter: FileFilter) extends FilterFiles {
+private class DescendantOrSelfPathFinder(val parent: PathFinder, val filter: FileFilter)
+    extends FilterFiles {
   private[sbt] def addTo(fileSet: mutable.Set[File]) = {
     for (file <- parent.get) {
       if (accept(file)) fileSet += file
