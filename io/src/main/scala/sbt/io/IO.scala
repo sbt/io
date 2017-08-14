@@ -486,7 +486,11 @@ object IO {
   def zip(sources: Traversable[(File, String)], outputZip: File): Unit =
     archive(sources.toSeq, outputZip, None)
 
-  private def archive(sources: Seq[(File, String)], outputFile: File, manifest: Option[Manifest]) = {
+  private def archive(
+      sources: Seq[(File, String)],
+      outputFile: File,
+      manifest: Option[Manifest]
+  ) = {
     if (outputFile.isDirectory)
       sys.error("Specified output file " + outputFile + " is a directory.")
     else {
