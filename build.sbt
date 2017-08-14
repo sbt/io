@@ -20,7 +20,7 @@ lazy val ioRoot = (project in file("."))
         description := "IO module for sbt",
         scmInfo := Some(ScmInfo(url("https://github.com/sbt/io"), "git@github.com:sbt/io.git")),
         scalafmtOnCompile := true,
-        scalafmtVersion := "1.1.0",
+        scalafmtVersion := "1.2.0",
       )),
     commonSettings,
     name := "IO Root",
