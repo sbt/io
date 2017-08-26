@@ -1,7 +1,7 @@
 import Dependencies._
 // import com.typesafe.tools.mima.core._, ProblemFilters._
 
-def baseVersion: String = "1.0.0-M12"
+def baseVersion: String = "1.1.0"
 
 def commonSettings: Seq[Setting[_]] = Seq(
   scalaVersion := scala212,
@@ -36,5 +36,5 @@ val io = (project in file("io"))
     libraryDependencies ++= Seq(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test),
     sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",
     initialCommands in console += "\nimport sbt.io._, syntax._",
-    mimaPreviousArtifacts := Set(organization.value %% moduleName.value % "1.0.0-RC3")
+    mimaPreviousArtifacts := Set(organization.value %% moduleName.value % "1.0.0")
   )
