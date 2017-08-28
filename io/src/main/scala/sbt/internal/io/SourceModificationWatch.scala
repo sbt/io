@@ -6,7 +6,7 @@ package sbt.internal.io
 import java.nio.file.{ Files, Path, WatchEvent, WatchKey }
 import java.nio.file.StandardWatchEventKinds._
 
-import sbt.io.{ DirectoryFilter, FileFilter, WatchService }
+import sbt.io.{ DirectoryFilter, FileFilter, WatchService, AllPassFilter, NothingFilter }
 import sbt.io.syntax._
 
 import scala.annotation.tailrec
@@ -154,6 +154,14 @@ final class Source(base: File, includeFilter: FileFilter, excludeFilter: FileFil
   private[sbt] def getUnfilteredPaths(): Seq[Path] =
     base.allPaths.get.map(_.toPath)
 
+}
+
+object Source {
+  def apply(base: File): Source =
+    new Source(base, AllPassFilter, NothingFilter)
+
+  def apply(base: File, includeFilter: FileFilter, excludeFilter: FileFilter): Source =
+    new Source(base, includeFilter, excludeFilter)
 }
 
 private[sbt] object WatchState {
