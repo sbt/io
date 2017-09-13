@@ -86,54 +86,119 @@ sealed trait RichNioPath extends Any {
 
   private[sbt] def linkOptions: Vector[LinkOption]
 
+  /**
+   * Returns this file's POSIX permissions.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
   def permissions: Set[PosixFilePermission] =
     Files.getPosixFilePermissions(asPath, linkOptions: _*).asScala.toSet
 
+  /**
+   * Returns this file's POSIX permissions.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
   def permissionsAsString: String =
     PosixFilePermissions.toString(permissions.asJava)
 
+  /**
+   * Updates permission of this file.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   *
+   * @param permissions
+   */
   def setPermissions(permissions: Set[PosixFilePermission]): Unit = {
     Files.setPosixFilePermissions(asPath, permissions.asJava)
     ()
   }
 
+  /**
+   * Adds permission to this file.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   *
+   * @param permission
+   */
   def addPermission(permission: PosixFilePermission): Unit =
     setPermissions(permissions + permission)
 
+  /**
+   * Removes permission from this file.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   *
+   * @param permission
+   */
   def removePermission(permission: PosixFilePermission): Unit =
     setPermissions(permissions - permission)
 
   /**
-   * test if file has this permission
+   * Tests if this file has the given permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   *
+   * @param permission
    */
   def testPermission(permission: PosixFilePermission): Boolean =
     permissions(permission)
 
+  /**
+   * Tests if this file has the owner+read permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
   def isOwnerReadable: Boolean =
     testPermission(PosixFilePermission.OWNER_READ)
 
+  /**
+   * Tests if this file has the owner+write permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
   def isOwnerWritable: Boolean =
     testPermission(PosixFilePermission.OWNER_WRITE)
 
+  /**
+   * Tests if this file has the owner+execute permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
   def isOwnerExecutable: Boolean =
     testPermission(PosixFilePermission.OWNER_EXECUTE)
 
+  /**
+   * Tests if this file has the group+read permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
   def isGroupReadable: Boolean =
     testPermission(PosixFilePermission.GROUP_READ)
 
+  /**
+   * Tests if this file has the group+write permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
   def isGroupWritable: Boolean =
     testPermission(PosixFilePermission.GROUP_WRITE)
 
+  /**
+   * Tests if this file has the group+execute permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
   def isGroupExecutable: Boolean =
     testPermission(PosixFilePermission.GROUP_EXECUTE)
 
-  def isOtherReadable: Boolean =
+  /**
+   * Tests if this file has the others+read permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
+  def isOthersReadable: Boolean =
     testPermission(PosixFilePermission.OTHERS_READ)
 
-  def isOtherWritable: Boolean =
+  /**
+   * Tests if this file has the others+write permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
+  def isOthersWritable: Boolean =
     testPermission(PosixFilePermission.OTHERS_WRITE)
 
-  def isOtherExecutable: Boolean =
+  /**
+   * Tests if this file has the others+execute permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
+  def isOthersExecutable: Boolean =
     testPermission(PosixFilePermission.OTHERS_EXECUTE)
 
   def attributes: BasicFileAttributes =
