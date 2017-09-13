@@ -19,6 +19,7 @@ import java.io.{ ObjectInputStream, ObjectStreamClass }
 import java.net.{ URI, URISyntaxException, URL }
 import java.nio.charset.Charset
 import java.nio.file.FileSystems
+import java.nio.file.attribute.PosixFilePermissions
 import java.util.Properties
 import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
@@ -1035,4 +1036,60 @@ object IO {
   private[this] lazy val supportedFileAttributeViews: Set[String] = {
     FileSystems.getDefault.supportedFileAttributeViews.asScala.toSet
   }
+
+  /**
+   * Updates permission of this file.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   *
+   * @param permissions Must be 9 character POSIX permission representation e.g. "rwxr-x---"
+   * @param file
+   */
+  def setPermissions(permissions: String, file: File): Unit = {
+    Path(file).setPermissions(PosixFilePermissions.fromString(permissions).asScala.toSet)
+  }
+
+  /**
+   * An alias for `setPermissions`. Updates permission of this file.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   *
+   * @param permissions Must be 9 character POSIX permission representation e.g. "rwxr-x---"
+   * @param file
+   */
+  def chmod(permissions: String, file: File): Unit = setPermissions(permissions, file)
+
+  /**
+   * Updates the file owner.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   *
+   * @param owner
+   * @param file
+   */
+  def setOwner(owner: String, file: File): Unit = Path(file).setOwner(owner)
+
+  /**
+   * An alias for `setOwner`. Updates the file owner.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   *
+   * @param owner
+   * @param file
+   */
+  def chown(owner: String, file: File): Unit = setOwner(owner, file)
+
+  /**
+   * Updates the group owner of the file.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   *
+   * @param group
+   * @param file
+   */
+  def setGroup(group: String, file: File): Unit = Path(file).setGroup(group)
+
+  /**
+   * An alias for setGroup. Updates the group owner of the file.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   *
+   * @param group
+   * @param file
+   */
+  def chgrp(group: String, file: File): Unit = setGroup(group, file)
 }

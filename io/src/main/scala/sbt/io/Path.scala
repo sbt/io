@@ -148,27 +148,49 @@ sealed trait RichNioPath extends Any {
   def aclFileAttributeView: AclFileAttributeView =
     Files.getFileAttributeView(asPath, classOf[AclFileAttributeView], linkOptions: _*)
 
-  /** Returns the owner of a file. */
+  /**
+   * Returns the owner of a file.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   */
   def owner: UserPrincipal =
     Files.getOwner(asPath, linkOptions: _*)
 
-  /** Returns the owner of a file. */
+  /**
+   * Returns the owner of a file.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   */
   def ownerName: String = owner.getName
 
-  /** Returns the group owner of the file. */
+  /**
+   * Returns the group owner of a file.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   */
   def group: GroupPrincipal = posixAttributes.group()
 
-  /** Returns the group owner of the file. */
+  /**
+   * Returns the group owner of a file.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   */
   def groupName: String = group.getName
 
-  /** Updates the file owner. */
+  /**
+   * Updates the file owner.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   *
+   * @param owner
+   */
   def setOwner(owner: String): Unit = {
     val fileSystem: FileSystem = asPath.getFileSystem
     Files.setOwner(asPath, fileSystem.getUserPrincipalLookupService.lookupPrincipalByName(owner))
     ()
   }
 
-  /** Updates the group owner of the file. */
+  /**
+   * Updates the group owner of the file.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   *
+   * @param group
+   */
   def setGroup(group: String): Unit = {
     val fileSystem: FileSystem = asPath.getFileSystem
     Files.setOwner(asPath,
