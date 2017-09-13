@@ -1041,10 +1041,10 @@ object IO {
    * Updates permission of this file.
    * This operation requires underlying filesystem to support `IO.isPosix`.
    *
-   * @param permissions Must be 9 character POSIX permission representation e.g. "rwxr-x---"
    * @param file
+   * @param permissions Must be 9 character POSIX permission representation e.g. "rwxr-x---"
    */
-  def setPermissions(permissions: String, file: File): Unit = {
+  def setPermissions(file: File, permissions: String): Unit = {
     Path(file).setPermissions(PosixFilePermissions.fromString(permissions).asScala.toSet)
   }
 
@@ -1055,16 +1055,16 @@ object IO {
    * @param permissions Must be 9 character POSIX permission representation e.g. "rwxr-x---"
    * @param file
    */
-  def chmod(permissions: String, file: File): Unit = setPermissions(permissions, file)
+  def chmod(permissions: String, file: File): Unit = setPermissions(file, permissions)
 
   /**
    * Updates the file owner.
    * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
    *
-   * @param owner
    * @param file
+   * @param owner
    */
-  def setOwner(owner: String, file: File): Unit = Path(file).setOwner(owner)
+  def setOwner(file: File, owner: String): Unit = Path(file).setOwner(owner)
 
   /**
    * An alias for `setOwner`. Updates the file owner.
@@ -1073,16 +1073,16 @@ object IO {
    * @param owner
    * @param file
    */
-  def chown(owner: String, file: File): Unit = setOwner(owner, file)
+  def chown(owner: String, file: File): Unit = setOwner(file, owner)
 
   /**
    * Updates the group owner of the file.
    * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
    *
-   * @param group
    * @param file
+   * @param group
    */
-  def setGroup(group: String, file: File): Unit = Path(file).setGroup(group)
+  def setGroup(file: File, group: String): Unit = Path(file).setGroup(group)
 
   /**
    * An alias for setGroup. Updates the group owner of the file.
@@ -1091,5 +1091,5 @@ object IO {
    * @param group
    * @param file
    */
-  def chgrp(group: String, file: File): Unit = setGroup(group, file)
+  def chgrp(group: String, file: File): Unit = setGroup(file, group)
 }
