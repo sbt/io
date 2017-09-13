@@ -18,6 +18,7 @@ import java.io.{
 import java.io.{ ObjectInputStream, ObjectStreamClass }
 import java.net.{ URI, URISyntaxException, URL }
 import java.nio.charset.Charset
+import java.nio.file.FileSystems
 import java.util.Properties
 import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
@@ -27,6 +28,7 @@ import scala.collection.mutable.{ HashMap, HashSet }
 import scala.reflect.{ Manifest => SManifest }
 import scala.util.control.NonFatal
 import scala.util.control.Exception._
+import scala.collection.JavaConverters._
 import Function.tupled
 
 /** A collection of File, URL, and I/O utility methods.*/
@@ -1009,4 +1011,28 @@ object IO {
       }
     }
 
+  /** Returns `true` if the filesystem supports POSIX file attribute view. */
+  def isPosix: Boolean = hasPosixFileAttributeView
+
+  /** Returns `true` if the filesystem supports POSIX file attribute view. */
+  lazy val hasPosixFileAttributeView: Boolean = supportedFileAttributeViews.contains("posix")
+
+  /** Returns `true` if the filesystem supports file owner attribute view. */
+  lazy val hasFileOwnerAttributeView: Boolean = supportedFileAttributeViews.contains("owner")
+
+  /** Returns `true` if the filesystem supports DOS file attribute view. */
+  lazy val hasDosFileAttributeView: Boolean = supportedFileAttributeViews.contains("dos")
+
+  /** Returns `true` if the filesystem supports ACL file attribute view. */
+  lazy val hasAclFileAttributeView: Boolean = supportedFileAttributeViews.contains("acl")
+
+  /** Returns `true` if the filesystem supports basic file attribute view. */
+  lazy val hasBasicFileAttributeView: Boolean = supportedFileAttributeViews.contains("basic")
+
+  /** Returns `true` if the filesystem supports user-defined file attribute view. */
+  lazy val hasUserDefinedFileAttributeView: Boolean = supportedFileAttributeViews.contains("user")
+
+  private[this] lazy val supportedFileAttributeViews: Set[String] = {
+    FileSystems.getDefault.supportedFileAttributeViews.asScala.toSet
+  }
 }

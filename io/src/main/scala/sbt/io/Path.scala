@@ -7,9 +7,8 @@ import java.io.File
 import java.net.URL
 import scala.collection.mutable
 import IO.wrapNull
-import java.nio.file.attribute.{ PosixFilePermission, PosixFilePermissions }
-import java.nio.file.{ Path => NioPath, LinkOption }
-import java.nio.file.Files
+import java.nio.file.attribute._
+import java.nio.file.{ Path => NioPath, LinkOption, FileSystem, Files }
 import scala.collection.JavaConverters._
 
 final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
@@ -136,6 +135,46 @@ sealed trait RichNioPath extends Any {
 
   def isOtherExecutable: Boolean =
     testPermission(PosixFilePermission.OTHERS_EXECUTE)
+
+  def attributes: BasicFileAttributes =
+    Files.readAttributes(asPath, classOf[BasicFileAttributes], linkOptions: _*)
+
+  def posixAttributes: PosixFileAttributes =
+    Files.readAttributes(asPath, classOf[PosixFileAttributes], linkOptions: _*)
+
+  def dosAttributes: DosFileAttributes =
+    Files.readAttributes(asPath, classOf[DosFileAttributes], linkOptions: _*)
+
+  def aclFileAttributeView: AclFileAttributeView =
+    Files.getFileAttributeView(asPath, classOf[AclFileAttributeView], linkOptions: _*)
+
+  /** Returns the owner of a file. */
+  def owner: UserPrincipal =
+    Files.getOwner(asPath, linkOptions: _*)
+
+  /** Returns the owner of a file. */
+  def ownerName: String = owner.getName
+
+  /** Returns the group owner of the file. */
+  def group: GroupPrincipal = posixAttributes.group()
+
+  /** Returns the group owner of the file. */
+  def groupName: String = group.getName
+
+  /** Updates the file owner. */
+  def setOwner(owner: String): Unit = {
+    val fileSystem: FileSystem = asPath.getFileSystem
+    Files.setOwner(asPath, fileSystem.getUserPrincipalLookupService.lookupPrincipalByName(owner))
+    ()
+  }
+
+  /** Updates the group owner of the file. */
+  def setGroup(group: String): Unit = {
+    val fileSystem: FileSystem = asPath.getFileSystem
+    Files.setOwner(asPath,
+                   fileSystem.getUserPrincipalLookupService.lookupPrincipalByGroupName(group))
+    ()
+  }
 }
 
 object Path extends Mapper {
