@@ -7,8 +7,11 @@ import java.io.File
 import java.net.URL
 import scala.collection.mutable
 import IO.wrapNull
+import java.nio.file.attribute._
+import java.nio.file.{ Path => NioPath, LinkOption, FileSystem, Files }
+import scala.collection.JavaConverters._
 
-final class RichFile(val asFile: File) extends AnyVal {
+final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
   def /(component: String): File = if (component == ".") asFile else new File(asFile, component)
 
   /** True if and only if the wrapped file exists.*/
@@ -64,6 +67,201 @@ final class RichFile(val asFile: File) extends AnyVal {
   def hash: Array[Byte] = Hash(asFile)
   def hashString: String = Hash.toHex(hash)
   def hashStringHalf: String = Hash.halve(hashString)
+
+  override def asPath: NioPath = asFile.toPath
+
+  private[sbt] override def linkOptions: Vector[LinkOption] = Vector.empty
+
+  def withLinkOptions(linkOption: LinkOption*): LinkOptionPath =
+    new LinkOptionPath(asPath, linkOption.toVector)
+}
+
+final class LinkOptionPath(p: NioPath, lo: Vector[LinkOption]) extends RichNioPath {
+  override val asPath: NioPath = p
+  private[sbt] val linkOptions: Vector[LinkOption] = lo
+}
+
+sealed trait RichNioPath extends Any {
+  def asPath: NioPath
+
+  private[sbt] def linkOptions: Vector[LinkOption]
+
+  /**
+   * Returns this file's POSIX permissions.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
+  def permissions: Set[PosixFilePermission] =
+    Files.getPosixFilePermissions(asPath, linkOptions: _*).asScala.toSet
+
+  /**
+   * Returns this file's POSIX permissions.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
+  def permissionsAsString: String =
+    PosixFilePermissions.toString(permissions.asJava)
+
+  /**
+   * Updates permission of this file.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   *
+   * @param permissions
+   */
+  def setPermissions(permissions: Set[PosixFilePermission]): Unit = {
+    Files.setPosixFilePermissions(asPath, permissions.asJava)
+    ()
+  }
+
+  /**
+   * Adds permission to this file.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   *
+   * @param permission
+   */
+  def addPermission(permission: PosixFilePermission): Unit =
+    setPermissions(permissions + permission)
+
+  /**
+   * Removes permission from this file.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   *
+   * @param permission
+   */
+  def removePermission(permission: PosixFilePermission): Unit =
+    setPermissions(permissions - permission)
+
+  /**
+   * Tests if this file has the given permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   *
+   * @param permission
+   */
+  def testPermission(permission: PosixFilePermission): Boolean =
+    permissions(permission)
+
+  /**
+   * Tests if this file has the owner+read permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
+  def isOwnerReadable: Boolean =
+    testPermission(PosixFilePermission.OWNER_READ)
+
+  /**
+   * Tests if this file has the owner+write permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
+  def isOwnerWritable: Boolean =
+    testPermission(PosixFilePermission.OWNER_WRITE)
+
+  /**
+   * Tests if this file has the owner+execute permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
+  def isOwnerExecutable: Boolean =
+    testPermission(PosixFilePermission.OWNER_EXECUTE)
+
+  /**
+   * Tests if this file has the group+read permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
+  def isGroupReadable: Boolean =
+    testPermission(PosixFilePermission.GROUP_READ)
+
+  /**
+   * Tests if this file has the group+write permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
+  def isGroupWritable: Boolean =
+    testPermission(PosixFilePermission.GROUP_WRITE)
+
+  /**
+   * Tests if this file has the group+execute permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
+  def isGroupExecutable: Boolean =
+    testPermission(PosixFilePermission.GROUP_EXECUTE)
+
+  /**
+   * Tests if this file has the others+read permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
+  def isOthersReadable: Boolean =
+    testPermission(PosixFilePermission.OTHERS_READ)
+
+  /**
+   * Tests if this file has the others+write permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
+  def isOthersWritable: Boolean =
+    testPermission(PosixFilePermission.OTHERS_WRITE)
+
+  /**
+   * Tests if this file has the others+execute permission.
+   * This operation requires underlying filesystem to support `IO.isPosix`.
+   */
+  def isOthersExecutable: Boolean =
+    testPermission(PosixFilePermission.OTHERS_EXECUTE)
+
+  def attributes: BasicFileAttributes =
+    Files.readAttributes(asPath, classOf[BasicFileAttributes], linkOptions: _*)
+
+  def posixAttributes: PosixFileAttributes =
+    Files.readAttributes(asPath, classOf[PosixFileAttributes], linkOptions: _*)
+
+  def dosAttributes: DosFileAttributes =
+    Files.readAttributes(asPath, classOf[DosFileAttributes], linkOptions: _*)
+
+  def aclFileAttributeView: AclFileAttributeView =
+    Files.getFileAttributeView(asPath, classOf[AclFileAttributeView], linkOptions: _*)
+
+  /**
+   * Returns the owner of a file.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   */
+  def owner: UserPrincipal =
+    Files.getOwner(asPath, linkOptions: _*)
+
+  /**
+   * Returns the owner of a file.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   */
+  def ownerName: String = owner.getName
+
+  /**
+   * Returns the group owner of a file.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   */
+  def group: GroupPrincipal = posixAttributes.group()
+
+  /**
+   * Returns the group owner of a file.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   */
+  def groupName: String = group.getName
+
+  /**
+   * Updates the file owner.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   *
+   * @param owner
+   */
+  def setOwner(owner: String): Unit = {
+    val fileSystem: FileSystem = asPath.getFileSystem
+    Files.setOwner(asPath, fileSystem.getUserPrincipalLookupService.lookupPrincipalByName(owner))
+    ()
+  }
+
+  /**
+   * Updates the group owner of the file.
+   * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
+   *
+   * @param group
+   */
+  def setGroup(group: String): Unit = {
+    val fileSystem: FileSystem = asPath.getFileSystem
+    Files.setOwner(asPath,
+                   fileSystem.getUserPrincipalLookupService.lookupPrincipalByGroupName(group))
+    ()
+  }
 }
 
 object Path extends Mapper {
@@ -87,6 +285,7 @@ object Path extends Mapper {
 
   def toURLs(files: Seq[File]): Array[URL] = files.map(_.toURI.toURL).toArray
 
+  private[sbt] val defaultLinkOptions: Vector[LinkOption] = Vector.empty
 }
 
 object PathFinder {
