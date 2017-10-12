@@ -168,6 +168,14 @@ final class Source(
   def withRecursive(recursive: Boolean): Source =
     new Source(base, includeFilter, excludeFilter, recursive)
 
+  override def toString =
+    s"""Source(
+       |  base = $base,
+       |  includeFilter = $includeFilter,
+       |  excludeFilter = $excludeFilter,
+       |  recursive = $recursive,
+       |)""".stripMargin
+
 }
 
 object Source {
