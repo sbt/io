@@ -76,6 +76,7 @@ final class SimpleFileFilter(val acceptFunction: File => Boolean) extends FileFi
 /** A [[NameFilter]] that accepts a name if it is exactly equal to `matchName`. */
 final class ExactFilter(val matchName: String) extends NameFilter {
   def accept(name: String) = matchName == name
+  override def toString = s"ExactFilter($matchName)"
 }
 
 /** A [[NameFilter]] that accepts a name if the predicate `acceptFunction` accepts it. */
@@ -86,6 +87,7 @@ final class SimpleFilter(val acceptFunction: String => Boolean) extends NameFilt
 /** A [[NameFilter]] that accepts a name if it matches the regular expression defined by `pattern`. */
 final class PatternFilter(val pattern: Pattern) extends NameFilter {
   def accept(name: String) = pattern.matcher(name).matches
+  override def toString = s"PatternFilter($pattern)"
 }
 
 /** A [[NameFilter]] that accepts all names. That is, `accept` always returns `true`. */
@@ -110,7 +112,7 @@ object FileFilter {
 
 }
 
-/** Constructs a filter from a String, interpreting wildcards.  See the [[apply]] method. */
+/** Constructs a filter from a String, interpreting wildcards.  See the [[GlobFilter.apply]] method. */
 object GlobFilter {
 
   /**
