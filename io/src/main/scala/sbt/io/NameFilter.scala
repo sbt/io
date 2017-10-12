@@ -12,18 +12,26 @@ trait FileFilter extends java.io.FileFilter {
 
   /** Constructs a filter that accepts a `File` if it matches either this filter or the given `filter`. */
   def ||(filter: FileFilter): FileFilter =
-    new SimpleFileFilter(file => accept(file) || filter.accept(file))
+    new SimpleFileFilter(file => accept(file) || filter.accept(file)) {
+      override def toString = s"SimpleFileFilter(${FileFilter.this} || $filter)"
+    }
 
   /** Constructs a filter that accepts a `File` if it matches both this filter and the given `filter`. */
   def &&(filter: FileFilter): FileFilter =
-    new SimpleFileFilter(file => accept(file) && filter.accept(file))
+    new SimpleFileFilter(file => accept(file) && filter.accept(file)) {
+      override def toString = s"SimpleFileFilter(${FileFilter.this} && $filter)"
+    }
 
   /** Constructs a filter that accepts a `File` if it matches this filter but does not match the given `filter`. */
   def --(filter: FileFilter): FileFilter =
-    new SimpleFileFilter(file => accept(file) && !filter.accept(file))
+    new SimpleFileFilter(file => accept(file) && !filter.accept(file)) {
+      override def toString = s"SimpleFileFilter(${FileFilter.this} -- $filter)"
+    }
 
   /** Constructs a filter that accepts a `File` if it does not match this filter. */
-  def unary_- : FileFilter = new SimpleFileFilter(file => !accept(file))
+  def unary_- : FileFilter = new SimpleFileFilter(file => !accept(file)) {
+    override def toString = s"SimpleFileFilter(-${FileFilter.this})"
+  }
 
 }
 
@@ -38,18 +46,26 @@ trait NameFilter extends FileFilter {
 
   /** Constructs a filter that accepts a `String` if it matches either this filter or the given `filter`. */
   def |(filter: NameFilter): NameFilter =
-    new SimpleFilter(name => accept(name) || filter.accept(name))
+    new SimpleFilter(name => accept(name) || filter.accept(name)) {
+      override def toString = s"SimpleFilter(${NameFilter.this} | $filter)"
+    }
 
   /** Constructs a filter that accepts a `String` if it matches both this filter and the given `filter`. */
   def &(filter: NameFilter): NameFilter =
-    new SimpleFilter(name => accept(name) && filter.accept(name))
+    new SimpleFilter(name => accept(name) && filter.accept(name)) {
+      override def toString = s"SimpleFilter(${NameFilter.this} & $filter)"
+    }
 
   /** Constructs a filter that accepts a `String` if it matches this filter but not the given `filter`. */
   def -(filter: NameFilter): NameFilter =
-    new SimpleFilter(name => accept(name) && !filter.accept(name))
+    new SimpleFilter(name => accept(name) && !filter.accept(name)) {
+      override def toString = s"SimpleFilter(${NameFilter.this} - $filter)"
+    }
 
   /** Constructs a filter that accepts a `String` if it does not match this filter. */
-  override def unary_- : NameFilter = new SimpleFilter(name => !accept(name))
+  override def unary_- : NameFilter = new SimpleFilter(name => !accept(name)) {
+    override def toString = s"SimpleFilter(-${NameFilter.this})"
+  }
 
 }
 
@@ -69,8 +85,8 @@ object DirectoryFilter extends FileFilter {
 }
 
 /** A [[FileFilter]] that selects files according the predicate `acceptFunction`. */
-final class SimpleFileFilter(val acceptFunction: File => Boolean) extends FileFilter {
-  def accept(file: File) = acceptFunction(file)
+sealed class SimpleFileFilter(val acceptFunction: File => Boolean) extends FileFilter {
+  final def accept(file: File) = acceptFunction(file)
 }
 
 /** A [[NameFilter]] that accepts a name if it is exactly equal to `matchName`. */
@@ -80,8 +96,8 @@ final class ExactFilter(val matchName: String) extends NameFilter {
 }
 
 /** A [[NameFilter]] that accepts a name if the predicate `acceptFunction` accepts it. */
-final class SimpleFilter(val acceptFunction: String => Boolean) extends NameFilter {
-  def accept(name: String) = acceptFunction(name)
+sealed class SimpleFilter(val acceptFunction: String => Boolean) extends NameFilter {
+  final def accept(name: String) = acceptFunction(name)
 }
 
 /** A [[NameFilter]] that accepts a name if it matches the regular expression defined by `pattern`. */

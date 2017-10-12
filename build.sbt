@@ -1,5 +1,5 @@
 import Dependencies._
-// import com.typesafe.tools.mima.core._, ProblemFilters._
+import com.typesafe.tools.mima.core._, ProblemFilters._
 
 def baseVersion: String = "1.1.0"
 
@@ -36,5 +36,11 @@ val io = (project in file("io"))
     libraryDependencies ++= Seq(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test),
     sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",
     initialCommands in console += "\nimport sbt.io._, syntax._",
-    mimaPreviousArtifacts := Set(organization.value %% moduleName.value % "1.0.0")
+    mimaPreviousArtifacts := Set(organization.value %% moduleName.value % "1.0.0"),
+    mimaBinaryIssueFilters ++= Seq(
+      // MiMa doesn't treat effectively final members as final
+      // WORKAROUND typesafehub/migration-manager#162
+      exclude[FinalMethodProblem]("sbt.io.SimpleFilter.accept"),
+      exclude[FinalMethodProblem]("sbt.io.SimpleFileFilter.accept"),
+    ),
   )
