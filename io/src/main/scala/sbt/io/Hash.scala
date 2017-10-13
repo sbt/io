@@ -5,6 +5,7 @@ package sbt.io
 
 import java.io.{ ByteArrayInputStream, File, InputStream }
 import java.net.{ URI, URL }
+import java.nio.file.Files
 
 object Hash {
   private val BufferSize = 8192
@@ -52,7 +53,7 @@ object Hash {
   def apply(as: Array[Byte]): Array[Byte] = apply(new ByteArrayInputStream(as))
 
   /** Calculates the SHA-1 hash of the given file.*/
-  def apply(file: File): Array[Byte] = Using.fileInputStream(file)(apply)
+  def apply(file: File): Array[Byte] = Files.readAllBytes(file.toPath)
 
   /** Calculates the SHA-1 hash of the given resource.*/
   def apply(url: URL): Array[Byte] = Using.urlInputStream(url)(apply)
