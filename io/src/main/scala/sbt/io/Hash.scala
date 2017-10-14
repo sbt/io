@@ -52,7 +52,18 @@ object Hash {
   def apply(as: Array[Byte]): Array[Byte] = apply(new ByteArrayInputStream(as))
 
   /** Calculates the SHA-1 hash of the given file.*/
-  def apply(file: File): Array[Byte] = Using.fileInputStream(file)(apply)
+  def apply(file: File): Array[Byte] = {
+    val key = (file, file.length, file.lastModified)
+    cache.get(key) match {
+      case Some(hit) =>
+        hit.clone
+      case None =>
+        val result = Using.fileInputStream(file)(apply)
+        cache += (key -> result.clone)
+        result
+    }
+  }
+  var cache: Map[(File, Long, Long), Array[Byte]] = Map.empty
 
   /** Calculates the SHA-1 hash of the given resource.*/
   def apply(url: URL): Array[Byte] = Using.urlInputStream(url)(apply)
