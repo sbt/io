@@ -130,8 +130,17 @@ private[sbt] final class WatchState private (
  * @param base          Where to start looking for files.
  * @param includeFilter Filter to apply to determine whether to include a file.
  * @param excludeFilter Filter to apply to determine whether to ignore a file.
+ * @param recursive     Whether the lists is recursive or immediate children.
  */
-final class Source(base: File, includeFilter: FileFilter, excludeFilter: FileFilter) {
+final class Source(
+    base: File,
+    includeFilter: FileFilter,
+    excludeFilter: FileFilter,
+    recursive: Boolean
+) {
+
+  def this(base: File, includeFilter: FileFilter, excludeFilter: FileFilter) =
+    this(base, includeFilter, excludeFilter, true)
 
   /**
    * Determine whether `p` should be included in this source.
@@ -151,8 +160,21 @@ final class Source(base: File, includeFilter: FileFilter, excludeFilter: FileFil
    * Gathers all the paths from this source without applying filters.
    * @return A sequence of all the paths collected from this source.
    */
-  private[sbt] def getUnfilteredPaths(): Seq[Path] =
-    base.allPaths.get.map(_.toPath)
+  private[sbt] def getUnfilteredPaths(): Seq[Path] = {
+    val pathFinder = if (recursive) base.allPaths else base.glob(AllPassFilter)
+    pathFinder.get.map(_.toPath)
+  }
+
+  def withRecursive(recursive: Boolean): Source =
+    new Source(base, includeFilter, excludeFilter, recursive)
+
+  override def toString =
+    s"""Source(
+       |  base = $base,
+       |  includeFilter = $includeFilter,
+       |  excludeFilter = $excludeFilter,
+       |  recursive = $recursive,
+       |)""".stripMargin
 
 }
 
