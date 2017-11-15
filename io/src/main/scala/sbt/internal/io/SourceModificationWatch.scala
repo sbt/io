@@ -133,10 +133,10 @@ private[sbt] final class WatchState private (
  * @param recursive     Whether the lists is recursive or immediate children.
  */
 final class Source(
-    base: File,
-    includeFilter: FileFilter,
-    excludeFilter: FileFilter,
-    recursive: Boolean
+    val base: File,
+    val includeFilter: FileFilter,
+    val excludeFilter: FileFilter,
+    val recursive: Boolean
 ) {
 
   def this(base: File, includeFilter: FileFilter, excludeFilter: FileFilter) =
