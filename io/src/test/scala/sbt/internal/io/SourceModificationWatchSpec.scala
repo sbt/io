@@ -15,6 +15,18 @@ abstract class SourceModificationWatchSpec(
 ) extends FlatSpec
     with Matchers {
 
+  it should "detect modified files" in IO.withTemporaryDirectory { dir =>
+    val parentDir = dir / "src" / "watchme"
+    val file = parentDir / "Foo.scala"
+
+    IO.write(file, "foo")
+
+    watchTest(parentDir)(pollDelay, maxWait) {
+      IO.write(file, "bar")
+    }
+    pending // until fixed https://github.com/sbt/io/issues/82
+  }
+
   it should "watch a directory for file creation" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val created = parentDir / "NewSource.scala"
