@@ -22,9 +22,15 @@ abstract class SourceModificationWatchSpec(
     IO.write(file, "foo")
 
     watchTest(parentDir) {
+      if (scala.util.Properties.isMac) {
+        // Looks like on HFS+ time stamp granularity is only 1 second
+        // https://developer.apple.com/library/content/documentation/FileManagement/Conceptual/APFS_Guide/VolumeFormatComparison/VolumeFormatComparison.html
+        // therefore in order to notice a last modified time change you need to have elapsed into
+        // the next second. We'll do this by sleeping 1 second.
+        Thread.sleep(1000L)
+      }
       IO.write(file, "bar")
     }
-    pending // until fixed https://github.com/sbt/io/issues/82
   }
 
   it should "watch a directory for file creation" in IO.withTemporaryDirectory { dir =>
