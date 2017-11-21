@@ -1,5 +1,6 @@
 package sbt.internal.io
 
+import java.io.{ File, IOException }
 import java.nio.file.{ ClosedWatchServiceException, Paths }
 
 import org.scalatest.{ Assertion, FlatSpec, Matchers }
@@ -21,10 +22,16 @@ abstract class SourceModificationWatchSpec(
 
     IO.write(file, "foo")
 
-    // watchTest(parentDir) {
-    //   IO.write(file, "bar")
-    // }
-    pending // until fixed https://github.com/sbt/io/issues/82
+    watchTest(parentDir) {
+      if (!supportsSubSecondModifiedTime(dir)) {
+        // Some filesystems, such as HFS+, only have 1 second time stamp granularity
+        // https://developer.apple.com/library/content/documentation/FileManagement/Conceptual/APFS_Guide/VolumeFormatComparison/VolumeFormatComparison.html
+        // therefore in order to notice a last modified time change you need to have elapsed into
+        // the next second. We'll do this by sleeping 1 second.
+        Thread.sleep(1000L)
+      }
+      IO.write(file, "bar")
+    }
   }
 
   it should "watch a directory for file creation" in IO.withTemporaryDirectory { dir =>
@@ -317,6 +324,19 @@ abstract class SourceModificationWatchSpec(
   private def emptyState(service: WatchService, base: File): WatchState = {
     val sources = Seq(Source(base, "*.scala", new SimpleFilter(_.startsWith("."))))
     WatchState.empty(service, sources).withCount(1)
+  }
+
+  private def supportsSubSecondModifiedTime(dir: File) = {
+    val file = File.createTempFile("sbt", null, dir)
+    try {
+      val oldTime = IO getModifiedTime file
+      IO.setModifiedTime(file, oldTime - 27)
+      val newTime = IO getModifiedTime file
+      newTime + 27 == oldTime
+    } finally {
+      if (!file.delete())
+        throw new IOException("Failed to delete temp file: " + file.getAbsolutePath)
+    }
   }
 
 }
