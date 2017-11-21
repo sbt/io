@@ -294,11 +294,7 @@ abstract class SourceModificationWatchSpec(
   private def watchTest(initState: WatchState)(modifier: => Unit): (Boolean, WatchState) = {
     var started = false
     val deadline = maxWait.fromNow
-    val modThread = new Thread {
-      override def run(): Unit = {
-        modifier
-      }
-    }
+    val modThread = new Thread { override def run() = modifier }
     SourceModificationWatch.watch(pollDelay, initState) {
       if (!started) {
         started = true
