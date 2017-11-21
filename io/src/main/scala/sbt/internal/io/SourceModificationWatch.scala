@@ -15,7 +15,7 @@ import scala.concurrent.duration.FiniteDuration
 private[sbt] object SourceModificationWatch {
 
   /**
-   * Checks for modifications on the file system every `delayMillis` milliseconds,
+   * Checks for modifications on the file system every `delay`,
    * until changes are detected or `terminationCondition` evaluates to `true`.
    */
   @tailrec
@@ -97,12 +97,12 @@ private[sbt] final class WatchState private (
     val newKeys =
       fs.filter(Files.exists(_)).foldLeft(registered) {
         case (ks, d) if Files.isDirectory(d) =>
-          if (registered.contains(d)) ks
+          if (ks.contains(d)) ks
           else ks + (d -> service.register(d, WatchState.events: _*))
 
         case (ks, f) =>
           val parent = f.getParent
-          if (registered.contains(parent)) ks + (f -> registered(parent))
+          if (ks.contains(parent)) ks + (f -> ks(parent))
           else ks + (f -> service.register(parent, WatchState.events: _*))
       }
     withRegistered(newKeys)
