@@ -24,8 +24,8 @@ private[sbt] object SourceModificationWatch {
   ): (Boolean, WatchState) = {
     if (state.count == 0) (true, state.withCount(1))
     else {
-      val events =
-        state.pollEvents().map(expandEvent)
+      val events = state.pollEvents().map(expandEvent)
+      println(s"events.size: " + events.size)
 
       if (events.isEmpty) {
         if (terminationCondition) {
@@ -47,6 +47,12 @@ private[sbt] object SourceModificationWatch {
         val filteredModified = events.collect {
           case (p, ENTRY_MODIFY) if state.sources.exists(_.accept(p, false)) => p
         }
+
+        val modifiedEntries = events.collect {
+          case (p, ENTRY_MODIFY) => p
+        }
+        println(s"modifiedEntries: " + modifiedEntries)
+        println(s"filteredModified: " + filteredModified)
 
         // Register and remove _unfiltered_ files. This is correct because directories
         // are likely to be filtered out (for instance), but we should still add them
@@ -192,6 +198,7 @@ private[sbt] object WatchState {
   def empty(service: WatchService, sources: Seq[Source]): WatchState = {
     val initFiles = sources.flatMap(_.getUnfilteredPaths())
     assert(initFiles.nonEmpty)
+    println(s"initFiles: " + initFiles)
     val initState = new WatchState(0, sources, service, Map.empty) ++ initFiles
     service.init()
     initState
