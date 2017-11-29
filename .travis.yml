@@ -1,6 +1,6 @@
 language: scala
 jdk: oraclejdk8
-script: sbt ++$TRAVIS_SCALA_VERSION mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test
+script: sbt ++$TRAVIS_SCALA_VERSION 'io/testOnly sbt.internal.io.PollingWatchServiceSpec'
 
 scala:
    - 2.10.6
