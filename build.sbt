@@ -33,7 +33,10 @@ val io = (project in file("io"))
   .settings(
     commonSettings,
     name := "IO",
-    libraryDependencies ++= Seq(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test),
+    libraryDependencies ++= {
+      if (scalaVersion.value startsWith "2.13.") Vector()
+      else Vector(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test)
+    },
     sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",
     initialCommands in console += "\nimport sbt.io._, syntax._",
     mimaPreviousArtifacts := Set(organization.value %% moduleName.value % "1.0.0"),

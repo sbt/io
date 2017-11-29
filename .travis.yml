@@ -1,12 +1,21 @@
 language: scala
 jdk: oraclejdk8
-script: sbt ++$TRAVIS_SCALA_VERSION mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test
 
-scala:
-   - 2.10.6
-   - 2.11.11
-   - 2.12.3
-   - 2.13.0-M1
+matrix:
+  include:
+   - scala: 2.10.7
+     env: CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+
+   - scala: 2.11.12
+     env: CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+
+   - scala: 2.12.4
+     env: CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+
+   - scala: 2.13.0-M2
+     env: CMD=compile
+
+script: sbt ++$TRAVIS_SCALA_VERSION $CMD
 
 cache:
   directories:
