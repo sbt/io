@@ -1,5 +1,5 @@
 import Dependencies._
-// import com.typesafe.tools.mima.core._, ProblemFilters._
+import com.typesafe.tools.mima.core._, ProblemFilters._
 
 def baseVersion: String = "1.1.0"
 
