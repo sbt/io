@@ -36,5 +36,10 @@ val io = (project in file("io"))
     libraryDependencies ++= Seq(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test),
     sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",
     initialCommands in console += "\nimport sbt.io._, syntax._",
-    mimaPreviousArtifacts := Set(organization.value %% moduleName.value % "1.0.0")
+    mimaPreviousArtifacts := Set(organization.value %% moduleName.value % "1.0.0"),
+    mimaBinaryIssueFilters ++= Seq(
+      // MiMa doesn't understand private inner classes?
+      // method this(sbt.io.PollingWatchService,sbt.io.PollingWatchService#PollingThread,java.nio.file.Watchable,java.util.List)Unit in class sbt.io.PollingWatchService#PollingWatchKey does not have a correspondent in current version
+      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingWatchKey.this"),
+    ),
   )
