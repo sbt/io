@@ -11,4 +11,6 @@ object Dependencies {
 
   val scalaCheck = "org.scalacheck" %% "scalacheck" % "1.13.4"
   val scalatest = "org.scalatest" %% "scalatest" % "3.0.3"
+  val jna = "net.java.dev.jna" % "jna" % "4.5.0"
+  val jnaPlatform = "net.java.dev.jna" % "jna-platform" % "4.5.0"
 }
