@@ -97,13 +97,16 @@ private[sbt] final class WatchState private (
     val newKeys =
       fs.filter(Files.exists(_)).foldLeft(registered) {
         case (ks, d) if Files.isDirectory(d) =>
-          if (registered.contains(d)) ks
+          if (ks.contains(d)) ks
           else ks + (d -> service.register(d, WatchState.events: _*))
 
         case (ks, f) =>
           val parent = f.getParent
-          if (registered.contains(parent)) ks + (f -> registered(parent))
-          else ks + (f -> service.register(parent, WatchState.events: _*))
+          if (ks.contains(parent)) ks + (f -> ks(parent))
+          else {
+            val key = service.register(parent, WatchState.events: _*)
+            ks ++ Seq(parent -> key, f -> key)
+          }
       }
     withRegistered(newKeys)
   }
