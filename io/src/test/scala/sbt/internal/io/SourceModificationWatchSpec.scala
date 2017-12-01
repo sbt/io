@@ -21,9 +21,9 @@ abstract class SourceModificationWatchSpec(
 
     IO.write(file, "foo")
 
-    watchTest(parentDir)(pollDelay, maxWait) {
-      IO.write(file, "bar")
-    }
+    // watchTest(parentDir)(pollDelay, maxWait) {
+    //   IO.write(file, "bar")
+    // }
     pending // until fixed https://github.com/sbt/io/issues/82
   }
 
