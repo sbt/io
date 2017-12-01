@@ -31,6 +31,7 @@ import scala.util.control.NonFatal
 import scala.util.control.Exception._
 import scala.collection.JavaConverters._
 import Function.tupled
+import sbt.internal.io.Milli
 
 /** A collection of File, URL, and I/O utility methods.*/
 object IO {
@@ -197,8 +198,8 @@ object IO {
     val created = translate("Could not create file " + absFile) { absFile.createNewFile() }
     if (created || absFile.isDirectory)
       ()
-    else if (setModified && !absFile.setLastModified(System.currentTimeMillis))
-      sys.error("Could not update last modified time for file " + absFile)
+    else if (setModified)
+      setModifiedTime(absFile, System.currentTimeMillis) // will throw exception if it cannot set the timestamp
   }
 
   /** Creates directories `dirs` and all parent directories.  It tries to work around a race condition in `File.mkdirs()` by retrying up to a limit.*/
@@ -298,7 +299,7 @@ object IO {
             }
           }
           if (preserveLastModified)
-            target.setLastModified(entry.getTime)
+            setModifiedTime(target, entry.getTime)
         } else {
           //log.debug("Ignoring zip entry '" + name + "'")
         }
@@ -535,7 +536,7 @@ object IO {
     def makeFileEntry(file: File, name: String) = {
       //			log.debug("\tAdding " + file + " as " + name + " ...")
       val e = createEntry(name)
-      e setTime file.lastModified
+      e setTime getModifiedTime(file)
       e
     }
     def addFileEntry(file: File, name: String) = {
@@ -635,7 +636,7 @@ object IO {
       preserveLastModified: Boolean,
       preserveExecutable: Boolean
   )(from: File, to: File): File = {
-    if (overwrite || !to.exists || from.lastModified > to.lastModified) {
+    if (overwrite || !to.exists || getModifiedTime(from) > getModifiedTime(to)) {
       if (from.isDirectory)
         createDirectory(to)
       else {
@@ -720,7 +721,7 @@ object IO {
       }
     }
     if (preserveLastModified) {
-      copyLastModified(sourceFile, targetFile)
+      copyModifiedTime(sourceFile, targetFile)
       ()
     }
     if (preserveExecutable) {
@@ -729,8 +730,27 @@ object IO {
     }
   }
 
-  /** Transfers the last modified time of `sourceFile` to `targetFile`. */
-  def copyLastModified(sourceFile: File, targetFile: File) = {
+  /**
+   * Transfers the last modified time of `sourceFile` to `targetFile`.
+   *
+   * Note: this method has an underspecified, and generally inconsistent
+   * behavior. In particular, if the source file is missing, it will
+   * silently set the target modification time to 1st January 1970,
+   * returning success. Also, because it uses lastModified(), it may
+   * trim away the millisecond part of the timestamp without notice.
+   *
+   * After sbt/io v1.0.2 (for the 1.0.x series) and v1.1.1 (for
+   * the 1.1.x series) a new method copyModifiedTime() has been added
+   * to sbt.io.IO. That method will correctly throw a FileNotFoundException
+   * if any of the two files are missing, or an IOException in case an
+   * IO exception occurs.
+   *
+   * The current behavior of copyLastModified() is retained for compatibility,
+   * but client code should be migrated to copyModifiedTime(), instead.
+   * The copyLastModified() method may be removed in future versions of sbt.io.IO.
+   */
+  @deprecated("Use copyModifiedTime() instead.", "1.0.3")
+  def copyLastModified(sourceFile: File, targetFile: File): Boolean = {
     val last = sourceFile.lastModified
     // lastModified can return a negative number, but setLastModified doesn't accept it
     // see Java bug #6791812
@@ -1092,4 +1112,78 @@ object IO {
    * @param file
    */
   def chgrp(group: String, file: File): Unit = setGroup(file, group)
+
+  /**
+   * Return the last modification timestamp of the specified file,
+   * in milliseconds from the Unix epoch (January 1, 1970 UTC).
+   * This method will use whenever possible native code in order to
+   * return a timestamp with a 1-millisecond precision.
+   *
+   * This is in contrast to lastModified() in java.io.File, and to
+   * getLastModifiedTime() in java.nio.file.Files, which on many implementations
+   * of the JDK prior to JDK 10 will return timestamps with 1-second precision.
+   *
+   * If native code support is not available for the JDK/OS in use, this
+   * method will revert to the Java calls. Currently supported systems
+   * are Linux 64/32 bits, Windows, and OSX, all on Intel hardware.
+   *
+   * Please note that even on those platforms, not all filesystems
+   * support sub-second timestamp resolutions. For instance, ext2/3,
+   * FAT, and HFS+ all have a one second resolution or higher for
+   * modification times. Conversely, ext4, NTFS, and APFS all support
+   * at least millisecond resolution, or finer.
+   *
+   * If the file does not exist, or if it impossible to obtain the
+   * modification time because of access permissions of other reasons,
+   * this method will throw a FileNotFoundException or an IOException,
+   * as appropriate. This is the same behavior as the nio code in
+   * Files.getLastModifiedTime(). However note that, in contrast,
+   * Java's traditional lastModified() in java.io.File will return
+   * zero if an error occurs.
+   *
+   * If you do not wish to use native calls, please define the property
+   * "sbt.io.jdktimestamps" to "true" (or anything other than "false"),
+   * and Java's get/setLastModifiedTime() will be used instead. This
+   * setting applies to setModifiedTime() and copyModifiedTime() as well.
+   *
+   * @see setModifiedTime
+   * @see copyModifiedTime
+   */
+  def getModifiedTime(file: File): Long = Milli.getModifiedTime(file)
+
+  /**
+   * Sets the modification time of the file argument, in milliseconds
+   * since the Unix epoch (January 1, 1970 UTC).
+   * This method will use native code whenever possible in order to
+   * achieve a subsecond precision. Please see getModifiedTime() for
+   * further information.
+   * If it is impossible to set the modification time, the code will
+   * throw a FileNotFoundException or an IOException, as appropriate.
+   * This is similar to Files.setLastModifiedTime(). Note that, in
+   * contrast, Java's traditional setLastModified() will return a
+   * boolean false value if an error occurs.
+   *
+   * @see getModifiedTime
+   * @see copyModifiedTime
+   */
+  def setModifiedTime(file: File, mtime: Long): Unit = Milli.setModifiedTime(file, mtime)
+
+  /**
+   * Copies the last modification time of `fromFile` to `toFile`, with
+   * a highest precision possible, by using native code when available.
+   *
+   * This method copies the timestamps with the highest possible precision
+   * offered by the native calls of this system for the filesystem in use.
+   * That could be in the region of nanoseconds. It is therefore more
+   * precise than using separate getModifiedTime()/setModifiedTime() calls,
+   * which will round timestamps to whole milliseconds.
+   *
+   * If the timestamp cannot be copied, this method will throw
+   * a FileNotFoundException or an IOException, as appropriate.
+   *
+   * @see getModifiedTime
+   * @see setModifiedTime
+   */
+  def copyModifiedTime(fromFile: File, toFile: File): Unit =
+    Milli.copyModifiedTime(fromFile, toFile)
 }

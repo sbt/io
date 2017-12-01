@@ -14,6 +14,7 @@ import java.util.{ List => JList }
 import sbt.io.syntax._
 import scala.collection.mutable
 import scala.concurrent.duration.{ Duration, FiniteDuration }
+import IO.getModifiedTime
 
 /** A `WatchService` that polls the filesystem every `delay`. */
 class PollingWatchService(delay: FiniteDuration) extends WatchService {
@@ -93,7 +94,7 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
       watched.toSeq.sortBy(_._1)(pathLengthOrdering).foreach {
         case (p, _) =>
           if (!results.contains(p))
-            p.toFile.allPaths.get.foreach(f => results += f.toPath -> f.lastModified)
+            p.toFile.allPaths.get.foreach(f => results += f.toPath -> getModifiedTime(f))
       }
       results.toMap
     }
