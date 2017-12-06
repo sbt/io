@@ -25,6 +25,7 @@ import com.sun.jna.platform.win32.WinNT.GENERIC_READ
 import com.sun.jna.platform.win32.WinNT.FILE_SHARE_READ
 import com.sun.jna.platform.win32.WinNT.FILE_SHARE_WRITE
 import com.sun.jna.platform.win32.WinNT.FILE_WRITE_ATTRIBUTES
+import com.sun.jna.platform.win32.WinNT.FILE_FLAG_BACKUP_SEMANTICS
 import com.sun.jna.platform.win32.WinNT.OPEN_EXISTING
 import com.sun.jna.platform.win32.WinNT.HANDLE
 import com.sun.jna.platform.win32.WinBase.INVALID_HANDLE_VALUE
@@ -221,7 +222,7 @@ private object WinMilli extends MilliNative[FILETIME] {
   import Kernel32.INSTANCE.{ CreateFile, GetLastError, CloseHandle, GetFileTime, SetFileTime }
 
   private def getHandle(lpFileName: String, dwDesiredAccess: Int, dwShareMode: Int): HANDLE = {
-    val hFile = CreateFile(lpFileName, dwDesiredAccess, dwShareMode, null, OPEN_EXISTING, 0, null)
+    val hFile = CreateFile(lpFileName, dwDesiredAccess, dwShareMode, null, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, null)
     if (hFile == INVALID_HANDLE_VALUE) {
       val err = GetLastError()
       if (err == ERROR_FILE_NOT_FOUND)
