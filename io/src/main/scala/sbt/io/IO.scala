@@ -154,8 +154,8 @@ object IO {
         // http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=5086147
         // The specific problem here is that `uri` will have a defined authority component for UNC names like //foo/bar/some/path.jar
         // but the File constructor requires URIs with an undefined authority component.
-        if (part startsWith "/") new File(part)
-        else new File("//" + part)
+        if (!(part startsWith "/") && (part contains ":")) new File("//" + part)
+        else new File(part)
     }
   }
 
@@ -1007,7 +1007,7 @@ object IO {
       f.toPath.toUri
     } else {
       // need to use the three argument URI constructor because the single argument version doesn't encode
-      new URI(null, normalizeName(f.getPath), null)
+      new URI(FileScheme, normalizeName(f.getPath), null)
     }
 
   /**
