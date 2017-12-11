@@ -140,11 +140,15 @@ object IO {
    * Converts the given file URI to a File.
    */
   private[this] def uriToFile(uri: URI): File = {
-    assert(
-      uri.getScheme == FileScheme,
-      "Expected protocol to be '" + FileScheme + "' in URI " + uri
-    )
     val part = uri.getSchemeSpecificPart
+    // scheme might be omitted for relative URI reference.
+    assert(
+      Option(uri.getScheme) match {
+        case None | Some(FileScheme) => true
+        case _                       => false
+      },
+      s"Expected protocol to be '$FileScheme' or empty in URI $uri"
+    )
     Option(uri.getAuthority) match {
       case None if part startsWith "/" => new File(uri)
       case _                           =>
@@ -1007,7 +1011,7 @@ object IO {
       f.toPath.toUri
     } else {
       // need to use the three argument URI constructor because the single argument version doesn't encode
-      new URI(FileScheme, normalizeName(f.getPath), null)
+      new URI(null, normalizeName(f.getPath), null)
     }
 
   /**

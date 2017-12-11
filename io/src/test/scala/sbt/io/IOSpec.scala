@@ -42,8 +42,8 @@ class IOSpec extends FlatSpec with Matchers {
   }
 
   it should "make u0 URI from a relative path" in {
-    val u = IO.toURI(file("src/main/scala"))
-    assert(u.toString == "file:src/main/scala")
+    val u = IO.toURI(file("src") / "main" / "scala")
+    assert(u.toString == "src/main/scala")
   }
 
   it should "make URI that roundtrips" in {
@@ -52,7 +52,7 @@ class IOSpec extends FlatSpec with Matchers {
   }
 
   it should "make u0 URI that roundtrips" in {
-    val u = IO.toURI(file("src/main/scala"))
-    assert(IO.toFile(u) == file("src/main/scala"))
+    val u = IO.toURI(file("src") / "main" / "scala")
+    assert(IO.toFile(u) == (file("src") / "main" / "scala"))
   }
 }
