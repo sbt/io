@@ -119,6 +119,9 @@ object IO {
   def toFile(url: URL): File =
     try { uriToFile(url.toURI) } catch { case _: URISyntaxException => new File(url.getPath) }
 
+  def toFile(uri: URI): File =
+    try { uriToFile(uri) } catch { case _: URISyntaxException => new File(uri.getPath) }
+
   /** Converts the given URL to a File.  If the URL is for an entry in a jar, the File for the jar is returned. */
   def asFile(url: URL): File = urlAsFile(url) getOrElse sys.error("URL is not a file: " + url)
   def urlAsFile(url: URL): Option[File] =
@@ -1000,8 +1003,12 @@ object IO {
 
   /** Converts the given File to a URI.  If the File is relative, the URI is relative, unlike File.toURI*/
   def toURI(f: File): URI =
-    // need to use the three argument URI constructor because the single argument version doesn't encode
-    if (f.isAbsolute) f.toURI else new URI(null, normalizeName(f.getPath), null)
+    if (f.isAbsolute) {
+      f.toPath.toUri
+    } else {
+      // need to use the three argument URI constructor because the single argument version doesn't encode
+      new URI(null, normalizeName(f.getPath), null)
+    }
 
   /**
    * Resolves `f` against `base`, which must be an absolute directory.
