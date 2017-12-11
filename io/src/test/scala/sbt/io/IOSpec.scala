@@ -3,9 +3,10 @@ package sbt.io
 import java.io.File
 import java.nio.file.Files
 import org.scalatest.{ FlatSpec, Matchers }
+import sbt.io.syntax._
 
 class IOSpec extends FlatSpec with Matchers {
-  it should "relativize" in {
+  "IO" should "relativize" in {
     // Given:
     // io-relativize/
     //     meh.file
@@ -33,5 +34,25 @@ class IOSpec extends FlatSpec with Matchers {
     IO.relativize(base, file1) shouldBe Some(".git")
     IO.relativize(base, file2) shouldBe Some(".git")
     IO.relativize(base, file3) shouldBe Some(".git")
+  }
+
+  "toURI" should "make URI" in {
+    val u = IO.toURI(file("/etc/hosts"))
+    assert(u.toString == "file:///etc/hosts")
+  }
+
+  it should "make u0 URI from a relative path" in {
+    val u = IO.toURI(file("src/main/scala"))
+    assert(u.toString == "file:src/main/scala")
+  }
+
+  it should "make URI that roundtrips" in {
+    val u = IO.toURI(file("/etc/hosts"))
+    assert(IO.toFile(u) == file("/etc/hosts"))
+  }
+
+  it should "make u0 URI that roundtrips" in {
+    val u = IO.toURI(file("src/main/scala"))
+    assert(IO.toFile(u) == file("src/main/scala"))
   }
 }
