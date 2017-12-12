@@ -387,9 +387,9 @@ object Milli {
               case LINUX =>
                 "(ext2/ext3, for instance, have a 1 sec resolution)"
               case MAC =>
-                "(HFS+ has a 1 sec resolution, but APFS is much more precise)"
+                "(HFS+ has a 1 sec resolution, but APFS is more precise)"
               case WINDOWS =>
-                "(FAT32, for instance, has a 1-2 sec resolution but NTFS is much more precise)"
+                "(FAT32, for instance, has a 1-2 sec resolution but NTFS is more precise)"
               case _ =>
                 ""
             }) + ". That may affect sbt's ability to detect rapid file changes."
