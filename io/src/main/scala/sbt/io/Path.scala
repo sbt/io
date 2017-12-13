@@ -6,7 +6,7 @@ package sbt.io
 import java.io.File
 import java.net.URL
 import scala.collection.mutable
-import IO.wrapNull
+import IO.{ wrapNull, getModifiedTime }
 import java.nio.file.attribute._
 import java.nio.file.{ Path => NioPath, LinkOption, FileSystem, Files }
 import scala.collection.JavaConverters._
@@ -21,7 +21,7 @@ final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
   def isDirectory: Boolean = asFile.isDirectory
 
   /** The last modified time of the wrapped file.*/
-  def lastModified: Long = asFile.lastModified
+  def lastModified: Long = getModifiedTime(asFile)
 
   /**
    * True if and only if the wrapped file `asFile` exists and the file 'other'
@@ -278,7 +278,7 @@ object Path extends Mapper {
     separated.mkString(sep)
   }
   def newerThan(a: File, b: File): Boolean =
-    a.exists && (!b.exists || a.lastModified > b.lastModified)
+    a.exists && (!b.exists || getModifiedTime(a) > getModifiedTime(b))
 
   /** The separator character of the platform.*/
   val sep: Char = java.io.File.separatorChar
