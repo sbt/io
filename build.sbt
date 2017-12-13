@@ -47,5 +47,9 @@ val io = (project in file("io"))
       // WORKAROUND typesafehub/migration-manager#162
       exclude[FinalMethodProblem]("sbt.io.SimpleFilter.accept"),
       exclude[FinalMethodProblem]("sbt.io.SimpleFileFilter.accept"),
+
+      // MiMa doesn't understand private inner classes?
+      // method this(sbt.io.PollingWatchService,sbt.io.PollingWatchService#PollingThread,java.nio.file.Watchable,java.util.List)Unit in class sbt.io.PollingWatchService#PollingWatchKey does not have a correspondent in current version
+      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingWatchKey.this"),
     ),
   )
