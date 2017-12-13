@@ -20,6 +20,7 @@ lazy val ioRoot = (project in file("."))
         description := "IO module for sbt",
         scmInfo := Some(ScmInfo(url("https://github.com/sbt/io"), "git@github.com:sbt/io.git")),
         scalafmtOnCompile := true,
+        scalafmtOnCompile in Sbt := false,
         scalafmtVersion := "1.2.0",
       )),
     commonSettings,
@@ -37,6 +38,7 @@ val io = (project in file("io"))
       if (scalaVersion.value startsWith "2.13.") Vector()
       else Vector(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test)
     },
+    libraryDependencies ++= Seq(jna, jnaPlatform),
     sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",
     initialCommands in console += "\nimport sbt.io._, syntax._",
     mimaPreviousArtifacts := Set(organization.value %% moduleName.value % "1.0.0"),
@@ -45,5 +47,9 @@ val io = (project in file("io"))
       // WORKAROUND typesafehub/migration-manager#162
       exclude[FinalMethodProblem]("sbt.io.SimpleFilter.accept"),
       exclude[FinalMethodProblem]("sbt.io.SimpleFileFilter.accept"),
+
+      // MiMa doesn't understand private inner classes?
+      // method this(sbt.io.PollingWatchService,sbt.io.PollingWatchService#PollingThread,java.nio.file.Watchable,java.util.List)Unit in class sbt.io.PollingWatchService#PollingWatchKey does not have a correspondent in current version
+      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingWatchKey.this"),
     ),
   )

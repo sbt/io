@@ -14,6 +14,7 @@ import java.util.{ List => JList }
 import sbt.io.syntax._
 import scala.collection.mutable
 import scala.concurrent.duration.{ Duration, FiniteDuration }
+import IO.getModifiedTime
 
 /** A `WatchService` that polls the filesystem every `delay`. */
 class PollingWatchService(delay: FiniteDuration) extends WatchService {
@@ -67,7 +68,7 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
 
   override def register(path: JPath, events: WatchEvent.Kind[JPath]*): WatchKey = {
     ensureNotClosed()
-    val key = new PollingWatchKey(thread, path, new java.util.ArrayList[WatchEvent[_]])
+    val key = new PollingWatchKey(path, new java.util.ArrayList[WatchEvent[_]])
     keys += path -> key
     watched += path -> events
     key
@@ -93,7 +94,7 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
       watched.toSeq.sortBy(_._1)(pathLengthOrdering).foreach {
         case (p, _) =>
           if (!results.contains(p))
-            p.toFile.allPaths.get.foreach(f => results += f.toPath -> f.lastModified)
+            p.toFile.allPaths.get.foreach(f => results += f.toPath -> getModifiedTime(f))
       }
       results.toMap
     }
@@ -158,14 +159,12 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
   }
 
   private class PollingWatchKey(
-      origin: PollingThread,
       override val watchable: Watchable,
       val events: JList[WatchEvent[_]]
   ) extends WatchKey {
     override def cancel(): Unit = ()
     override def isValid(): Boolean = true
-    override def pollEvents(): java.util.List[WatchEvent[_]] = origin.keysWithEvents.synchronized {
-      origin.keysWithEvents -= this
+    override def pollEvents(): java.util.List[WatchEvent[_]] = {
       val evs = new java.util.ArrayList[WatchEvent[_]](events)
       events.clear()
       evs
