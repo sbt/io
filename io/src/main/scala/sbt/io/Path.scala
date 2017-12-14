@@ -6,7 +6,6 @@ package sbt.io
 import java.io.File
 import java.net.URL
 import scala.collection.mutable
-import IO.{ wrapNull, getModifiedTime }
 import java.nio.file.attribute._
 import java.nio.file.{ Path => NioPath, LinkOption, FileSystem, Files }
 import scala.collection.JavaConverters._
@@ -21,7 +20,7 @@ final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
   def isDirectory: Boolean = asFile.isDirectory
 
   /** The last modified time of the wrapped file.*/
-  def lastModified: Long = getModifiedTime(asFile)
+  def lastModified: Long = IO.getModifiedTime(asFile)
 
   /**
    * True if and only if the wrapped file `asFile` exists and the file 'other'
@@ -278,7 +277,7 @@ object Path extends Mapper {
     separated.mkString(sep)
   }
   def newerThan(a: File, b: File): Boolean =
-    a.exists && (!b.exists || getModifiedTime(a) > getModifiedTime(b))
+    a.exists && (!b.exists || IO.getModifiedTime(a) > IO.getModifiedTime(b))
 
   /** The separator character of the platform.*/
   val sep: Char = java.io.File.separatorChar
@@ -426,7 +425,7 @@ private abstract class FilterFiles extends PathFinder with FileFilter {
   final def accept(file: File) = filter.accept(file)
 
   protected def handleFile(file: File, fileSet: mutable.Set[File]): Unit =
-    for (matchedFile <- wrapNull(file.listFiles(this)))
+    for (matchedFile <- IO.wrapNull(file.listFiles(this)))
       fileSet += new File(file, matchedFile.getName)
 }
 
@@ -441,7 +440,7 @@ private class DescendantOrSelfPathFinder(val parent: PathFinder, val filter: Fil
 
   private def handleFileDescendant(file: File, fileSet: mutable.Set[File]): Unit = {
     handleFile(file, fileSet)
-    for (childDirectory <- wrapNull(file listFiles DirectoryFilter))
+    for (childDirectory <- IO.wrapNull(file listFiles DirectoryFilter))
       handleFileDescendant(new File(file, childDirectory.getName), fileSet)
   }
 }
