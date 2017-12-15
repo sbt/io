@@ -162,7 +162,7 @@ final class Source(
    */
   private[sbt] def getUnfilteredPaths(): Seq[Path] = {
     val pathFinder = if (recursive) base.allPaths else base.glob(AllPassFilter)
-    pathFinder.get.map(_.toPath)
+    pathFinder.get().map(_.toPath)
   }
 
   def withRecursive(recursive: Boolean): Source =

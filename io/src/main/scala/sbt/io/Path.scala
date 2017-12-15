@@ -357,7 +357,7 @@ sealed abstract class PathFinder {
    */
   def pair[T](mapper: File => Option[T], errorIfNone: Boolean = true): Seq[(File, T)] = {
     val apply = if (errorIfNone) mapper | fail else mapper
-    for (file <- get; mapped <- apply(file)) yield file -> mapped
+    for (file <- get(); mapped <- apply(file)) yield file -> mapped
   }
 
   /**
@@ -385,16 +385,16 @@ sealed abstract class PathFinder {
    * Only keeps paths for which `f` returns true.
    * It is non-strict, so it is not evaluated until the returned finder is evaluated.
    */
-  final def filter(f: File => Boolean): PathFinder = PathFinder(get filter f)
+  final def filter(f: File => Boolean): PathFinder = PathFinder(get() filter f)
 
   /** Non-strict flatMap: no evaluation occurs until the returned finder is evaluated. */
-  final def flatMap(f: File => PathFinder): PathFinder = PathFinder(get.flatMap(p => f(p).get))
+  final def flatMap(f: File => PathFinder): PathFinder = PathFinder(get().flatMap(p => f(p).get()))
 
   /** Evaluates this finder and converts the results to an `Array` of `URL`s. */
-  final def getURLs: Array[URL] = get.toArray.map(_.toURI.toURL)
+  final def getURLs(): Array[URL] = get().toArray.map(_.toURI.toURL)
 
   /** Evaluates this finder and converts the results to a distinct sequence of absolute path strings. */
-  final def getPaths: Seq[String] = get.map(_.absolutePath)
+  final def getPaths(): Seq[String] = get().map(_.absolutePath)
 
   private[sbt] def addTo(fileSet: mutable.Set[File]): Unit
 
@@ -402,16 +402,16 @@ sealed abstract class PathFinder {
    * Create a PathFinder from this one where each path has a unique name.
    * A single path is arbitrarily selected from the set of paths with the same name.
    */
-  def distinct: PathFinder = PathFinder { get.map(p => (p.asFile.getName, p)).toMap.values }
+  def distinct(): PathFinder = PathFinder { get().map(p => (p.asFile.getName, p)).toMap.values }
 
   /**
    * Constructs a string by evaluating this finder, converting the resulting Paths to absolute path strings,
    * and joining them with the platform path separator.
    */
-  final def absString: String = Path.makeString(get)
+  final def absString(): String = Path.makeString(get())
 
   /** Constructs a debugging string for this finder by evaluating it and separating paths by newlines. */
-  override def toString = get.mkString("\n   ", "\n   ", "")
+  override def toString() = get().mkString("\n   ", "\n   ", "")
 }
 
 private class SingleFile(asFile: File) extends PathFinder {
@@ -432,7 +432,7 @@ private abstract class FilterFiles extends PathFinder with FileFilter {
 private class DescendantOrSelfPathFinder(val parent: PathFinder, val filter: FileFilter)
     extends FilterFiles {
   private[sbt] def addTo(fileSet: mutable.Set[File]) = {
-    for (file <- parent.get) {
+    for (file <- parent.get()) {
       if (accept(file)) fileSet += file
       handleFileDescendant(file, fileSet)
     }
@@ -447,7 +447,7 @@ private class DescendantOrSelfPathFinder(val parent: PathFinder, val filter: Fil
 
 private class ChildPathFinder(val parent: PathFinder, val filter: FileFilter) extends FilterFiles {
   private[sbt] def addTo(fileSet: mutable.Set[File]) =
-    for (file <- parent.get)
+    for (file <- parent.get())
       handleFile(file, fileSet)
 }
 
