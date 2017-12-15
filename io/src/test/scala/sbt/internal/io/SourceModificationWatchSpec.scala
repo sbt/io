@@ -1,5 +1,6 @@
 package sbt.internal.io
 
+import java.io.{ File, IOException }
 import java.nio.file.{ ClosedWatchServiceException, Paths }
 
 import org.scalatest.{ Assertion, FlatSpec, Matchers }
@@ -15,19 +16,25 @@ abstract class SourceModificationWatchSpec(
 ) extends FlatSpec
     with Matchers {
 
-  it should "detect modified files" in IO.withTemporaryDirectory { dir =>
+  it should "detect modified files" in withTestDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val file = parentDir / "Foo.scala"
 
     IO.write(file, "foo")
 
-    // watchTest(parentDir) {
-    //   IO.write(file, "bar")
-    // }
-    pending // until fixed https://github.com/sbt/io/issues/82
+    watchTest(parentDir) {
+      if (!supportsSubSecondModifiedTime(dir)) {
+        // Some filesystems, such as HFS+, only have 1 second time stamp granularity
+        // https://developer.apple.com/library/content/documentation/FileManagement/Conceptual/APFS_Guide/VolumeFormatComparison/VolumeFormatComparison.html
+        // therefore in order to notice a last modified time change you need to have elapsed into
+        // the next second. We'll do this by sleeping 1 second.
+        Thread.sleep(1000L)
+      }
+      IO.write(file, "bar")
+    }
   }
 
-  it should "watch a directory for file creation" in IO.withTemporaryDirectory { dir =>
+  it should "watch a directory for file creation" in withTestDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val created = parentDir / "NewSource.scala"
 
@@ -38,43 +45,7 @@ abstract class SourceModificationWatchSpec(
     }
   }
 
-  it should "ignore creation of directories with no tracked sources" in IO.withTemporaryDirectory {
-    dir =>
-      val parentDir = dir / "src" / "watchme"
-      val created = parentDir / "ignoreme"
-
-      IO.createDirectory(parentDir)
-
-      watchTest(parentDir, expectedTrigger = false) {
-        IO.createDirectory(created)
-      }
-  }
-
-  it should "ignore creation of files that do not match inclusion filter" in
-    IO.withTemporaryDirectory { dir =>
-      val parentDir = dir / "src" / "watchme"
-      val created = parentDir / "ignoreme"
-
-      IO.createDirectory(parentDir)
-
-      watchTest(parentDir, expectedTrigger = false) {
-        IO.touch(created)
-      }
-    }
-
-  it should "ignore creation of files that are explicitly ignored" in IO.withTemporaryDirectory {
-    dir =>
-      val parentDir = dir / "src" / "watchme"
-      val created = parentDir / ".hidden.scala"
-
-      IO.createDirectory(parentDir)
-
-      watchTest(parentDir, expectedTrigger = false) {
-        IO.touch(created)
-      }
-  }
-
-  it should "ignore creation of an empty directory" in IO.withTemporaryDirectory { dir =>
+  it should "ignore creation of directories with no tracked sources" in withTestDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val created = parentDir / "ignoreme"
 
@@ -85,7 +56,41 @@ abstract class SourceModificationWatchSpec(
     }
   }
 
-  it should "detect files created in a subdirectory" in IO.withTemporaryDirectory { dir =>
+  it should "ignore creation of files that do not match inclusion filter" in
+    withTestDirectory { dir =>
+      val parentDir = dir / "src" / "watchme"
+      val created = parentDir / "ignoreme"
+
+      IO.createDirectory(parentDir)
+
+      watchTest(parentDir, expectedTrigger = false) {
+        IO.touch(created)
+      }
+    }
+
+  it should "ignore creation of files that are explicitly ignored" in withTestDirectory { dir =>
+    val parentDir = dir / "src" / "watchme"
+    val created = parentDir / ".hidden.scala"
+
+    IO.createDirectory(parentDir)
+
+    watchTest(parentDir, expectedTrigger = false) {
+      IO.touch(created)
+    }
+  }
+
+  it should "ignore creation of an empty directory" in withTestDirectory { dir =>
+    val parentDir = dir / "src" / "watchme"
+    val created = parentDir / "ignoreme"
+
+    IO.createDirectory(parentDir)
+
+    watchTest(parentDir, expectedTrigger = false) {
+      IO.createDirectory(created)
+    }
+  }
+
+  it should "detect files created in a subdirectory" in withTestDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val subDir = parentDir / "sub"
     val created = subDir / "NewSource.scala"
@@ -98,7 +103,7 @@ abstract class SourceModificationWatchSpec(
   }
 
   it should "ignore creation of files not included in inclusion filter in subdirectories" in
-    IO.withTemporaryDirectory { dir =>
+    withTestDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "sub"
       val created = subDir / "ignoreme"
@@ -111,7 +116,7 @@ abstract class SourceModificationWatchSpec(
     }
 
   it should "ignore creation of files explicitly ignored in subdirectories" in
-    IO.withTemporaryDirectory { dir =>
+    withTestDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "sub"
       val created = subDir / ".hidden.scala"
@@ -123,20 +128,19 @@ abstract class SourceModificationWatchSpec(
       }
     }
 
-  it should "ignore creation of empty directories in a subdirectory" in IO.withTemporaryDirectory {
-    dir =>
-      val parentDir = dir / "src" / "watchme"
-      val subDir = parentDir / "sub"
-      val created = subDir / "ignoreme"
+  it should "ignore creation of empty directories in a subdirectory" in withTestDirectory { dir =>
+    val parentDir = dir / "src" / "watchme"
+    val subDir = parentDir / "sub"
+    val created = subDir / "ignoreme"
 
-      IO.createDirectory(subDir)
+    IO.createDirectory(subDir)
 
-      watchTest(parentDir, expectedTrigger = false) {
-        IO.createDirectory(created)
-      }
+    watchTest(parentDir, expectedTrigger = false) {
+      IO.createDirectory(created)
+    }
   }
 
-  it should "detect deleted files" in IO.withTemporaryDirectory { dir =>
+  it should "detect deleted files" in withTestDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val file = parentDir / "WillBeDeleted.scala"
     IO.write(file, "foo")
@@ -146,8 +150,8 @@ abstract class SourceModificationWatchSpec(
     }
   }
 
-  it should "ignore deletion of files not included in inclusion filter" in IO
-    .withTemporaryDirectory { dir =>
+  it should "ignore deletion of files not included in inclusion filter" in
+    withTestDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val file = parentDir / "ignoreme"
       IO.write(file, "foo")
@@ -157,7 +161,7 @@ abstract class SourceModificationWatchSpec(
       }
     }
 
-  it should "ignore deletion of files explicitly ignored" in IO.withTemporaryDirectory { dir =>
+  it should "ignore deletion of files explicitly ignored" in withTestDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val file = parentDir / ".hidden.scala"
     IO.write(file, "foo")
@@ -167,7 +171,7 @@ abstract class SourceModificationWatchSpec(
     }
   }
 
-  it should "ignore deletion of empty directories" in IO.withTemporaryDirectory { dir =>
+  it should "ignore deletion of empty directories" in withTestDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val subDir = parentDir / "ignoreme"
     IO.createDirectory(subDir)
@@ -177,7 +181,7 @@ abstract class SourceModificationWatchSpec(
     }
   }
 
-  it should "detect deleted files in subdirectories" in IO.withTemporaryDirectory { dir =>
+  it should "detect deleted files in subdirectories" in withTestDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val subDir = parentDir / "subdir"
     val willBeDeleted = subDir / "WillBeDeleted.scala"
@@ -189,7 +193,7 @@ abstract class SourceModificationWatchSpec(
   }
 
   it should "ignore deletion of files not included in inclusion filter in subdirectories" in
-    IO.withTemporaryDirectory { dir =>
+    withTestDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "subdir"
       val willBeDeleted = subDir / "ignoreme"
@@ -201,7 +205,7 @@ abstract class SourceModificationWatchSpec(
     }
 
   it should "ignore deletion of files explicitly ignored in subdirectories" in
-    IO.withTemporaryDirectory { dir =>
+    withTestDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "subdir"
       val willBeDeleted = subDir / ".hidden.scala"
@@ -212,65 +216,62 @@ abstract class SourceModificationWatchSpec(
       }
     }
 
-  it should "ignore deletion of empty directories in subdirectories" in IO.withTemporaryDirectory {
-    dir =>
-      val parentDir = dir / "src" / "watchme"
-      val subDir = parentDir / "subdir"
-      val willBeDeleted = subDir / "ignoreme"
-      IO.createDirectory(willBeDeleted)
+  it should "ignore deletion of empty directories in subdirectories" in withTestDirectory { dir =>
+    val parentDir = dir / "src" / "watchme"
+    val subDir = parentDir / "subdir"
+    val willBeDeleted = subDir / "ignoreme"
+    IO.createDirectory(willBeDeleted)
 
-      watchTest(parentDir, expectedTrigger = false) {
-        IO.delete(willBeDeleted)
+    watchTest(parentDir, expectedTrigger = false) {
+      IO.delete(willBeDeleted)
+    }
+  }
+
+  it should "ignore creation and then deletion of empty directories" in withTestDirectory { dir =>
+    val parentDir = dir / "src" / "watchme"
+    val subDir = parentDir / "subdir"
+    val service = getService
+    IO.createDirectory(parentDir)
+
+    try {
+      val initState = emptyState(service, parentDir)
+      val (triggered0, newState0) = watchTest(initState) {
+        IO.createDirectory(subDir)
       }
+      triggered0 shouldBe false
+      newState0.count shouldBe 1
+
+      val (triggered1, newState1) = watchTest(newState0) {
+        IO.delete(subDir)
+      }
+      triggered1 shouldBe false
+      newState1.count shouldBe 1
+    } finally service.close()
   }
 
-  it should "ignore creation and then deletion of empty directories" in IO.withTemporaryDirectory {
-    dir =>
-      val parentDir = dir / "src" / "watchme"
-      val subDir = parentDir / "subdir"
-      val service = getService
-      IO.createDirectory(parentDir)
+  it should "detect deletion of a directory containing watched files" in withTestDirectory { dir =>
+    val parentDir = dir / "src" / "watchme"
+    val subDir = parentDir / "subdir"
+    val src = subDir / "src.scala"
+    val service = getService
 
-      try {
-        val initState = emptyState(service, parentDir)
-        val (triggered0, newState0) = watchTest(initState) {
-          IO.createDirectory(subDir)
-        }
-        triggered0 shouldBe false
-        newState0.count shouldBe 1
+    IO.createDirectory(parentDir)
 
-        val (triggered1, newState1) = watchTest(newState0) {
-          IO.delete(subDir)
-        }
-        triggered1 shouldBe false
-        newState1.count shouldBe 1
-      } finally service.close()
-  }
+    try {
+      val initState = emptyState(service, parentDir)
+      val (triggered0, newState0) = watchTest(initState) {
+        IO.createDirectory(subDir)
+        IO.touch(src)
+      }
+      triggered0 shouldBe true
+      newState0.count shouldBe 2
 
-  it should "detect deletion of a directory containing watched files" in IO.withTemporaryDirectory {
-    dir =>
-      val parentDir = dir / "src" / "watchme"
-      val subDir = parentDir / "subdir"
-      val src = subDir / "src.scala"
-      val service = getService
-
-      IO.createDirectory(parentDir)
-
-      try {
-        val initState = emptyState(service, parentDir)
-        val (triggered0, newState0) = watchTest(initState) {
-          IO.createDirectory(subDir)
-          IO.touch(src)
-        }
-        triggered0 shouldBe true
-        newState0.count shouldBe 2
-
-        val (triggered1, newState1) = watchTest(newState0) {
-          IO.delete(subDir)
-        }
-        triggered1 shouldBe true
-        newState1.count shouldBe 3
-      } finally service.close()
+      val (triggered1, newState1) = watchTest(newState0) {
+        IO.delete(subDir)
+      }
+      triggered1 shouldBe true
+      newState1.count shouldBe 3
+    } finally service.close()
   }
 
   "WatchService.poll" should "throw a `ClosedWatchServiceException` if used after `close`" in {
@@ -317,6 +318,27 @@ abstract class SourceModificationWatchSpec(
   private def emptyState(service: WatchService, base: File): WatchState = {
     val sources = Seq(Source(base, "*.scala", new SimpleFilter(_.startsWith("."))))
     WatchState.empty(service, sources).withCount(1)
+  }
+
+  private def supportsSubSecondModifiedTime(dir: File) = {
+    val file = File.createTempFile("sbt", null, dir)
+    try {
+      val oldTime = IO getModifiedTime file
+      IO.setModifiedTime(file, oldTime - 27)
+      val newTime = IO getModifiedTime file
+      newTime + 27 == oldTime
+    } finally {
+      if (!file.delete())
+        throw new IOException("Failed to delete temp file: " + file.getAbsolutePath)
+    }
+  }
+
+  // We don't want to use the temporary directory as it's common that that is a tmpfs virtual
+  // ram-based filesystem, and therefore doesn't really check the filesystem.
+  private def withTestDirectory[T](action: File => T): T = {
+    val dir = IO.createUniqueDirectory(BuildInfo.target)
+    try action(dir)
+    finally IO.delete(dir)
   }
 
 }
