@@ -374,7 +374,7 @@ sealed abstract class PathFinder {
    * The files returned by this method will reflect the underlying filesystem at the time of calling.
    * If the filesystem changes, two calls to this method might be different.
    */
-  final def get: Seq[File] = {
+  final def get(): Seq[File] = {
     import scala.collection.JavaConverters._
     val pathSet: mutable.Set[File] = (new java.util.LinkedHashSet[File]).asScala
     addTo(pathSet)
