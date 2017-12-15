@@ -4,8 +4,7 @@
 package sbt.internal.io
 
 import java.io.File
-import sbt.io.IO._
-import Resources.error
+import sbt.io.IO
 
 private[sbt] object Resources {
   def apply(basePath: String) = {
@@ -14,7 +13,7 @@ private[sbt] object Resources {
     if (resource == null)
       error("Resource base directory '" + basePath + "' not on classpath.")
     else {
-      val file = toFile(resource)
+      val file = IO.toFile(resource)
       if (file.exists)
         new Resources(file)
       else
@@ -48,9 +47,9 @@ private[sbt] final class Resources(val baseDirectory: File) {
     require(readOnly.isDirectory)
     def readWrite(readOnly: File)(temporary: File): T = {
       val readWriteDirectory = new File(temporary, readOnly.getName)
-      copyDirectory(readOnly, readWriteDirectory)
+      IO.copyDirectory(readOnly, readWriteDirectory)
       withDirectory(readWriteDirectory)
     }
-    withTemporaryDirectory(readWrite(readOnly))
+    IO.withTemporaryDirectory(readWrite(readOnly))
   }
 }
