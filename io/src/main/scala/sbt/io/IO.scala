@@ -15,7 +15,7 @@ import java.io.{
   OutputStream,
   PrintWriter
 }
-import java.io.{ ObjectInputStream, ObjectStreamClass }
+import java.io.{ ObjectInputStream, ObjectStreamClass, FileNotFoundException }
 import java.net.{ URI, URISyntaxException, URL }
 import java.nio.charset.Charset
 import java.nio.file.FileSystems
@@ -306,7 +306,7 @@ object IO {
             }
           }
           if (preserveLastModified)
-            setModifiedTime(target, entry.getTime)
+            setLastModified(target, entry.getTime)
         } else {
           //log.debug("Ignoring zip entry '" + name + "'")
         }
@@ -543,7 +543,7 @@ object IO {
     def makeFileEntry(file: File, name: String) = {
       //			log.debug("\tAdding " + file + " as " + name + " ...")
       val e = createEntry(name)
-      e setTime getModifiedTime(file)
+      e setTime lastModified(file)
       e
     }
     def addFileEntry(file: File, name: String) = {
@@ -643,7 +643,7 @@ object IO {
       preserveLastModified: Boolean,
       preserveExecutable: Boolean
   )(from: File, to: File): File = {
-    if (overwrite || !to.exists || getModifiedTime(from) > getModifiedTime(to)) {
+    if (overwrite || !to.exists || lastModified(from) > lastModified(to)) {
       if (from.isDirectory)
         createDirectory(to)
       else {
@@ -728,7 +728,7 @@ object IO {
       }
     }
     if (preserveLastModified) {
-      copyModifiedTime(sourceFile, targetFile)
+      copyLastModified(sourceFile, targetFile)
       ()
     }
     if (preserveExecutable) {
