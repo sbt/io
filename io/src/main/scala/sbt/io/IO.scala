@@ -1184,11 +1184,12 @@ object IO {
    *
    * @see getModifiedTime
    */
-  def lastModified(file: File): Long = try {
-    getModifiedTime(file)
-  } catch {
-    case _: FileNotFoundException => 0L
-  }
+  def lastModified(file: File): Long =
+    try {
+      getModifiedTime(file)
+    } catch {
+      case _: FileNotFoundException => 0L
+    }
 
   /**
    * Sets the modification time of the file argument, in milliseconds
@@ -1202,12 +1203,13 @@ object IO {
    *
    * @see setModifiedTime
    */
-  def setLastModified(file: File, mtime: Long): Boolean = try {
-    Milli.setModifiedTime(file, mtime)
-    true
-  } catch {
-    case _: FileNotFoundException => false
-  }
+  def setLastModified(file: File, mtime: Long): Boolean =
+    try {
+      Milli.setModifiedTime(file, mtime)
+      true
+    } catch {
+      case _: FileNotFoundException => false
+    }
 
   /**
    * Transfers the last modified time of `sourceFile` to `targetFile`.
@@ -1220,7 +1222,7 @@ object IO {
    * The method returns true if the target file modification time was
    * successfully changed, false otherwise.
    *
-   * After sbt/io v1.1.1, a new method copyModifiedTime() has been added
+   * Since sbt/io v1.1.2, a new method copyModifiedTime() has been added
    * to sbt.io.IO. That method will throw a FileNotFoundException
    * if any of the two files are missing, or an IOException in case an
    * IO exception occurs, so it may be a preferable choice for new code.
