@@ -36,6 +36,12 @@ class IOSpec extends FlatSpec with Matchers {
     IO.relativize(base, file3) shouldBe Some(".git")
   }
 
+  it should "relativize relative paths" in {
+    val base = new File(".").getCanonicalFile
+    val file = new File("build.sbt")
+    IO.relativize(base, file) shouldBe Some("build.sbt")
+  }
+
   "toURI" should "make URI" in {
     val u = IO.toURI(file("/etc/hosts"))
     assert(u.toString == "file:///etc/hosts")
