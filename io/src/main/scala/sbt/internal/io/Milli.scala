@@ -237,22 +237,17 @@ private trait Mac extends Library with Posix[Long] {
                   options: Int): Int
 }
 private object MacMilli extends PosixMilliLong[Mac] {
-  private final val ATTR_BIT_MAP_COUNT: Short = 5
-  private final val ATTR_CMN_MODTIME: Int = 0x00000400
+  private val attr = new Attrlist
+  attr.bitmapcount = 5 // ATTR_BIT_MAP_COUNT
+  attr.commonattr = 0x00000400 // ATTR_CMN_MODTIME
 
   protected def getModifiedTimeNative(filePath: String) = {
-    val attr = new Attrlist
-    attr.bitmapcount = ATTR_BIT_MAP_COUNT
-    attr.commonattr = ATTR_CMN_MODTIME
     val buf = new TimeBuf
     checkedIO(filePath) { libc.getattrlist(filePath, attr, buf, 20 /* buf size */, 0) }
     (buf.tv_sec, buf.tv_nsec)
   }
 
   protected def setModifiedTimeNative(filePath: String, mtimeNative: (Long, Long)): Unit = {
-    val attr = new Attrlist
-    attr.bitmapcount = ATTR_BIT_MAP_COUNT
-    attr.commonattr = ATTR_CMN_MODTIME
     val buf = new Timespec
     val (sec, nsec) = mtimeNative
     buf.tv_sec = sec
