@@ -93,7 +93,7 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
       watched.toSeq.sortBy(_._1)(pathLengthOrdering).foreach {
         case (p, _) =>
           if (!results.contains(p))
-            p.toFile.allPaths.get.foreach(f => results += f.toPath -> IO.getModifiedTime(f))
+            p.toFile.allPaths.get().foreach(f => results += f.toPath -> IO.getModifiedTime(f))
       }
       results.toMap
     }

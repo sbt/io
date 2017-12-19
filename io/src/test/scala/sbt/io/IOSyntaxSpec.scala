@@ -16,7 +16,7 @@ class IOSyntaxSpec extends FlatSpec with Matchers {
     IO.withTemporaryDirectory { dir =>
       IO.write(new JFile(dir, "foo.txt"), "foo")
       IO.write(new JFile(dir, "bar.json"), "{}")
-      (dir glob "*.txt").get shouldBe Seq(new JFile(dir, "foo.txt"))
+      (dir glob "*.txt").get() shouldBe Seq(new JFile(dir, "foo.txt"))
     }
   }
 }
