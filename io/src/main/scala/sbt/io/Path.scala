@@ -9,7 +9,6 @@ import scala.collection.mutable
 import java.nio.file.attribute._
 import java.nio.file.{ Path => NioPath, LinkOption, FileSystem, Files }
 import scala.collection.JavaConverters._
-import sbt.io.IO
 
 final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
   def /(component: String): File = if (component == ".") asFile else new File(asFile, component)

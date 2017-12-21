@@ -1139,7 +1139,7 @@ object IO {
    * @see setModifiedTime
    * @see copyModifiedTime
    */
-  @deprecated
+  @deprecated("This method might be removed in the future, also see getModifiedOrZero()", "1.1.3")
   def getModifiedTime(file: File): Long = Milli.getModifiedTime(file)
 
   /**
@@ -1165,7 +1165,8 @@ object IO {
    * @see getModifiedTime
    * @see copyModifiedTime
    */
-  @deprecated
+  @deprecated("This method might be removed in the future, also see setModifiedTimeOrFalse()",
+              "1.1.3")
   def setModifiedTime(file: File, mtime: Long): Unit = Milli.setModifiedTime(file, mtime)
 
   /**
@@ -1190,7 +1191,7 @@ object IO {
    * @see getModifiedTime
    * @see setModifiedTime
    */
-  @deprecated
+  @deprecated("This method might be removed in the future, also see copyLastModified()", "1.1.3")
   def copyModifiedTime(fromFile: File, toFile: File): Unit =
     Milli.copyModifiedTime(fromFile, toFile)
 

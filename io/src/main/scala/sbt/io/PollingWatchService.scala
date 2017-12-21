@@ -14,7 +14,6 @@ import java.util.{ List => JList }
 import sbt.io.syntax._
 import scala.collection.mutable
 import scala.concurrent.duration.{ Duration, FiniteDuration }
-import sbt.io.IO
 
 /** A `WatchService` that polls the filesystem every `delay`. */
 class PollingWatchService(delay: FiniteDuration) extends WatchService {
