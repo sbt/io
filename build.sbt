@@ -19,9 +19,7 @@ lazy val ioRoot = (project in file("."))
         homepage := Some(url("https://github.com/sbt/io")),
         description := "IO module for sbt",
         scmInfo := Some(ScmInfo(url("https://github.com/sbt/io"), "git@github.com:sbt/io.git")),
-        scalafmtOnCompile := true,
         scalafmtOnCompile in Sbt := false,
-        scalafmtVersion := "1.2.0",
       )),
     commonSettings,
     name := "IO Root",
@@ -41,7 +39,10 @@ val io = (project in file("io"))
     libraryDependencies ++= Seq(jna, jnaPlatform),
     sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",
     initialCommands in console += "\nimport sbt.io._, syntax._",
-    mimaPreviousArtifacts := Set(organization.value %% moduleName.value % "1.0.0"),
+    mimaPreviousArtifacts := Set(
+      "1.0.0", "1.0.1", "1.0.2",
+      "1.1.0", "1.1.1", "1.1.2",
+    ) map (version => organization.value %% moduleName.value % version),
     mimaBinaryIssueFilters ++= Seq(
       // MiMa doesn't treat effectively final members as final
       // WORKAROUND typesafehub/migration-manager#162
