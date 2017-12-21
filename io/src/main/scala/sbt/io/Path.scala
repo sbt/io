@@ -21,7 +21,7 @@ final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
   def isDirectory: Boolean = asFile.isDirectory
 
   /** The last modified time of the wrapped file.*/
-  def lastModified: Long = IO.lastModified(asFile)
+  def lastModified: Long = IO.getModifiedTimeOrZero(asFile)
 
   /**
    * True if and only if the wrapped file `asFile` exists and the file 'other'
@@ -278,7 +278,7 @@ object Path extends Mapper {
     separated.mkString(sep)
   }
   def newerThan(a: File, b: File): Boolean =
-    a.exists && (!b.exists || IO.lastModified(a) > IO.lastModified(b))
+    a.exists && (!b.exists || IO.getModifiedTimeOrZero(a) > IO.getModifiedTimeOrZero(b))
 
   /** The separator character of the platform.*/
   val sep: Char = java.io.File.separatorChar
