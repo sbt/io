@@ -21,10 +21,9 @@ abstract class SourceModificationWatchSpec(
 
     IO.write(file, "foo")
 
-    // watchTest(parentDir) {
-    //   IO.write(file, "bar")
-    // }
-    pending // until fixed https://github.com/sbt/io/issues/82
+    watchTest(parentDir) {
+      IO.write(file, "bar")
+    }
   }
 
   it should "watch a directory for file creation" in IO.withTemporaryDirectory { dir =>

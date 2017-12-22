@@ -15,7 +15,7 @@ import java.io.{
   OutputStream,
   PrintWriter
 }
-import java.io.{ ObjectInputStream, ObjectStreamClass }
+import java.io.{ ObjectInputStream, ObjectStreamClass, FileNotFoundException }
 import java.net.{ URI, URISyntaxException, URL }
 import java.nio.charset.Charset
 import java.nio.file.FileSystems
@@ -306,7 +306,7 @@ object IO {
             }
           }
           if (preserveLastModified)
-            setModifiedTime(target, entry.getTime)
+            setModifiedTimeOrFalse(target, entry.getTime)
         } else {
           //log.debug("Ignoring zip entry '" + name + "'")
         }
@@ -543,7 +543,7 @@ object IO {
     def makeFileEntry(file: File, name: String) = {
       //			log.debug("\tAdding " + file + " as " + name + " ...")
       val e = createEntry(name)
-      e setTime getModifiedTime(file)
+      e setTime getModifiedTimeOrZero(file)
       e
     }
     def addFileEntry(file: File, name: String) = {
@@ -643,7 +643,7 @@ object IO {
       preserveLastModified: Boolean,
       preserveExecutable: Boolean
   )(from: File, to: File): File = {
-    if (overwrite || !to.exists || getModifiedTime(from) > getModifiedTime(to)) {
+    if (overwrite || !to.exists || getModifiedTimeOrZero(from) > getModifiedTimeOrZero(to)) {
       if (from.isDirectory)
         createDirectory(to)
       else {
@@ -728,40 +728,13 @@ object IO {
       }
     }
     if (preserveLastModified) {
-      copyModifiedTime(sourceFile, targetFile)
+      copyLastModified(sourceFile, targetFile)
       ()
     }
     if (preserveExecutable) {
       copyExecutable(sourceFile, targetFile)
       ()
     }
-  }
-
-  /**
-   * Transfers the last modified time of `sourceFile` to `targetFile`.
-   *
-   * Note: this method has an underspecified, and generally inconsistent
-   * behavior. In particular, if the source file is missing, it will
-   * silently set the target modification time to 1st January 1970,
-   * returning success. Also, because it uses lastModified(), it may
-   * trim away the millisecond part of the timestamp without notice.
-   *
-   * After sbt/io v1.0.2 (for the 1.0.x series) and v1.1.1 (for
-   * the 1.1.x series) a new method copyModifiedTime() has been added
-   * to sbt.io.IO. That method will correctly throw a FileNotFoundException
-   * if any of the two files are missing, or an IOException in case an
-   * IO exception occurs.
-   *
-   * The current behavior of copyLastModified() is retained for compatibility,
-   * but client code should be migrated to copyModifiedTime(), instead.
-   * The copyLastModified() method may be removed in future versions of sbt.io.IO.
-   */
-  @deprecated("Use copyModifiedTime() instead.", "1.0.3")
-  def copyLastModified(sourceFile: File, targetFile: File): Boolean = {
-    val last = sourceFile.lastModified
-    // lastModified can return a negative number, but setLastModified doesn't accept it
-    // see Java bug #6791812
-    targetFile.setLastModified(math.max(last, 0L))
   }
 
   /** Transfers the executable property of `sourceFile` to `targetFile`. */
@@ -1126,7 +1099,7 @@ object IO {
 
   /**
    * Return the last modification timestamp of the specified file,
-   * in milliseconds from the Unix epoch (January 1, 1970 UTC).
+   * in milliseconds since the Unix epoch (January 1, 1970 UTC).
    * This method will use whenever possible native code in order to
    * return a timestamp with a 1-millisecond precision.
    *
@@ -1157,9 +1130,16 @@ object IO {
    * and Java's get/setLastModifiedTime() will be used instead. This
    * setting applies to setModifiedTime() and copyModifiedTime() as well.
    *
+   * This method was added in sbt/io v1.1.2, but it may be
+   * replaced in the future by a similar method that returns
+   * a Try, rather than throwing an exception.
+   * It is therefore marked as deprecated, since we cannot
+   * guarantee that it will remain available in future versions.
+   *
    * @see setModifiedTime
    * @see copyModifiedTime
    */
+  @deprecated("This method might be removed in the future, also see getModifiedOrZero()", "1.1.3")
   def getModifiedTime(file: File): Long = Milli.getModifiedTime(file)
 
   /**
@@ -1174,9 +1154,19 @@ object IO {
    * contrast, Java's traditional setLastModified() will return a
    * boolean false value if an error occurs.
    *
+   * This method may not work correctly if mtime is negative.
+   *
+   * This method was added in sbt/io v1.1.2, but it may be
+   * replaced in the future by a similar method that returns
+   * a Try, rather than throwing an exception.
+   * It is therefore marked as deprecated, since we cannot
+   * guarantee that it will remain available in future versions.
+   *
    * @see getModifiedTime
    * @see copyModifiedTime
    */
+  @deprecated("This method might be removed in the future, also see setModifiedTimeOrFalse()",
+              "1.1.3")
   def setModifiedTime(file: File, mtime: Long): Unit = Milli.setModifiedTime(file, mtime)
 
   /**
@@ -1192,9 +1182,82 @@ object IO {
    * If the timestamp cannot be copied, this method will throw
    * a FileNotFoundException or an IOException, as appropriate.
    *
+   * This method was added in sbt/io v1.1.2, but it may be
+   * replaced in the future by a similar method that returns
+   * a Try, rather than throwing an exception.
+   * It is therefore marked as deprecated, since we cannot
+   * guarantee that it will remain available in future versions.
+   *
    * @see getModifiedTime
    * @see setModifiedTime
    */
+  @deprecated("This method might be removed in the future, also see copyLastModified()", "1.1.3")
   def copyModifiedTime(fromFile: File, toFile: File): Unit =
     Milli.copyModifiedTime(fromFile, toFile)
+
+  /**
+   * Return the last modification timestamp of the specified file,
+   * in milliseconds since the Unix epoch (January 1, 1970 UTC).
+   *
+   * If the specified file does not exist, this method will return 0L.
+   *
+   * The deprecated method getModifiedTime() has similar semantics,
+   * but will throw an exception if the file does not exist.
+   * Please refer to its documentation for additional details.
+   *
+   * @see getModifiedTime
+   */
+  def getModifiedTimeOrZero(file: File): Long =
+    try {
+      getModifiedTime(file)
+    } catch {
+      case _: FileNotFoundException => 0L
+    }
+
+  /**
+   * Sets the modification time of the file argument, in milliseconds
+   * since the Unix epoch (January 1, 1970 UTC).
+   *
+   * If the specified file does not exist, this method will return false.
+   * It will return true if the file modification time was successfully changed.
+   *
+   * The deprecated method setModifiedTime() has similar semantics,
+   * but will throw an exception if the file does not exist.
+   * Please refer to its documentation for additional details.
+   *
+   * This method may not work correctly if mtime is negative.
+   *
+   * @see setModifiedTime
+   */
+  def setModifiedTimeOrFalse(file: File, mtime: Long): Boolean =
+    try {
+      Milli.setModifiedTime(file, mtime)
+      true
+    } catch {
+      case _: FileNotFoundException => false
+    }
+
+  /**
+   * Transfers the last modified time of `sourceFile` to `targetFile`.
+   *
+   * Note: this method has a special semantics if files are missing.
+   * In particular, if the source file is missing, it will silently
+   * set the target modification time to 1st January 1970, which
+   * corresponds to the Unix epoch.
+   *
+   * The method returns true if the target file modification time was
+   * successfully changed, false otherwise.
+   *
+   * The deprecated related method copyModifiedTime() has a somewhat different
+   * semantics, please refer to its documentation for additional details.
+   *
+   * @see copyModifiedTime
+   */
+  def copyLastModified(sourceFile: File, targetFile: File): Boolean = {
+    val last = getModifiedTimeOrZero(sourceFile)
+    // getModifiedTimeOrZero can return a negative number, but setLastModified
+    // (which may be used by setModifiedTimeOrFalse) doesn't accept it,
+    // see Java bug #6791812
+    setModifiedTimeOrFalse(targetFile, math.max(last, 0L))
+  }
 }
