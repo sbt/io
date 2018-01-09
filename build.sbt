@@ -30,7 +30,7 @@ lazy val ioRoot = (project in file("."))
 
 // Path, IO (formerly FileUtilities), NameFilter and other I/O utility classes
 val io = (project in file("io"))
-  .enablePlugins(ContrabandPlugin, BuildInfoPlugin)
+  .enablePlugins(ContrabandPlugin)
   .settings(
     commonSettings,
     name := "IO",
@@ -52,19 +52,7 @@ val io = (project in file("io"))
       // method this(sbt.io.PollingWatchService,sbt.io.PollingWatchService#PollingThread,java.nio.file.Watchable,java.util.List)Unit in class sbt.io.PollingWatchService#PollingWatchKey does not have a correspondent in current version
       exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingWatchKey.this"),
     ),
-    buildInfoRenderer in Compile := {
-      // This disables build info rendering in Compile scope
-      import sbtbuildinfo._
-      new BuildInfoRenderer {
-        def fileType = BuildInfoType.Source
-        def extension = "nil"
-        def renderKeys(infoKeysNameAndValues: Seq[BuildInfoResult]) = Nil
-        def footer = Nil
-        def header = Nil
-        override def isSource = false
-        override def isResource = false
-      }
-    },
+    BuildInfoPlugin.buildInfoDefaultSettings, // avoids BuildInfo generated in Compile scope
     addBuildInfoToConfig(Test),
     buildInfoKeys in Test := Seq[BuildInfoKey](target),
     buildInfoPackage in Test := "sbt.internal.io",
