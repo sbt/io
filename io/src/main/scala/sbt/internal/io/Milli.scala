@@ -12,7 +12,7 @@ import java.nio.file.{ Paths => JPaths }
 import java.nio.file.attribute.FileTime
 
 import scala.reflect.{ ClassTag, classTag }
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.mapAsJavaMapConverter
 
 import com.sun.jna.NativeMapped
 import com.sun.jna.Library
@@ -31,6 +31,8 @@ import com.sun.jna.platform.win32.WinNT.HANDLE
 import com.sun.jna.platform.win32.WinBase.INVALID_HANDLE_VALUE
 import com.sun.jna.platform.win32.WinBase.FILETIME
 import com.sun.jna.platform.win32.WinError.ERROR_FILE_NOT_FOUND
+
+import sbt.internal.io.MacJNA._
 
 private abstract class Stat[Time_T](size: Int) extends NativeMapped {
   val buffer = ByteBuffer.allocate(size).order(ByteOrder.nativeOrder())
@@ -76,25 +78,17 @@ private abstract class MilliNative[Native] extends Milli {
   protected def toNative(mtime: Long): Native // convert milliseconds to native time
 }
 
-private abstract class PosixMilli[Interface <: Posix[Time_T]: ClassTag, Time_T]
-    extends MilliNative[(Time_T, Time_T)] {
-  private val options = Map[String, Object]().asJava
-  protected val AT_FDCWD: Int
-  protected val UTIME_OMIT: Time_T
+private trait PosixBase {
+  def strerror(errnum: Int): String
+}
+private abstract class MilliPosixBase[Interface <: PosixBase: ClassTag, Native]
+    extends MilliNative[Native] {
+  private val options = scala.collection.Map[String, Object]().asJava
   private final val ENOENT = 2
   protected val libc: Interface =
     (JNANative.loadLibrary(Platform.C_LIBRARY_NAME,
                            classTag[Interface].runtimeClass.asInstanceOf[Class[Interface]],
                            options)): Interface
-  protected def fromLongLong(sec_nsec: (Long, Long)): Long = {
-    val (sec, nsec) = sec_nsec
-    sec * 1000L + (nsec / 1000000L)
-  }
-  protected def toLongLong(mtime: Long): (Long, Long) = {
-    val sec = mtime / 1000L
-    val nsec = (mtime - sec * 1000L) * 1000000L
-    (sec, nsec)
-  }
   protected def checkedIO[T](filePath: String)(f: => Int) = {
     if (f != 0) {
       val errno = JNANative.getLastError()
@@ -107,15 +101,24 @@ private abstract class PosixMilli[Interface <: Posix[Time_T]: ClassTag, Time_T]
   }
 }
 
+private trait Posix[Time_T] extends PosixBase
+private abstract class PosixMilli[Interface <: Posix[Time_T]: ClassTag, Time_T]
+    extends MilliPosixBase[Interface, (Time_T, Time_T)] {
+  protected def fromLongLong(sec_nsec: (Long, Long)): Long = {
+    val (sec, nsec) = sec_nsec
+    sec * 1000L + (nsec / 1000000L)
+  }
+  protected def toLongLong(mtime: Long): (Long, Long) = {
+    val sec = mtime / 1000L
+    val nsec = (mtime - sec * 1000L) * 1000000L
+    (sec, nsec)
+  }
+}
+
 private abstract class PosixMilliLong[Interface <: Posix[Long]: ClassTag]
     extends PosixMilli[Interface, Long] {
   protected def fromNative(sec_nsec: (Long, Long)) = fromLongLong(sec_nsec)
   protected def toNative(mtime: Long) = toLongLong(mtime)
-  protected def setModifiedTimeNative(filePath: String, mtimeNative: (Long, Long)): Unit = {
-    val (sec, nsec) = mtimeNative
-    val times = new TimeSpec2Long(sec, nsec, UTIME_OMIT)
-    checkedIO(filePath) { libc.utimensat(AT_FDCWD, filePath, times, 0) }
-  }
 }
 private abstract class PosixMilliInt[Interface <: Posix[Int]: ClassTag]
     extends PosixMilli[Interface, Int] {
@@ -127,19 +130,15 @@ private abstract class PosixMilliInt[Interface <: Posix[Int]: ClassTag]
     val (sec, nsec) = toLongLong(mtime)
     (sec.toInt, nsec.toInt)
   }
-  protected def setModifiedTimeNative(filePath: String, mtimeNative: (Int, Int)): Unit = {
-    val (sec, nsec) = mtimeNative
-    val times = new TimeSpec2Int(sec, nsec, UTIME_OMIT)
-    checkedIO(filePath) { libc.utimensat(AT_FDCWD, filePath, times, 0) }
-  }
 }
 
 // Cannot use classtag to initialize buffer: JNA needs
 // a nullary constructor. So, extend manually below.
 //
 // Note: technically, tv_nsec is a long, not a time_t.
-// But on Linux32 a long is also 4 bytes, so same size as time_t
-// in all cases.
+// But on Linux32 a long is 4 bytes (like time_t), and on
+// Linux64 a long is 8 bytes (like time_t), so time_t
+// and long have the same size in both cases.
 //
 private abstract class TimeSpec2[Time_T] extends NativeMapped {
   val buffer: Array[Time_T]
@@ -171,18 +170,39 @@ private class TimeSpec2Int extends TimeSpec2[Int] {
   }
 }
 
-private trait Posix[Time_T] {
+private trait Utimensat[Time_T] extends Posix[Time_T] {
   def utimensat(dirfd: Int, filePath: String, times: TimeSpec2[Time_T], flags: Int): Int
-  def strerror(errnum: Int): String
+}
+private trait MilliUtimensat[Time_T] {
+  protected def AT_FDCWD: Int
+  protected def UTIME_OMIT: Time_T
+}
+private abstract class PosixMilliLongUtim[Interface <: Utimensat[Long]: ClassTag]
+    extends PosixMilliLong[Interface]
+    with MilliUtimensat[Long] {
+  protected def setModifiedTimeNative(filePath: String, mtimeNative: (Long, Long)): Unit = {
+    val (sec, nsec) = mtimeNative
+    val times = new TimeSpec2Long(sec, nsec, UTIME_OMIT)
+    checkedIO(filePath) { libc.utimensat(AT_FDCWD, filePath, times, 0) }
+  }
+}
+private abstract class PosixMilliIntUtim[Interface <: Utimensat[Int]: ClassTag]
+    extends PosixMilliInt[Interface]
+    with MilliUtimensat[Int] {
+  protected def setModifiedTimeNative(filePath: String, mtimeNative: (Int, Int)): Unit = {
+    val (sec, nsec) = mtimeNative
+    val times = new TimeSpec2Int(sec, nsec, UTIME_OMIT)
+    checkedIO(filePath) { libc.utimensat(AT_FDCWD, filePath, times, 0) }
+  }
 }
 
 private class Linux64FileStat extends StatLong(144, 88, 96)
-private trait Linux64 extends Library with Posix[Long] {
+private trait Linux64 extends Library with Utimensat[Long] {
   def __xstat64(version: Int, filePath: String, buf: Linux64FileStat): Int
 }
-private object Linux64Milli extends PosixMilliLong[Linux64] {
+private object Linux64Milli extends PosixMilliLongUtim[Linux64] {
   protected final val AT_FDCWD: Int = -100
-  protected final val UTIME_OMIT: Long = ((1L << 30) - 2L)
+  protected final val UTIME_OMIT: Long = ((1 << 30) - 2)
   protected def getModifiedTimeNative(filePath: String) = {
     val stat = new Linux64FileStat
     checkedIO(filePath) { libc.__xstat64(1, filePath, stat) }
@@ -191,10 +211,10 @@ private object Linux64Milli extends PosixMilliLong[Linux64] {
 }
 
 private class Linux32FileStat extends StatInt(88, 64, 68)
-private trait Linux32 extends Library with Posix[Int] {
+private trait Linux32 extends Library with Utimensat[Int] {
   def __xstat(version: Int, filePath: String, buf: Linux32FileStat): Int
 }
-private object Linux32Milli extends PosixMilliInt[Linux32] {
+private object Linux32Milli extends PosixMilliIntUtim[Linux32] {
   protected final val AT_FDCWD: Int = -100
   protected final val UTIME_OMIT: Int = ((1 << 30) - 2)
   protected def getModifiedTimeNative(filePath: String) = {
@@ -205,16 +225,34 @@ private object Linux32Milli extends PosixMilliInt[Linux32] {
 }
 
 private trait Mac extends Library with Posix[Long] {
-  def stat(filePath: String, buf: MacFileStat): Int
+  def getattrlist(path: String,
+                  attrlist: Attrlist,
+                  attrBuf: TimeBuf,
+                  attrBufSize: Int,
+                  options: Int): Int
+  def setattrlist(path: String,
+                  attrlist: Attrlist,
+                  attrBuf: Timespec,
+                  attrBufSize: Int,
+                  options: Int): Int
 }
-private class MacFileStat extends StatLong(120, 40, 48) // or 144,48,56 for stat64(), in theory
 private object MacMilli extends PosixMilliLong[Mac] {
-  protected final val AT_FDCWD: Int = -2
-  protected final val UTIME_OMIT: Long = -2
+  private val attr = new Attrlist
+  attr.bitmapcount = 5 // ATTR_BIT_MAP_COUNT
+  attr.commonattr = 0x00000400 // ATTR_CMN_MODTIME
+
   protected def getModifiedTimeNative(filePath: String) = {
-    val stat = new MacFileStat
-    checkedIO(filePath) { libc.stat(filePath, stat) }
-    stat.getModifiedTimeNative
+    val buf = new TimeBuf
+    checkedIO(filePath) { libc.getattrlist(filePath, attr, buf, 20 /* buf size */, 0) }
+    (buf.tv_sec, buf.tv_nsec)
+  }
+
+  protected def setModifiedTimeNative(filePath: String, mtimeNative: (Long, Long)): Unit = {
+    val buf = new Timespec
+    val (sec, nsec) = mtimeNative
+    buf.tv_sec = sec
+    buf.tv_nsec = nsec
+    checkedIO(filePath) { libc.setattrlist(filePath, attr, buf, 16 /* buf size */, 0) }
   }
 }
 
@@ -222,7 +260,13 @@ private object WinMilli extends MilliNative[FILETIME] {
   import Kernel32.INSTANCE.{ CreateFile, GetLastError, CloseHandle, GetFileTime, SetFileTime }
 
   private def getHandle(lpFileName: String, dwDesiredAccess: Int, dwShareMode: Int): HANDLE = {
-    val hFile = CreateFile(lpFileName, dwDesiredAccess, dwShareMode, null, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, null)
+    val hFile = CreateFile(lpFileName,
+                           dwDesiredAccess,
+                           dwShareMode,
+                           null,
+                           OPEN_EXISTING,
+                           FILE_FLAG_BACKUP_SEMANTICS,
+                           null)
     if (hFile == INVALID_HANDLE_VALUE) {
       val err = GetLastError()
       if (err == ERROR_FILE_NOT_FOUND)
@@ -338,9 +382,9 @@ object Milli {
               case LINUX =>
                 "(ext2/ext3, for instance, have a 1 sec resolution)"
               case MAC =>
-                "(HFS+ has a 1 sec resolution, but APFS is much more precise)"
+                "(HFS+ has a 1 sec resolution, but APFS is more precise)"
               case WINDOWS =>
-                "(FAT32, for instance, has a 1-2 sec resolution but NTFS is much more precise)"
+                "(FAT32, for instance, has a 1-2 sec resolution but NTFS is more precise)"
               case _ =>
                 ""
             }) + ". That may affect sbt's ability to detect rapid file changes."
