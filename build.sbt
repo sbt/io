@@ -41,7 +41,7 @@ val io = (project in file("io"))
     initialCommands in console += "\nimport sbt.io._, syntax._",
     mimaPreviousArtifacts := Set(
       "1.0.0", "1.0.1", "1.0.2",
-      "1.1.0", "1.1.1", "1.1.2",
+      "1.1.0", "1.1.1", "1.1.2", "1.1.3",
     ) map (version => organization.value %% moduleName.value % version),
     mimaBinaryIssueFilters ++= Seq(
       // MiMa doesn't treat effectively final members as final
