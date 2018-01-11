@@ -1,6 +1,11 @@
 language: scala
 jdk: oraclejdk8
-script: sbt ++$TRAVIS_SCALA_VERSION mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test
+script: sbt
+  ++$TRAVIS_SCALA_VERSION
+  mimaReportBinaryIssues
+  scalafmt::test test:scalafmt::test sbt:scalafmt::test
+  whitesourceCheckPolicies
+  test
 
 scala:
    - 2.10.7
@@ -8,11 +13,15 @@ scala:
    - 2.12.4
    - 2.13.0-M2
 
+env:
+  global:
+    - secure: HFp0Jm4r+bk7CKT5YJX6rlqo0+itHfcae0gC4BY7rNrv8JN7POHs+Db2BeCwwOJXKFxHDxFjLyKwzX4LcFkBzQataUfzqHvBlkLh2XkCkMUZsOt4xhflwJZMXYihLyoX0Wct42AE4DWmBiFiC5wePI6/7/nWFk+gv0KN+X8zK0y1WdtZR6PqyFxE0NengnRB9sliiDQU2ESdZ7zuoMytbRDlcmTqj70C8ym9KGLdZvM/8R7n+5GGbkfvCXAiNnYDd2uARw/Ep4JDqM/UoXC21NqOknIHuaC3j3Rb66+wgNev+Nmfg5YU1mGWWGWSsFPTh6MVuUM84aFtoStUwsTSjvVvHTrzPyHEg4kP44Qco5fdRgDQUz+7MVOjVL4hogW0eLSiVceOle7tcN6Q5zn/5wNaKoJRJjo9Dw5zEI+w4AgEkiky/TKRnJQiqzTbLQ2kN9ALGJAHan1+Kg7SaC5GWdjm6bDFz4zjbAPYEqPosePRB9X2sxUjndTE/HYLgLLqK5yIUj06XY7YNmWOwRS83+5VzwAl82lkfaI9oXb8Giy7XiAtT0jfviAHwSx1fo1QRyBUCCPyxiLccgFLCFyaUBwwUXXBEieWJWLbRIbScj3b0RTZRtR/VZ54rz3rMzDxD9J09x7NGJvn3Ext0ampMuOcJpEHOy2akojZ60qQcV8=
+
 cache:
   directories:
     - $HOME/.ivy2/cache
     - $HOME/.sbt
 
 before_cache:
-  - find $HOME/.ivy2/cache -name "ivydata-*.properties" -print -delete
-  - find $HOME/.sbt        -name "*.lock"               -print -delete
+  - find $HOME/.ivy2/cache -name "ivydata-*.properties" -delete
+  - find $HOME/.sbt        -name "*.lock"               -delete
