@@ -7,7 +7,7 @@ import java.io.File
 import java.util.Date
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.file.Files
+import java.nio.file.{ Files, NoSuchFileException }
 import java.nio.file.{ Paths => JPaths }
 import java.nio.file.attribute.FileTime
 
@@ -333,11 +333,19 @@ private abstract class MilliMilliseconds extends Milli {
 
 private object JavaMilli extends MilliMilliseconds {
   def getModifiedTime(filePath: String): Long =
-    Files.getLastModifiedTime(JPaths.get(filePath)).toMillis
-  def setModifiedTime(filePath: String, mtime: Long): Unit = {
-    Files.setLastModifiedTime(JPaths.get(filePath), FileTime.fromMillis(mtime))
-    ()
-  }
+    mapNoSuchFileException(Files.getLastModifiedTime(JPaths.get(filePath)).toMillis)
+  def setModifiedTime(filePath: String, mtime: Long): Unit =
+    mapNoSuchFileException {
+      Files.setLastModifiedTime(JPaths.get(filePath), FileTime.fromMillis(mtime))
+      ()
+    }
+
+  private def mapNoSuchFileException[A](f: => A): A =
+    try {
+      f
+    } catch {
+      case e: NoSuchFileException => throw new FileNotFoundException(e.getFile).initCause(e)
+    }
 }
 
 object Milli {
