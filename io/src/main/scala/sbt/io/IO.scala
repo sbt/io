@@ -4,6 +4,7 @@
 package sbt.io
 
 import Using._
+
 import sbt.internal.io.ErrorHandling.translate
 
 import java.io.{
@@ -23,15 +24,18 @@ import java.nio.file.attribute.PosixFilePermissions
 import java.util.Properties
 import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
+
+import sbt.internal.io.ErrorHandling.translate
+import sbt.internal.io.Milli
+
+import scala.Function.tupled
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.collection.immutable.TreeSet
 import scala.collection.mutable.{ HashMap, HashSet }
 import scala.reflect.{ Manifest => SManifest }
-import scala.util.control.NonFatal
 import scala.util.control.Exception._
-import scala.collection.JavaConverters._
-import Function.tupled
-import sbt.internal.io.Milli
+import scala.util.control.NonFatal
 
 /** A collection of File, URL, and I/O utility methods.*/
 object IO {
@@ -701,7 +705,8 @@ object IO {
       sourceFile: File,
       targetFile: File,
       preserveLastModified: Boolean = false,
-      preserveExecutable: Boolean = true
+      preserveExecutable: Boolean = true,
+      preservePermission: Boolean = true
   ): Unit = {
     // NOTE: when modifying this code, test with larger values of CopySpec.MaxFileSizeBits than default
 
@@ -731,10 +736,19 @@ object IO {
       copyLastModified(sourceFile, targetFile)
       ()
     }
-    if (preserveExecutable) {
+
+    // Copy the original file permission
+    if (preservePermission) {
+      copyPermission(sourceFile, targetFile)
+    } else if (preserveExecutable) {
       copyExecutable(sourceFile, targetFile)
       ()
     }
+  }
+
+  /** Transfers posix file permissions of `sourceFile` to `targetFile` **/
+  def copyPermission(sourceFile: File, targetFile: File) = {
+    new RichFile(targetFile).setPermissions(new RichFile(sourceFile).permissions)
   }
 
   /** Transfers the executable property of `sourceFile` to `targetFile`. */

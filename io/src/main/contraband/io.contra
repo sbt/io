@@ -16,4 +16,6 @@ type CopyOptions {
   ## If `true` the executable properties are copied.
   preserveExecutable: boolean! = true @since("0.0.1")
 
+  ## If `true` the file permissions are copied. Setting this `true` disregards the effect of preserveExcecutable flag
+  preservePermission: boolean! = true @since("0.0.2")
 }
