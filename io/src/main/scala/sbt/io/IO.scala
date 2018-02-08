@@ -9,6 +9,7 @@ import sbt.internal.io.ErrorHandling.translate
 import java.io.{
   BufferedReader,
   ByteArrayOutputStream,
+  BufferedOutputStream,
   BufferedWriter,
   File,
   InputStream,
@@ -21,7 +22,7 @@ import java.nio.charset.Charset
 import java.nio.file.FileSystems
 import java.nio.file.attribute.PosixFilePermissions
 import java.util.Properties
-import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
+import java.util.jar.{ Attributes, JarEntry, JarFile, JarOutputStream, Manifest }
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeSet
@@ -517,11 +518,14 @@ object IO {
   private def writeZip(sources: Seq[(File, String)], output: ZipOutputStream)(
       createEntry: String => ZipEntry
   ) = {
-    val files = sources.flatMap {
-      case (file, name) => if (file.isFile) (file, normalizeName(name)) :: Nil else Nil
-    }
+    val files = sources
+      .flatMap {
+        case (file, name) => if (file.isFile) (file, normalizeName(name)) :: Nil else Nil
+      }
+      .sortBy {
+        case (_, name) => name
+      }
 
-    val now = System.currentTimeMillis
     // The CRC32 for an empty value, needed to store directories in zip files
     val emptyCRC = new CRC32().getValue()
 
@@ -533,21 +537,23 @@ object IO {
     def makeDirectoryEntry(name: String) = {
       //			log.debug("\tAdding directory " + relativePath + " ...")
       val e = createEntry(name)
-      e setTime now
+      // Leave directory timestamps empty to make the build independent of packaging time
+      e setTime 0
       e setSize 0
       e setMethod ZipEntry.STORED
       e setCrc emptyCRC
       e
     }
 
-    def makeFileEntry(file: File, name: String) = {
+    def makeFileEntry(name: String) = {
       //			log.debug("\tAdding " + file + " as " + name + " ...")
       val e = createEntry(name)
-      e setTime getModifiedTimeOrZero(file)
+      // Leave directory timestamps empty to make the build independent of packaging time
+      e setTime 0
       e
     }
     def addFileEntry(file: File, name: String) = {
-      output putNextEntry makeFileEntry(file, name)
+      output putNextEntry makeFileEntry(name)
       transfer(file, output)
       output.closeEntry()
     }
@@ -589,7 +595,16 @@ object IO {
             val main = mf.getMainAttributes
             if (!main.containsKey(MANIFEST_VERSION))
               main.put(MANIFEST_VERSION, "1.0")
-            (new JarOutputStream(fileOut, mf), "jar")
+
+            val os = new JarOutputStream(fileOut)
+            val e = new ZipEntry(JarFile.MANIFEST_NAME)
+            // Leave manifest timestamp empty to make build repeatable
+            e setTime 0
+            os.putNextEntry(e)
+            mf.write(new BufferedOutputStream(os))
+            os.closeEntry()
+
+            (new JarOutputStream(fileOut), "jar")
           case None => (new ZipOutputStream(fileOut), "zip")
         }
       try { f(zipOut) } finally { zipOut.close }
