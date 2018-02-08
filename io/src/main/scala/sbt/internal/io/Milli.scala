@@ -365,11 +365,11 @@ object Milli {
       JavaMilli
     else
       getOSType match {
-        case LINUX   => if (is64Bit) Linux64Milli else Linux32Milli
+        case LINUX                => if (is64Bit) Linux64Milli else Linux32Milli
         case FREEBSD if (is64Bit) => FreeBSD64Milli
-        case MAC     => MacMilli
-        case WINDOWS => WinMilli
-        case _       => JavaMilli
+        case MAC                  => MacMilli
+        case WINDOWS              => WinMilli
+        case _                    => JavaMilli
       }
 
   def getModifiedTime(file: File): Long =
