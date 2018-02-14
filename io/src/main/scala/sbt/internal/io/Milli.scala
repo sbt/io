@@ -7,7 +7,7 @@ import java.io.File
 import java.util.Date
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.file.Files
+import java.nio.file.{ Files, NoSuchFileException }
 import java.nio.file.{ Paths => JPaths }
 import java.nio.file.attribute.FileTime
 
@@ -31,6 +31,7 @@ import com.sun.jna.platform.win32.WinNT.HANDLE
 import com.sun.jna.platform.win32.WinBase.INVALID_HANDLE_VALUE
 import com.sun.jna.platform.win32.WinBase.FILETIME
 import com.sun.jna.platform.win32.WinError.ERROR_FILE_NOT_FOUND
+import com.sun.jna.platform.win32.WinError.ERROR_PATH_NOT_FOUND
 
 import sbt.internal.io.MacJNA._
 
@@ -224,6 +225,20 @@ private object Linux32Milli extends PosixMilliIntUtim[Linux32] {
   }
 }
 
+private class FreeBSD64FileStat extends StatLong(120, 40, 48)
+private trait FreeBSD64 extends Library with Utimensat[Long] {
+  def stat(filePath: String, buf: FreeBSD64FileStat): Int
+}
+private object FreeBSD64Milli extends PosixMilliLongUtim[FreeBSD64] {
+  protected final val AT_FDCWD: Int = -100
+  protected final val UTIME_OMIT: Long = -2
+  protected def getModifiedTimeNative(filePath: String) = {
+    val stat = new FreeBSD64FileStat
+    checkedIO(filePath) { libc.stat(filePath, stat) }
+    stat.getModifiedTimeNative
+  }
+}
+
 private trait Mac extends Library with Posix[Long] {
   def getattrlist(path: String,
                   attrlist: Attrlist,
@@ -269,7 +284,7 @@ private object WinMilli extends MilliNative[FILETIME] {
                            null)
     if (hFile == INVALID_HANDLE_VALUE) {
       val err = GetLastError()
-      if (err == ERROR_FILE_NOT_FOUND)
+      if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
         throw new FileNotFoundException("Not found: " + lpFileName)
       else
         throw new IOException("CreateFile() failed with error " + GetLastError())
@@ -318,11 +333,19 @@ private abstract class MilliMilliseconds extends Milli {
 
 private object JavaMilli extends MilliMilliseconds {
   def getModifiedTime(filePath: String): Long =
-    Files.getLastModifiedTime(JPaths.get(filePath)).toMillis
-  def setModifiedTime(filePath: String, mtime: Long): Unit = {
-    Files.setLastModifiedTime(JPaths.get(filePath), FileTime.fromMillis(mtime))
-    ()
-  }
+    mapNoSuchFileException(Files.getLastModifiedTime(JPaths.get(filePath)).toMillis)
+  def setModifiedTime(filePath: String, mtime: Long): Unit =
+    mapNoSuchFileException {
+      Files.setLastModifiedTime(JPaths.get(filePath), FileTime.fromMillis(mtime))
+      ()
+    }
+
+  private def mapNoSuchFileException[A](f: => A): A =
+    try {
+      f
+    } catch {
+      case e: NoSuchFileException => throw new FileNotFoundException(e.getFile).initCause(e)
+    }
 }
 
 object Milli {
@@ -342,10 +365,11 @@ object Milli {
       JavaMilli
     else
       getOSType match {
-        case LINUX   => if (is64Bit) Linux64Milli else Linux32Milli
-        case MAC     => MacMilli
-        case WINDOWS => WinMilli
-        case _       => JavaMilli
+        case LINUX                => if (is64Bit) Linux64Milli else Linux32Milli
+        case FREEBSD if (is64Bit) => FreeBSD64Milli
+        case MAC                  => MacMilli
+        case WINDOWS              => WinMilli
+        case _                    => JavaMilli
       }
 
   def getModifiedTime(file: File): Long =

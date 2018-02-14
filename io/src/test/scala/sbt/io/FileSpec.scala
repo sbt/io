@@ -10,17 +10,16 @@ class FileSpec extends FlatSpec with Matchers {
       val t1 = dir / "foo.txt"
       IO.write(t1, "foo")
       if (IO.isPosix) {
-        //an[UnsupportedOperationException] should be thrownBy t1.dosAttributes
         t1.permissions(PosixFilePermission.OWNER_EXECUTE) shouldBe false
 
         t1.addPermission(PosixFilePermission.OWNER_EXECUTE)
         t1.addPermission(PosixFilePermission.GROUP_WRITE)
         t1.testPermission(PosixFilePermission.OWNER_EXECUTE) shouldBe true
-        t1.permissionsAsString shouldBe "rwxrw-r--"
+        t1.permissionsAsString should fullyMatch regex "..x.w...."
 
         t1.removePermission(PosixFilePermission.OWNER_EXECUTE)
         t1.isOwnerExecutable shouldBe false
-        t1.permissionsAsString shouldBe "rw-rw-r--"
+        t1.permissionsAsString should fullyMatch regex "..-.w...."
       } else ()
     }
   }
