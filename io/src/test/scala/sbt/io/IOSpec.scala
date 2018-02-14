@@ -61,4 +61,8 @@ class IOSpec extends FlatSpec with Matchers {
     val u = IO.toURI(file("src") / "main" / "scala")
     assert(IO.toFile(u) == (file("src") / "main" / "scala"))
   }
+
+  "getModifiedTimeOrZero" should "return 0L if the file doesn't exists" in {
+    assert(IO.getModifiedTimeOrZero(file("/not/existing/path")) == 0L)
+  }
 }
