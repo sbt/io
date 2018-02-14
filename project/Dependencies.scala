@@ -10,7 +10,7 @@ object Dependencies {
   val scalaCompiler = Def.setting { "org.scala-lang" % "scala-compiler" % scalaVersion.value }
 
   val scalaCheck = "org.scalacheck" %% "scalacheck" % "1.13.5"
-  val scalatest = "org.scalatest" %% "scalatest" % "3.0.4"
+  val scalatest = "org.scalatest" %% "scalatest" % "3.0.5-M1"
   val jna = "net.java.dev.jna" % "jna" % "4.5.0"
   val jnaPlatform = "net.java.dev.jna" % "jna-platform" % "4.5.0"
 }
