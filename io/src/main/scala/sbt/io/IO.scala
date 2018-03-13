@@ -12,14 +12,15 @@ import java.io.{
   BufferedWriter,
   File,
   InputStream,
+  IOException,
   OutputStream,
   PrintWriter
 }
 import java.io.{ ObjectInputStream, ObjectStreamClass, FileNotFoundException }
 import java.net.{ URI, URISyntaxException, URL }
 import java.nio.charset.Charset
-import java.nio.file.FileSystems
-import java.nio.file.attribute.PosixFilePermissions
+import java.nio.file.{FileSystems, Files, Path => NioPath, SimpleFileVisitor, FileVisitResult}
+import java.nio.file.attribute.{PosixFilePermissions, BasicFileAttributes}
 import java.util.Properties
 import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
@@ -31,7 +32,7 @@ import scala.util.control.NonFatal
 import scala.util.control.Exception._
 import scala.collection.JavaConverters._
 import Function.tupled
-import sbt.internal.io.Milli
+import sbt.internal.io.{Milli, TranslatedIOException, TranslatedException}
 
 /** A collection of File, URL, and I/O utility methods.*/
 object IO {
@@ -454,14 +455,30 @@ object IO {
 
   /** Deletes `file`, recursively if it is a directory. */
   def delete(file: File): Unit = {
-    translate("Error deleting file " + file + ": ") {
-      val deleted = file.delete()
-      if (!deleted && file.isDirectory) {
-        delete(listFiles(file))
-        file.delete
-        ()
+    object deleter extends SimpleFileVisitor[NioPath] {
+      def tryDelete(file: NioPath): Unit = {
+        try Files.delete(file)
+        catch {
+          case _: FileNotFoundException => //silently ignore this
+          case e: IOException => throw new TranslatedIOException(s"Error deleting file $e", e)
+          case e: Exception   => throw new TranslatedException(s"Error deleting file $e", e)
+        }
+
+      }
+      override def visitFile(path: NioPath, attr: BasicFileAttributes): FileVisitResult = {
+        tryDelete(path)
+        FileVisitResult.CONTINUE
+      }
+
+      override def postVisitDirectory(path: NioPath, e: IOException): FileVisitResult = {
+        if (e eq null) {
+          tryDelete(path)
+          FileVisitResult.CONTINUE
+        } else throw e // directory iteration failed
       }
     }
+    Files.walkFileTree(file.toPath, deleter)
+    ()
   }
 
   /** Returns the children of directory `dir` that match `filter` in a non-null array.*/
