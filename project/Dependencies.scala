@@ -13,4 +13,5 @@ object Dependencies {
   val scalatest = "org.scalatest" %% "scalatest" % "3.0.3"
   val jna = "net.java.dev.jna" % "jna" % "4.5.0"
   val jnaPlatform = "net.java.dev.jna" % "jna-platform" % "4.5.0"
+  val appleFileEvents = "com.swoval" % "apple-file-events" % "1.3.0"
 }
