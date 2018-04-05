@@ -1,15 +1,11 @@
 package sbt.internal.io
 
-import java.lang.UnsupportedOperationException
 import java.io.IOException
 import java.io.FileNotFoundException
 import java.io.File
 import java.util.Date
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.file.{ Files, NoSuchFileException }
-import java.nio.file.{ Paths => JPaths }
-import java.nio.file.attribute.FileTime
 
 import scala.reflect.{ ClassTag, classTag }
 import scala.collection.JavaConverters.mapAsJavaMapConverter
@@ -33,6 +29,7 @@ import com.sun.jna.platform.win32.WinBase.FILETIME
 import com.sun.jna.platform.win32.WinError.ERROR_FILE_NOT_FOUND
 import com.sun.jna.platform.win32.WinError.ERROR_PATH_NOT_FOUND
 
+import sbt.io.JavaMilli
 import sbt.internal.io.MacJNA._
 
 private abstract class Stat[Time_T](size: Int) extends NativeMapped {
@@ -56,7 +53,7 @@ private abstract class StatInt(size: Int, mtimeOffset: Int, mtimensecOffset: Int
   def getModifiedTimeNative = (buffer.getInt(mtimeOffset), buffer.getInt(mtimensecOffset))
 }
 
-private abstract class Milli {
+private[sbt] abstract class Milli {
   def getModifiedTime(filePath: String): Long
   def setModifiedTime(filePath: String, mtime: Long): Unit
   def copyModifiedTime(fromFilePath: String, toFilePath: String): Unit
@@ -326,26 +323,9 @@ private object WinMilli extends MilliNative[FILETIME] {
 }
 
 // No native time information? Copy just the milliseconds
-private abstract class MilliMilliseconds extends Milli {
+private[sbt] abstract class MilliMilliseconds extends Milli {
   def copyModifiedTime(fromFilePath: String, toFilePath: String): Unit =
     setModifiedTime(toFilePath, getModifiedTime(fromFilePath))
-}
-
-private object JavaMilli extends MilliMilliseconds {
-  def getModifiedTime(filePath: String): Long =
-    mapNoSuchFileException(Files.getLastModifiedTime(JPaths.get(filePath)).toMillis)
-  def setModifiedTime(filePath: String, mtime: Long): Unit =
-    mapNoSuchFileException {
-      Files.setLastModifiedTime(JPaths.get(filePath), FileTime.fromMillis(mtime))
-      ()
-    }
-
-  private def mapNoSuchFileException[A](f: => A): A =
-    try {
-      f
-    } catch {
-      case e: NoSuchFileException => throw new FileNotFoundException(e.getFile).initCause(e)
-    }
 }
 
 object Milli {
