@@ -50,5 +50,9 @@ val io = (project in file("io"))
       // MiMa doesn't understand private inner classes?
       // method this(sbt.io.PollingWatchService,sbt.io.PollingWatchService#PollingThread,java.nio.file.Watchable,java.util.List)Unit in class sbt.io.PollingWatchService#PollingWatchKey does not have a correspondent in current version
       exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingWatchKey.this"),
+
+      // moved JavaMilli to sbt.io
+      exclude[MissingClassProblem]("sbt.internal.io.JavaMilli$"),
+      exclude[MissingClassProblem]("sbt.internal.io.JavaMilli"),
     ),
   )
