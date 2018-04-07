@@ -67,7 +67,10 @@ private[sbt] object SourceModificationWatch {
   private def expandEvent(event: (Path, WatchEvent[_])): (Path, WatchEvent.Kind[Path]) = {
     event match {
       case (base, ev) =>
-        val fullPath = base.resolve(ev.context().asInstanceOf[Path])
+        val fullPath = Option(ev.context().asInstanceOf[Path]) match {
+          case Some(path) => base.resolve(path)
+          case None       => base
+        }
         val kind = ev.kind().asInstanceOf[WatchEvent.Kind[Path]]
         (fullPath, kind)
     }
