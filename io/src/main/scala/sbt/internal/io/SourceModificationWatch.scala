@@ -156,7 +156,8 @@ final class Source(
       if (includeDirs) DirectoryFilter || includeFilter
       else includeFilter
 
-    p.startsWith(base.toPath) && inc.accept(p.toFile) && !excludeFilter.accept(p.toFile)
+    (if (!recursive) p.getParent == base.toPath else p.startsWith(base.toPath)) && inc.accept(
+      p.toFile) && !excludeFilter.accept(p.toFile)
   }
 
   /**
