@@ -9,17 +9,16 @@ import java.nio.file.{
   Path => JPath,
   Paths => JPaths
 }
-import java.util.Collections
 import java.util.concurrent._
 import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
-import java.util.{ List => JList }
+import java.util.{ Collections, List => JList }
 
 import com.swoval.concurrent.ThreadFactory
 import com.swoval.files.apple.FileEventsApi.Consumer
 import com.swoval.files.apple.{ FileEvent, FileEventsApi, Flags }
 
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.concurrent.duration._
 
 class MacOSXWatchService extends WatchService with Unregisterable {
