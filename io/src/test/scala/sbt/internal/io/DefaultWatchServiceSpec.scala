@@ -8,14 +8,11 @@ import scala.concurrent.duration._
 import scala.util.Properties
 
 object DefaultWatchServiceSpec {
-  // java.nio's default watch service is much slower on MacOS at the moment.
-  // We give it more time to detect changes.
-  val (pollDelay, maxWaitTime) = (50.milliseconds, 3.seconds)
+  val pollDelay = 100.milliseconds
 }
 
 class DefaultWatchServiceSpec
     extends SourceModificationWatchSpec(
       if (Properties.isMac) new MacOSXWatchService else FileSystems.getDefault.newWatchService,
-      DefaultWatchServiceSpec.pollDelay,
-      DefaultWatchServiceSpec.maxWaitTime
+      DefaultWatchServiceSpec.pollDelay
     )
