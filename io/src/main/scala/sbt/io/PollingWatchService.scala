@@ -16,7 +16,7 @@ import scala.collection.mutable
 import scala.concurrent.duration.{ Duration, FiniteDuration }
 
 /** A `WatchService` that polls the filesystem every `delay`. */
-class PollingWatchService(delay: FiniteDuration) extends WatchService {
+class PollingWatchService(delay: FiniteDuration) extends WatchService with Unregisterable {
   private var closed: Boolean = false
   private val thread: PollingThread = new PollingThread(delay)
   private val keys: mutable.Map[JPath, PollingWatchKey] = mutable.Map.empty
@@ -72,6 +72,12 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
     thread.setFileTimes(path)
     watched += path -> events
     key
+  }
+
+  override def unregister(path: JPath): Unit = {
+    ensureNotClosed()
+    watched -= path
+    ()
   }
 
   private def ensureNotClosed(): Unit =

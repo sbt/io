@@ -22,7 +22,7 @@ import scala.collection.mutable
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
-class MacOSXWatchService extends WatchService {
+class MacOSXWatchService extends WatchService with Unregisterable {
   // The FsEvents api doesn't seem to report events at lower than 10 millisecond intervals.
   private[this] val watchLatency: Duration = 10.milliseconds
   private[this] val queueSize = 256
@@ -68,7 +68,7 @@ class MacOSXWatchService extends WatchService {
   override def pollEvents(): Map[WatchKey, Seq[WatchEvent[JPath]]] =
     registered
       .synchronized(registered.flatMap {
-        case (_, k) =>
+        case (_, (k, _)) =>
           val events = k.pollEvents()
           if (events.isEmpty) None
           else Some(k -> events.asScala.map(_.asInstanceOf[WatchEvent[JPath]]))
@@ -80,17 +80,30 @@ class MacOSXWatchService extends WatchService {
       registered.synchronized {
         val realPath = path.toRealPath()
         registered get realPath match {
-          case Some(k) => k;
+          case Some((k, _)) => k;
           case _ =>
             val key = new MacOSXWatchKey(realPath, queueSize, events: _*)
-            registered += realPath -> key
             val flags = new Flags.Create().setNoDefer().setFileEvents().value
-            watcher.createStream(realPath.toString, watchLatency.toMillis / 1000.0, flags)
+            val id =
+              watcher.createStream(realPath.toString, watchLatency.toMillis / 1000.0, flags)
+            registered += realPath -> (key -> id)
             key
         }
       }
     } else throw new ClosedWatchServiceException
   }
+
+  override def unregister(path: JPath): Unit =
+    if (isOpen) registered.synchronized {
+      registered.get(path) match {
+        case Some((k, i)) =>
+          if (i >= 0) watcher.stopStream(i)
+          k.cancel()
+          registered -= path
+        case None =>
+      }
+      ()
+    } else throw new ClosedWatchServiceException
 
   private def createEvent(key: MacOSXWatchKey, kind: WatchEvent.Kind[JPath], file: JPath): Unit = {
     val event = Event(kind, 1, file)
@@ -105,7 +118,7 @@ class MacOSXWatchService extends WatchService {
 
   private[this] val open = new AtomicBoolean(true)
   private[this] val readyKeys = new LinkedBlockingQueue[MacOSXWatchKey]
-  private[this] val registered = mutable.Map.empty[JPath, MacOSXWatchKey]
+  private[this] val registered = mutable.Map.empty[JPath, (MacOSXWatchKey, Int)]
 }
 
 private case class Event[T](kind: WatchEvent.Kind[T], count: Int, context: T) extends WatchEvent[T]

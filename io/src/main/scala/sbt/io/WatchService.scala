@@ -20,19 +20,23 @@ object WatchService {
    * Adapts a Java `WatchService` to be used with sbt's `WatchService` infrastructure.
    * @param service The `WatchService` to use.
    */
-  implicit final class WatchServiceAdapter(service: JWatchService) extends WatchService {
+  implicit final class WatchServiceAdapter(service: JWatchService)
+      extends WatchService
+      with Unregisterable {
     private var closed: Boolean = false
-    private val registered: mutable.Buffer[WatchKey] = mutable.Buffer.empty
+    private val registered: mutable.Map[JPath, WatchKey] = mutable.Map.empty
 
     override def init(): Unit =
       ()
 
-    override def pollEvents(): Map[WatchKey, Seq[WatchEvent[JPath]]] =
-      registered.flatMap { k =>
+    override def pollEvents(): Map[WatchKey, Seq[WatchEvent[JPath]]] = {
+      val values = registered.synchronized(registered.values.toIndexedSeq)
+      values.flatMap { k =>
         val events = k.pollEvents()
         if (events.isEmpty) None
         else Some((k, events.asScala.asInstanceOf[Seq[WatchEvent[JPath]]]))
       }.toMap
+    }
 
     @tailrec
     override def poll(timeout: Duration): WatchKey =
@@ -48,10 +52,30 @@ object WatchService {
     override def register(path: JPath, events: WatchEvent.Kind[JPath]*): WatchKey = {
       if (closed) throw new ClosedWatchServiceException
       else {
-        val key = path.register(service, events: _*)
-        registered += key
-        key
+        registered.synchronized {
+          registered.get(path) match {
+            case None =>
+              val key = path.register(service, events: _*)
+              registered += path -> key
+              key
+            case Some(key) =>
+              key
+          }
+        }
       }
+    }
+
+    override def unregister(path: JPath): Unit = {
+      if (closed) throw new ClosedWatchServiceException
+      registered.synchronized {
+        registered.get(path) match {
+          case Some(key) =>
+            key.cancel()
+            registered -= path
+          case _ =>
+        }
+      }
+      ()
     }
 
     override def close(): Unit = {
@@ -102,4 +126,13 @@ trait WatchService {
    * Closes this `WatchService`.
    */
   def close(): Unit
+}
+
+trait Unregisterable { self: WatchService =>
+
+  /**
+   * Unregisters a monitored path.
+   * @param path The monitored path.
+   */
+  def unregister(path: JPath): Unit
 }

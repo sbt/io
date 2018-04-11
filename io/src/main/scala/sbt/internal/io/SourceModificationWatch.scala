@@ -88,10 +88,10 @@ private[sbt] final class WatchState private (
   /** Removes all of `fs` from the watched paths. */
   private[sbt] def --(fs: Iterable[Path]): WatchState = {
     for {
-      f <- fs;
-      wk <- registered.get(f);
-      if (registered.values.count(_ == wk)) <= 1
-    } wk.cancel()
+      f <- fs
+      wk <- registered.get(f)
+      if registered.values.count(_ == wk) <= 1
+    } service.unregister(wk.watchable().asInstanceOf[Path])
     withRegistered(registered -- fs)
   }
 
