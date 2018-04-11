@@ -1,7 +1,14 @@
 package sbt.io
 
 import java.nio.file.StandardWatchEventKinds.{ ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY, OVERFLOW }
-import java.nio.file.{ Files, WatchEvent, WatchKey, Path => JPath, Paths => JPaths }
+import java.nio.file.{
+  ClosedWatchServiceException,
+  Files,
+  WatchEvent,
+  WatchKey,
+  Path => JPath,
+  Paths => JPaths
+}
 import java.util.Collections
 import java.util.concurrent._
 import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
@@ -22,39 +29,41 @@ class MacOSXWatchService extends WatchService {
 
   private[this] val executor =
     Executors.newSingleThreadExecutor(new ThreadFactory("sbt.io.MacOSXWatchService"))
+  private[this] def async[R](f: => R): Unit = {
+    executor.submit(new Runnable() { override def run(): Unit = { f; () } })
+    ()
+  }
   private[this] val dropEvent = new Consumer[String] {
     override def accept(s: String): Unit = {}
   }
   private val onFileEvent = new Consumer[FileEvent] {
-    override def accept(fileEvent: FileEvent): Unit = {
-      executor.submit(new Runnable {
-        override def run(): Unit = {
-          val path = JPaths.get(fileEvent.fileName)
-          registered.synchronized(registered.get(path.getParent).foreach { key =>
-            val exists = Files.exists(path)
-            if (exists && key.reportModifyEvents) createEvent(key, ENTRY_MODIFY, path)
-            else if (!exists && key.reportDeleteEvents) createEvent(key, ENTRY_DELETE, path)
-          })
-        }
+    override def accept(fileEvent: FileEvent): Unit = async {
+      val path = JPaths.get(fileEvent.fileName)
+      registered.synchronized(registered.get(path) orElse registered.get(path.getParent) foreach {
+        case (key, _) =>
+          val exists = Files.exists(path)
+          if (exists && key.reportModifyEvents) createEvent(key, ENTRY_MODIFY, path)
+          else if (!exists && key.reportDeleteEvents) createEvent(key, ENTRY_DELETE, path)
       })
-      ()
     }
   }
 
   private[this] val watcher: FileEventsApi = FileEventsApi.apply(onFileEvent, dropEvent)
-  override def close(): Unit = {
+  override def close(): Unit = watcher.synchronized {
     if (open.compareAndSet(true, false)) {
       watcher.close()
       executor.shutdownNow()
+      executor.awaitTermination(5, TimeUnit.SECONDS)
       ()
-    }
+    } else {}
   }
 
   override def init(): Unit = {}
 
-  override def poll(timeout: Duration): WatchKey = {
-    readyKeys.poll(timeout.toNanos, TimeUnit.NANOSECONDS)
-  }
+  override def poll(timeout: Duration): WatchKey =
+    if (isOpen) {
+      readyKeys.poll(timeout.toNanos, TimeUnit.NANOSECONDS)
+    } else throw new ClosedWatchServiceException
 
   override def pollEvents(): Map[WatchKey, Seq[WatchEvent[JPath]]] =
     registered
@@ -67,18 +76,20 @@ class MacOSXWatchService extends WatchService {
       .toMap[WatchKey, Seq[WatchEvent[JPath]]]
 
   override def register(path: JPath, events: WatchEvent.Kind[JPath]*): WatchKey = {
-    registered.synchronized {
-      val realPath = path.toRealPath()
-      registered get realPath match {
-        case Some(k) => k;
-        case _ =>
-          val key = new MacOSXWatchKey(realPath, queueSize, events: _*)
-          registered += realPath -> key
-          val flags = new Flags.Create().setNoDefer().setFileEvents().value
-          watcher.createStream(realPath.toString, watchLatency.toMillis / 1000.0, flags)
-          key
+    if (isOpen) {
+      registered.synchronized {
+        val realPath = path.toRealPath()
+        registered get realPath match {
+          case Some(k) => k;
+          case _ =>
+            val key = new MacOSXWatchKey(realPath, queueSize, events: _*)
+            registered += realPath -> key
+            val flags = new Flags.Create().setNoDefer().setFileEvents().value
+            watcher.createStream(realPath.toString, watchLatency.toMillis / 1000.0, flags)
+            key
+        }
       }
-    }
+    } else throw new ClosedWatchServiceException
   }
 
   private def createEvent(key: MacOSXWatchKey, kind: WatchEvent.Kind[JPath], file: JPath): Unit = {
