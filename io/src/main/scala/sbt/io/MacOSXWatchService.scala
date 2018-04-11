@@ -29,12 +29,23 @@ class MacOSXWatchService extends WatchService with Unregisterable {
 
   private[this] val executor =
     Executors.newSingleThreadExecutor(new ThreadFactory("sbt.io.MacOSXWatchService"))
+  private[this] val streams = mutable.Set.empty[JPath]
   private[this] def async[R](f: => R): Unit = {
     executor.submit(new Runnable() { override def run(): Unit = { f; () } })
     ()
   }
   private[this] val dropEvent = new Consumer[String] {
-    override def accept(s: String): Unit = {}
+    override def accept(s: String): Unit = async {
+      registered.synchronized {
+        val path = JPaths.get(s)
+        streams -= path
+        registered.get(path) match {
+          case None =>
+          case Some((k, _)) =>
+            registered += path -> (k -> -1)
+        }
+      }
+    }
   }
   private val onFileEvent = new Consumer[FileEvent] {
     override def accept(fileEvent: FileEvent): Unit = async {
@@ -85,7 +96,12 @@ class MacOSXWatchService extends WatchService with Unregisterable {
             val key = new MacOSXWatchKey(realPath, queueSize, events: _*)
             val flags = new Flags.Create().setNoDefer().setFileEvents().value
             val id =
-              watcher.createStream(realPath.toString, watchLatency.toMillis / 1000.0, flags)
+              if (streams.exists(s => realPath.startsWith(s))) -1
+              else {
+                streams += realPath
+                watcher.createStream(realPath.toString, watchLatency.toMillis / 1000.0, flags)
+              }
+
             registered += realPath -> (key -> id)
             key
         }
