@@ -68,13 +68,14 @@ class MacOSXWatchService extends WatchService {
 
   override def register(path: JPath, events: WatchEvent.Kind[JPath]*): WatchKey = {
     registered.synchronized {
-      registered get path match {
+      val realPath = path.toRealPath()
+      registered get realPath match {
         case Some(k) => k;
         case _ =>
-          val key = new MacOSXWatchKey(path, queueSize, events: _*)
-          registered += path -> key
+          val key = new MacOSXWatchKey(realPath, queueSize, events: _*)
+          registered += realPath -> key
           val flags = new Flags.Create().setNoDefer().setFileEvents().value
-          watcher.createStream(path.toRealPath().toString, watchLatency.toMillis / 1000.0, flags)
+          watcher.createStream(realPath.toString, watchLatency.toMillis / 1000.0, flags)
           key
       }
     }
