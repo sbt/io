@@ -314,7 +314,8 @@ abstract class SourceModificationWatchSpec(
   }
 
   private def emptyState(service: WatchService, base: File): WatchState = {
-    val sources = Seq(Source(base, "*.scala", new SimpleFilter(_.startsWith("."))))
+    val sources = Seq(
+      Source(base.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
     WatchState.empty(service, sources).withCount(1)
   }
 
