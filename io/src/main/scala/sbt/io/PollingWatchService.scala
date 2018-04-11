@@ -69,6 +69,7 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
     ensureNotClosed()
     val key = new PollingWatchKey(path, new java.util.ArrayList[WatchEvent[_]])
     keys += path -> key
+    thread.setFileTimes(path)
     watched += path -> events
     key
   }
@@ -87,7 +88,10 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
         initDone = true
         Thread.sleep(delay.toMillis)
       }
-
+    private[PollingWatchService] def setFileTimes(path: JPath): Unit = {
+      val entries = path.toFile.allPaths.get.map(f => f.toPath -> IO.getModifiedTimeOrZero(f))
+      fileTimes.synchronized(fileTimes ++= entries)
+    }
     def getFileTimes(): Map[JPath, Long] = {
       val results = mutable.Map.empty[JPath, Long]
       watched.toSeq.sortBy(_._1)(pathLengthOrdering).foreach {
@@ -107,17 +111,20 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
     }
 
     private def populateEvents(): Unit = {
-      val newFileTimes = getFileTimes()
-      val newFiles = newFileTimes.keySet
-      val oldFiles = fileTimes.keySet
+      val (deletedFiles, createdFiles, modifiedFiles) = fileTimes.synchronized {
+        val newFileTimes = getFileTimes()
+        val newFiles = newFileTimes.keySet
+        val oldFiles = fileTimes.keySet
 
-      val deletedFiles = (oldFiles -- newFiles).toSeq
-      val createdFiles = (newFiles -- oldFiles).toSeq
+        val deletedFiles = (oldFiles -- newFiles).toSeq
+        val createdFiles = (newFiles -- oldFiles).toSeq
 
-      val modifiedFiles = fileTimes.collect {
-        case (p, oldTime) if newFileTimes.getOrElse(p, 0L) > oldTime => p
+        val modifiedFiles = fileTimes.collect {
+          case (p, oldTime) if newFileTimes.getOrElse(p, 0L) > oldTime => p
+        }
+        fileTimes = newFileTimes
+        (deletedFiles, createdFiles, modifiedFiles)
       }
-      fileTimes = newFileTimes
 
       deletedFiles
         .map { deleted =>
