@@ -10,10 +10,10 @@ import scala.concurrent.duration._
 
 abstract class SourceModificationWatchSpec(
     getService: => WatchService,
-    pollDelay: FiniteDuration,
-    maxWait: FiniteDuration
+    pollDelay: FiniteDuration
 ) extends FlatSpec
     with Matchers {
+  val maxWait = 2 * pollDelay
 
   it should "detect modified files" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
