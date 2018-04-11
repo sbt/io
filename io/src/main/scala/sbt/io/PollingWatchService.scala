@@ -119,14 +119,16 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
       }
       fileTimes = newFileTimes
 
-      deletedFiles.foreach { deleted =>
-        val parent = deleted.getParent
-        if (watched.getOrElse(parent, Seq.empty).contains(ENTRY_DELETE)) {
-          val ev = new PollingWatchEvent(parent.relativize(deleted), ENTRY_DELETE)
-          addEvent(parent, ev)
+      deletedFiles
+        .map { deleted =>
+          val parent = deleted.getParent
+          if (watched.getOrElse(parent, Seq.empty).contains(ENTRY_DELETE)) {
+            val ev = new PollingWatchEvent(parent.relativize(deleted), ENTRY_DELETE)
+            addEvent(parent, ev)
+          }
+          deleted
         }
-        watched -= deleted
-      }
+        .foreach(watched -= _)
 
       createdFiles.sorted(pathLengthOrdering).foreach {
         case dir if Files.isDirectory(dir) =>
