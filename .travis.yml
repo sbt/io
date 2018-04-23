@@ -7,7 +7,9 @@ matrix:
   include:
 
    - scala: 2.10.7
-     env: CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+     env:
+       CMD: "mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+       TRAVIS_SCALA_VERSION: 2.10.7
      - os: linux
        dist: trusty
      - os: osx
@@ -15,7 +17,9 @@ matrix:
        osx_image: xcode9.2
 
    - scala: 2.11.12
-     env: CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+     env:
+       CMD: "mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+       TRAVIS_SCALA_VERSION: 2.11.12
      - os: linux
        dist: trusty
      - os: osx
@@ -23,7 +27,9 @@ matrix:
        osx_image: xcode9.2
 
    - scala: 2.12.4
-     env: CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+     env:
+       CMD: "mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+       TRAVIS_SCALA_VERSION: 2.12.4
      - os: linux
        dist: trusty
      - os: osx
@@ -31,7 +37,9 @@ matrix:
        osx_image: xcode9.2
 
    - scala: 2.13.0-M3
-     env: CMD=compile
+     env:
+       CMD: compile
+       TRAVIS_SCALA_VERSION: 2.13.0-M3
      - os: linux
        dist: trusty
      - os: osx
