@@ -192,7 +192,6 @@ private[sbt] object EventMonitor {
             case Cancelled =>
             case _ =>
               while (!events.offer(Cancelled)) {
-                log("Stopped watch...")
                 events.clear()
               }
           }
