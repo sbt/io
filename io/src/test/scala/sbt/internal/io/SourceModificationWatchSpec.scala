@@ -14,12 +14,11 @@ abstract class SourceModificationWatchSpec(
 ) extends FlatSpec
     with Matchers {
   val maxWait = 2 * pollDelay
-
   it should "detect modified files" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val file = parentDir / "Foo.scala"
 
-    IO.write(file, "foo")
+    writeNewFile(file, "foo")
 
     watchTest(parentDir) {
       IO.write(file, "bar")
@@ -286,7 +285,7 @@ abstract class SourceModificationWatchSpec(
       val parentDir = dir / "src" / "watchme"
       val file = parentDir / "Foo.scala"
 
-      IO.write(file, "foo")
+      writeNewFile(file, "foo")
       val monitor = defaultMonitor(getService, parentDir, antiEntropy = maxWait * 2)
       try {
         val triggered0 = watchTest(monitor) {
@@ -324,7 +323,7 @@ abstract class SourceModificationWatchSpec(
     val parentDir = dir / "src" / "watchme"
     val file = parentDir / "Foo.scala"
 
-    IO.write(file, "foo")
+    writeNewFile(file, "foo")
 
     val sources = Seq(
       Source(parentDir.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
@@ -402,4 +401,9 @@ abstract class SourceModificationWatchSpec(
     addMonitor(WatchState.empty(service, sources), antiEntropy, tc())
   }
 
+  private def writeNewFile(file: File, content: String): Unit = {
+    IO.write(file, content)
+    IO.setModifiedTimeOrFalse(file, (Deadline.now - 5.seconds).timeLeft.toMillis)
+    ()
+  }
 }
