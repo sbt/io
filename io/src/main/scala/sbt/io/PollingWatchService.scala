@@ -16,7 +16,7 @@ import scala.collection.mutable
 import scala.concurrent.duration.{ Duration, FiniteDuration }
 
 /** A `WatchService` that polls the filesystem every `delay`. */
-class PollingWatchService(delay: FiniteDuration) extends WatchService {
+class PollingWatchService(delay: FiniteDuration) extends WatchService with Unregisterable {
   private var closed: Boolean = false
   private val thread: PollingThread = new PollingThread(delay)
   private val keys: mutable.Map[JPath, PollingWatchKey] = mutable.Map.empty
@@ -69,8 +69,15 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
     ensureNotClosed()
     val key = new PollingWatchKey(path, new java.util.ArrayList[WatchEvent[_]])
     keys += path -> key
+    thread.setFileTimes(path)
     watched += path -> events
     key
+  }
+
+  override def unregister(path: JPath): Unit = {
+    ensureNotClosed()
+    watched -= path
+    ()
   }
 
   private def ensureNotClosed(): Unit =
@@ -87,7 +94,10 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
         initDone = true
         Thread.sleep(delay.toMillis)
       }
-
+    private[PollingWatchService] def setFileTimes(path: JPath): Unit = {
+      val entries = path.toFile.allPaths.get.map(f => f.toPath -> IO.getModifiedTimeOrZero(f))
+      fileTimes.synchronized(fileTimes ++= entries)
+    }
     def getFileTimes(): Map[JPath, Long] = {
       val results = mutable.Map.empty[JPath, Long]
       watched.toSeq.sortBy(_._1)(pathLengthOrdering).foreach {
@@ -107,26 +117,31 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
     }
 
     private def populateEvents(): Unit = {
-      val newFileTimes = getFileTimes()
-      val newFiles = newFileTimes.keySet
-      val oldFiles = fileTimes.keySet
+      val (deletedFiles, createdFiles, modifiedFiles) = fileTimes.synchronized {
+        val newFileTimes = getFileTimes()
+        val newFiles = newFileTimes.keySet
+        val oldFiles = fileTimes.keySet
 
-      val deletedFiles = (oldFiles -- newFiles).toSeq
-      val createdFiles = (newFiles -- oldFiles).toSeq
+        val deletedFiles = (oldFiles -- newFiles).toSeq
+        val createdFiles = (newFiles -- oldFiles).toSeq
 
-      val modifiedFiles = fileTimes.collect {
-        case (p, oldTime) if newFileTimes.getOrElse(p, 0L) > oldTime => p
-      }
-      fileTimes = newFileTimes
-
-      deletedFiles.foreach { deleted =>
-        val parent = deleted.getParent
-        if (watched.getOrElse(parent, Seq.empty).contains(ENTRY_DELETE)) {
-          val ev = new PollingWatchEvent(parent.relativize(deleted), ENTRY_DELETE)
-          addEvent(parent, ev)
+        val modifiedFiles = fileTimes.collect {
+          case (p, oldTime) if newFileTimes.getOrElse(p, 0L) > oldTime => p
         }
-        watched -= deleted
+        fileTimes = newFileTimes
+        (deletedFiles, createdFiles, modifiedFiles)
       }
+
+      deletedFiles
+        .map { deleted =>
+          val parent = deleted.getParent
+          if (watched.getOrElse(parent, Seq.empty).contains(ENTRY_DELETE)) {
+            val ev = new PollingWatchEvent(parent.relativize(deleted), ENTRY_DELETE)
+            addEvent(parent, ev)
+          }
+          deleted
+        }
+        .foreach(watched -= _)
 
       createdFiles.sorted(pathLengthOrdering).foreach {
         case dir if Files.isDirectory(dir) =>
