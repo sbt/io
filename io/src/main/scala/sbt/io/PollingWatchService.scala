@@ -40,27 +40,23 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
     thread.start()
   }
 
-  override def poll(timeout: Duration): WatchKey = thread.keysWithEvents.synchronized {
+  override def poll(timeout: Duration): WatchKey = thread.withKeys { keys =>
     ensureNotClosed()
-    thread.keysWithEvents.synchronized {
-      if (thread.keysWithEvents.isEmpty) {
-        thread.keysWithEvents.wait(timeout.toMillis)
-      }
+    if (keys.isEmpty) {
+      keys.wait(timeout.toMillis)
     }
-    thread.keysWithEvents.headOption.map { k =>
-      thread.keysWithEvents -= k
+    keys.headOption.map { k =>
+      keys -= k
       k
     }.orNull
   }
 
   override def pollEvents(): Map[WatchKey, Seq[WatchEvent[JPath]]] =
-    thread.keysWithEvents.synchronized {
+    thread.withKeys { keys =>
       import scala.collection.JavaConverters._
       ensureNotClosed()
-      val events = thread.keysWithEvents.map { k =>
-        k -> k.pollEvents().asScala.asInstanceOf[Seq[WatchEvent[JPath]]]
-      }
-      thread.keysWithEvents.clear()
+      val events = keys.map(k => k -> k.pollEvents().asScala.asInstanceOf[Seq[WatchEvent[JPath]]])
+      keys.clear()
       events.toMap
     }
 
@@ -83,14 +79,19 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
     if (closed) throw new ClosedWatchServiceException
 
   private class PollingThread(delay: FiniteDuration) extends Thread {
-    val keysWithEvents = mutable.LinkedHashSet.empty[WatchKey]
+    private[this] val _keysWithEvents = mutable.LinkedHashSet.empty[WatchKey]
     private[this] val _initDone = new AtomicBoolean(false)
     private[this] var fileTimes: Map[JPath, Long] = Map.empty
+
+    private[PollingWatchService] def withKeys[R](f: mutable.LinkedHashSet[WatchKey] => R): R =
+      _keysWithEvents.synchronized(f(_keysWithEvents))
 
     @deprecated("The initDone variable should not be accessed externally", "1.1.17")
     def initDone: Boolean = _initDone.get()
     @deprecated("The initDone variable should not be set externally", "1.1.17")
     def initDone_=(initDone: Boolean) = _initDone.set(initDone)
+    @deprecated("Use withKeys instead of directly accessing keysWithEvents", "1.1.17")
+    def keysWithEvents: mutable.LinkedHashSet[WatchKey] = _keysWithEvents
 
     override def run(): Unit =
       while (!closed) {
@@ -119,11 +120,11 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
       results.toMap
     }
 
-    private def addEvent(path: JPath, ev: WatchEvent[JPath]): Unit = keysWithEvents.synchronized {
+    private def addEvent(path: JPath, ev: WatchEvent[JPath]): Unit = _keysWithEvents.synchronized {
       keys.get(path).foreach { k =>
-        keysWithEvents += k
+        _keysWithEvents += k
         k.events.add(ev)
-        keysWithEvents.notifyAll()
+        _keysWithEvents.notifyAll()
       }
     }
 
