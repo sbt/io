@@ -200,7 +200,7 @@ private trait Linux64 extends Library with Utimensat[Long] {
 }
 private object Linux64Milli extends PosixMilliLongUtim[Linux64] {
   protected final val AT_FDCWD: Int = -100
-  protected final val UTIME_OMIT: Long = ((1 << 30) - 2)
+  protected final val UTIME_OMIT: Long = (1L << 30) - 2
   protected def getModifiedTimeNative(filePath: String) = {
     val stat = new Linux64FileStat
     checkedIO(filePath) { libc.__xstat64(1, filePath, stat) }
