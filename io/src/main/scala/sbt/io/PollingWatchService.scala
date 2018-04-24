@@ -1,17 +1,19 @@
 package sbt.io
 
+import java.nio.file.StandardWatchEventKinds._
 import java.nio.file.{
   ClosedWatchServiceException,
   Files,
-  Path => JPath,
-  Watchable,
+  WatchEvent,
   WatchKey,
-  WatchEvent
+  Watchable,
+  Path => JPath
 }
-import java.nio.file.StandardWatchEventKinds._
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.{ List => JList }
 
 import sbt.io.syntax._
+
 import scala.collection.mutable
 import scala.concurrent.duration.{ Duration, FiniteDuration }
 
@@ -36,9 +38,6 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
   override def init(): Unit = {
     ensureNotClosed()
     thread.start()
-    while (!thread.initDone) {
-      Thread.sleep(100)
-    }
   }
 
   override def poll(timeout: Duration): WatchKey = thread.keysWithEvents.synchronized {
@@ -84,16 +83,28 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
     if (closed) throw new ClosedWatchServiceException
 
   private class PollingThread(delay: FiniteDuration) extends Thread {
-    private var fileTimes: Map[JPath, Long] = Map.empty
-    var initDone = false
     val keysWithEvents = mutable.LinkedHashSet.empty[WatchKey]
+    private[this] val _initDone = new AtomicBoolean(false)
+    private[this] var fileTimes: Map[JPath, Long] = Map.empty
+
+    @deprecated("The initDone variable should not be accessed externally", "1.1.17")
+    def initDone: Boolean = _initDone.get()
+    @deprecated("The initDone variable should not be set externally", "1.1.17")
+    def initDone_=(initDone: Boolean) = _initDone.set(initDone)
 
     override def run(): Unit =
       while (!closed) {
         populateEvents()
-        initDone = true
+        _initDone.synchronized {
+          _initDone.set(true)
+          _initDone.notify()
+        }
         Thread.sleep(delay.toMillis)
       }
+    override def start(): Unit = {
+      super.start()
+      _initDone.synchronized { while (!_initDone.get()) _initDone.wait() }
+    }
     private[PollingWatchService] def setFileTimes(path: JPath): Unit = {
       val entries = path.toFile.allPaths.get.map(f => f.toPath -> IO.getModifiedTimeOrZero(f))
       fileTimes.synchronized(fileTimes ++= entries)
