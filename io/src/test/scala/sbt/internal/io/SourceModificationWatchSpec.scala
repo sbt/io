@@ -1,11 +1,13 @@
 package sbt.internal.io
 
+import java.io.IOException
 import java.nio.file.{ ClosedWatchServiceException, Paths }
 
 import org.scalatest.{ Assertion, FlatSpec, Matchers }
 import sbt.io.syntax._
 import sbt.io.{ IO, SimpleFilter, WatchService }
 
+import scala.annotation.tailrec
 import scala.concurrent.duration._
 
 abstract class SourceModificationWatchSpec(
@@ -401,9 +403,13 @@ abstract class SourceModificationWatchSpec(
     addMonitor(WatchState.empty(service, sources), antiEntropy, tc())
   }
 
-  private def writeNewFile(file: File, content: String): Unit = {
-    IO.write(file, content)
-    IO.setModifiedTimeOrFalse(file, (Deadline.now - 5.seconds).timeLeft.toMillis)
-    ()
+  @tailrec
+  private def writeNewFile(file: File, content: String, attempt: Int = 0): Unit = {
+    if (attempt == 0) IO.write(file, content)
+    // IO.setModifiedTimeOrFalse sometimes throws an invalid argument exception
+    val res = try {
+      IO.setModifiedTimeOrFalse(file, (Deadline.now - 5.seconds).timeLeft.toMillis)
+    } catch { case _: IOException if attempt < 10 => false }
+    if (!res) writeNewFile(file, content, attempt + 1)
   }
 }
