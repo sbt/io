@@ -1,21 +1,72 @@
 language: scala
-jdk: oraclejdk8
+
+env:
+  global:
+  - SBT_VER=1.1.2
 
 matrix:
   include:
    - scala: 2.10.7
      env: CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+     os: linux
+     dist: trusty
+
+   - scala: 2.10.7
+     os: osx
+     env:
+       CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+       TRAVIS_SCALA_VERSION=2.10.7
+     language: java
+     osx_image: xcode9.3
 
    - scala: 2.11.12
      env: CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+     os: linux
+     dist: trusty
+
+   - scala: 2.11.12
+     os: osx
+     env:
+       CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+       TRAVIS_SCALA_VERSION=2.11.12
+     language: java
+     osx_image: xcode9.3
 
    - scala: 2.12.4
      env: CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+     os: linux
+     dist: trusty
+
+   - scala: 2.12.4
+     os: osx
+     env:
+       CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+       TRAVIS_SCALA_VERSION=2.12.4
+     language: java
+     osx_image: xcode9.3
 
    - scala: 2.13.0-M3
      env: CMD=compile
+     os: linux
+     dist: trusty
 
-script: sbt ++$TRAVIS_SCALA_VERSION $CMD
+   - scala: 2.13.0-M3
+     os: osx
+     env:
+       CMD="compile"
+       TRAVIS_SCALA_VERSION=2.13.0-M3
+     language: java
+     osx_image: xcode9.3
+
+script: sbt -Dsbt.version=$SBT_VER ++$TRAVIS_SCALA_VERSION $CMD
+
+before_install:
+  # https://github.com/travis-ci/travis-ci/issues/8408
+  - unset _JAVA_OPTIONS
+  - if [[ "$TRAVIS_OS_NAME" = "osx" ]]; then
+      brew update;
+      brew install sbt;
+    fi
 
 cache:
   directories:

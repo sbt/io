@@ -1,25 +1,26 @@
 package sbt.internal.io
 
+import java.io.IOException
 import java.nio.file.{ ClosedWatchServiceException, Paths }
 
 import org.scalatest.{ Assertion, FlatSpec, Matchers }
 import sbt.io.syntax._
 import sbt.io.{ IO, SimpleFilter, WatchService }
 
+import scala.annotation.tailrec
 import scala.concurrent.duration._
 
 abstract class SourceModificationWatchSpec(
     getService: => WatchService,
-    pollDelay: FiniteDuration,
-    maxWait: FiniteDuration
+    pollDelay: FiniteDuration
 ) extends FlatSpec
     with Matchers {
-
+  val maxWait = 2 * pollDelay
   it should "detect modified files" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val file = parentDir / "Foo.scala"
 
-    IO.write(file, "foo")
+    writeNewFile(file, "foo")
 
     watchTest(parentDir) {
       IO.write(file, "bar")
@@ -227,23 +228,33 @@ abstract class SourceModificationWatchSpec(
     dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "subdir"
-      val service = getService
       IO.createDirectory(parentDir)
+      val firstDeadline = maxWait.fromNow
+      val secondDeadline = (2 * maxWait).fromNow
+      var firstDeadlinePassed = false
 
+      val tc = () => {
+        if (!firstDeadlinePassed) {
+          firstDeadlinePassed = firstDeadline.isOverdue()
+          firstDeadlinePassed
+        } else {
+          secondDeadline.isOverdue()
+        }
+      }
+      val monitor = defaultMonitor(getService, parentDir, tc = tc)
       try {
-        val initState = emptyState(service, parentDir)
-        val (triggered0, newState0) = watchTest(initState) {
+        val triggered0 = watchTest(monitor) {
           IO.createDirectory(subDir)
         }
         triggered0 shouldBe false
-        newState0.count shouldBe 1
+        monitor.state().count shouldBe 1
 
-        val (triggered1, newState1) = watchTest(newState0) {
+        val triggered1 = watchTest(monitor) {
           IO.delete(subDir)
         }
         triggered1 shouldBe false
-        newState1.count shouldBe 1
-      } finally service.close()
+        monitor.state().count shouldBe 1
+      } finally monitor.close()
   }
 
   it should "detect deletion of a directory containing watched files" in IO.withTemporaryDirectory {
@@ -251,25 +262,90 @@ abstract class SourceModificationWatchSpec(
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "subdir"
       val src = subDir / "src.scala"
-      val service = getService
 
       IO.createDirectory(parentDir)
 
+      val monitor = defaultMonitor(getService, parentDir)
       try {
-        val initState = emptyState(service, parentDir)
-        val (triggered0, newState0) = watchTest(initState) {
+        val triggered0 = watchTest(monitor) {
           IO.createDirectory(subDir)
           IO.touch(src)
         }
         triggered0 shouldBe true
-        newState0.count shouldBe 2
+        monitor.state().count shouldBe 2
 
-        val (triggered1, newState1) = watchTest(newState0) {
+        val triggered1 = watchTest(monitor) {
           IO.delete(subDir)
         }
         triggered1 shouldBe true
-        newState1.count shouldBe 3
-      } finally service.close()
+        monitor.state().count shouldBe 3
+      } finally monitor.close()
+  }
+
+  it should "not generate multiple events for the same file within anti-entropy period" in IO
+    .withTemporaryDirectory { dir =>
+      val parentDir = dir / "src" / "watchme"
+      val file = parentDir / "Foo.scala"
+
+      writeNewFile(file, "foo")
+      val monitor = defaultMonitor(getService, parentDir, antiEntropy = maxWait * 2)
+      try {
+        val triggered0 = watchTest(monitor) {
+          IO.write(file, "bar")
+        }
+        assert(triggered0)
+        assert(IO.read(file) == "bar")
+
+        val triggered1 = watchTest(monitor) {
+          IO.write(file, "baz")
+        }
+        assert(!triggered1)
+        assert(IO.read(file) == "baz")
+      } finally monitor.close()
+    }
+
+  it should "ignore valid files in non-recursive subdirectories" in IO.withTemporaryDirectory {
+    dir =>
+      val file = dir / "src" / "Foo.scala"
+      val source =
+        Source(dir.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith(".")))
+          .withRecursive(false)
+      val tc = defaultTerminationCondition
+      val monitor = addMonitor(WatchState.empty(getService, Seq(source)), 0.seconds, tc = tc())
+      try {
+        val triggered = watchTest(monitor) {
+          IO.write(file, "foo")
+        }
+        assert(!triggered)
+        assert(IO.read(file) == "foo")
+      } finally monitor.close()
+  }
+
+  it should "log triggered files" in IO.withTemporaryDirectory { dir =>
+    val parentDir = dir / "src" / "watchme"
+    val file = parentDir / "Foo.scala"
+
+    writeNewFile(file, "foo")
+
+    val sources = Seq(
+      Source(parentDir.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
+    var lines: Seq[String] = Nil
+    val logger = new EventMonitor.Logger {
+      override def debug(msg: => Any): Unit = {
+        lines :+= msg.toString
+      }
+    }
+    val tc = defaultTerminationCondition
+    val monitor =
+      EventMonitor(WatchState.empty(getService, sources), pollDelay, 0.seconds, tc(), logger)
+    try {
+      val triggered = watchTest(monitor) {
+        IO.write(file, "bar")
+      }
+      assert(triggered)
+      assert(monitor.state().count == 2)
+      assert(lines.exists(_.startsWith("Triggered")))
+    } finally monitor.close()
   }
 
   "WatchService.poll" should "throw a `ClosedWatchServiceException` if used after `close`" in {
@@ -290,32 +366,50 @@ abstract class SourceModificationWatchSpec(
     service.close()
   }
 
-  private def watchTest(initState: WatchState)(modifier: => Unit): (Boolean, WatchState) = {
-    var started = false
-    val deadline = maxWait.fromNow
-    val modThread = new Thread { override def run() = modifier }
-    SourceModificationWatch.watch(pollDelay, initState) {
-      if (!started) {
-        started = true
-        modThread.start()
-      }
-      deadline.isOverdue()
-    }
+  private def watchTest(eventMonitor: EventMonitor)(modifier: => Unit): Boolean = {
+    modifier
+    eventMonitor.awaitEvent()
   }
 
   private def watchTest(base: File, expectedTrigger: Boolean = true)(
       modifier: => Unit): Assertion = {
-    val service = getService
+    val monitor = defaultMonitor(getService, base)
     try {
-      val initState = emptyState(service, base)
-      val (triggered, _) = watchTest(initState)(modifier)
+      val triggered = watchTest(monitor)(modifier)
       triggered shouldBe expectedTrigger
-    } finally service.close()
+    } finally monitor.close()
   }
 
-  private def emptyState(service: WatchService, base: File): WatchState = {
-    val sources = Seq(Source(base, "*.scala", new SimpleFilter(_.startsWith("."))))
-    WatchState.empty(service, sources).withCount(1)
+  private def defaultTerminationCondition: () => Boolean = {
+    lazy val deadline = maxWait.fromNow
+    () =>
+      {
+        val res = deadline.isOverdue()
+        if (!res) Thread.sleep(5)
+        res
+      }
+  }
+  private def addMonitor(s: WatchState,
+                         antiEntropy: FiniteDuration,
+                         tc: => Boolean): EventMonitor = {
+    EventMonitor(s, pollDelay, antiEntropy, tc)
+  }
+  private def defaultMonitor(service: WatchService,
+                             base: File,
+                             antiEntropy: FiniteDuration = 0.milliseconds,
+                             tc: () => Boolean = defaultTerminationCondition): EventMonitor = {
+    val sources = Seq(
+      Source(base.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
+    addMonitor(WatchState.empty(service, sources), antiEntropy, tc())
   }
 
+  @tailrec
+  private def writeNewFile(file: File, content: String, attempt: Int = 0): Unit = {
+    if (attempt == 0) IO.write(file, content)
+    // IO.setModifiedTimeOrFalse sometimes throws an invalid argument exception
+    val res = try {
+      IO.setModifiedTimeOrFalse(file, (Deadline.now - 5.seconds).timeLeft.toMillis)
+    } catch { case _: IOException if attempt < 10 => false }
+    if (!res) writeNewFile(file, content, attempt + 1)
+  }
 }
