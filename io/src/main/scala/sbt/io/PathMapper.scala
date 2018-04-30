@@ -171,5 +171,5 @@ abstract class Mapper {
   private[this] def fold[A, B, T](zero: A => Option[B], in: Iterable[T])(
       f: T => A => Option[B]
   ): A => Option[B] =
-    (zero /: in)((mapper, base) => f(base) | mapper)
+    in.foldLeft(zero)((mapper, base) => f(base) | mapper)
 }

@@ -37,8 +37,8 @@ private[sbt] object SourceModificationWatch {
       } else {
         val previousFiles = state.registered.keySet
         val newFiles = state.sources.flatMap(_.getUnfilteredPaths()).toSet
-        val createdFiles = newFiles -- previousFiles
-        val deletedFiles = previousFiles -- newFiles
+        val createdFiles = newFiles diff previousFiles
+        val deletedFiles = previousFiles diff newFiles
 
         // We may have events that are not relevant (e.g., created an empty directory.)
         // We filter out those changes, so that we don't trigger unnecessarily.

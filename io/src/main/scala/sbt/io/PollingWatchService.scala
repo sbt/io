@@ -111,8 +111,8 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService {
       val newFiles = newFileTimes.keySet
       val oldFiles = fileTimes.keySet
 
-      val deletedFiles = (oldFiles -- newFiles).toSeq
-      val createdFiles = (newFiles -- oldFiles).toSeq
+      val deletedFiles = (oldFiles diff newFiles).toSeq
+      val createdFiles = (newFiles diff oldFiles).toSeq
 
       val modifiedFiles = fileTimes.collect {
         case (p, oldTime) if newFileTimes.getOrElse(p, 0L) > oldTime => p
