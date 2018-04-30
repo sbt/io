@@ -54,5 +54,8 @@ val io = (project in file("io"))
       // moved JavaMilli to sbt.io
       exclude[MissingClassProblem]("sbt.internal.io.JavaMilli$"),
       exclude[MissingClassProblem]("sbt.internal.io.JavaMilli"),
+
+      // protected[this]
+      exclude[DirectMissingMethodProblem]("sbt.io.CopyOptions.copy*"),
     ),
   )
