@@ -166,7 +166,7 @@ private[sbt] object WatchState {
 
   /**
    * An empty `WatchState`.
-   * @param service The `WatchService` to use to monitor the file system.
+   * @param service The `WatchService` to use to trigger the file system.
    * @param sources The sources from where to collect the paths.
    * @return An initial `WatchState`.
    */

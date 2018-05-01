@@ -90,7 +90,7 @@ object WatchService {
 }
 
 /**
- * A service that will monitor the file system for file creation, deletion
+ * A service that will trigger the file system for file creation, deletion
  * and modification.
  */
 trait WatchService {
@@ -116,7 +116,7 @@ trait WatchService {
 
   /**
    * Registers a path to be monitored.
-   * @param path The path to monitor.
+   * @param path The path to trigger.
    * @param events The events that should be registered.
    * @return A `WatchKey`, that represents a token of registration.
    */

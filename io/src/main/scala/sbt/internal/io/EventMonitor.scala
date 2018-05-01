@@ -7,8 +7,6 @@ import java.nio.file.attribute.BasicFileAttributes
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
 
-import sbt.io.WatchService
-
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -29,7 +27,7 @@ import scala.concurrent.duration._
  */
 private[sbt] sealed trait EventMonitor extends AutoCloseable {
 
-  /** Block indefinitely until the monitor receives a file event or the user stops the watch. */
+  /** Block indefinitely until the trigger receives a file event or the user stops the watch. */
   def awaitEvent(): Boolean
 
   /** A snapshot of the WatchState that includes the number of build triggers and watch sources. */
@@ -44,45 +42,34 @@ private[sbt] object EventMonitor {
   private case object Cancelled extends Event
   private case class Triggered(path: Path) extends Event
 
-  private class EventMonitorImpl private[EventMonitor] (
-      private[this] val service: WatchService,
-      private[this] val events: ArrayBlockingQueue[Event],
-      private[this] val eventThread: Looper with HasWatchState,
+  private[this] class EventMonitorImpl private[EventMonitor] (
+      private[this] val trigger: Trigger,
+      private[this] val eventThread: Looper with HasState,
       private[this] val userInputThread: Looper,
       private[this] val logger: Logger,
       private[this] val closeService: Boolean)
-      extends EventMonitor {
-
-    override def state(): WatchState = eventThread.state()
-
-    override def awaitEvent(): Boolean = events.take() match {
-      case Cancelled => false
-      case Triggered(path) =>
-        logger.debug(s"Triggered watch event due to updated path: $path")
-        eventThread.incrementCount()
-        true
-    }
-
+      extends AntiEntropyEventMonitor(trigger, eventThread.state(), logger) {
     override def close(): Unit = {
       if (closed.compareAndSet(false, true)) {
-        if (closeService) service.close()
+        if (closeService) eventThread.state().service.close()
         userInputThread.close()
         eventThread.close()
         logger.debug("Closed EventMonitor")
       }
     }
-
+    override def state(): WatchState = eventThread.state().withCount(count)
     private[this] val closed = new AtomicBoolean(false)
   }
 
   /**
    * Create a new EventMonitor
-   * @param state The initial watch state for the monitor
-   * @param delay Maximum duration that the monitor will poll the watch service for events
-   * @param antiEntropy Minimum duration that must elapse before a build may by re-triggered by
-   *                    the same file
+   *
+   * @param state                The initial watch state for the trigger
+   * @param delay                Maximum duration that the trigger will poll the watch service for events
+   * @param antiEntropy          Minimum duration that must elapse before a build may by re-triggered by
+   *                             the same file
    * @param terminationCondition Exits watch if evaluates to true
-   * @param logger
+   * @param logger               Logs output
    * @return The new EventMonitor
    */
   def apply(state: WatchState,
@@ -99,9 +86,10 @@ private[sbt] object EventMonitor {
                                       logger: Logger,
                                       closeService: Boolean): EventMonitor = {
     val events = new ArrayBlockingQueue[Event](1)
-    val eventThread = newEventsThread(delay, antiEntropy, state, events, logger)
+    val trigger = new Trigger(events, state.accept, antiEntropy, logger)
+    val eventThread = newEventsThread(delay, state, trigger, logger)
     val userInputThread = newUserInputThread(terminationCondition, events, logger)
-    new EventMonitorImpl(state.service, events, eventThread, userInputThread, logger, closeService)
+    new EventMonitorImpl(trigger, eventThread, userInputThread, logger, closeService)
   }
 
   private[io] def legacy(state: WatchState,
@@ -109,25 +97,20 @@ private[sbt] object EventMonitor {
                          terminationCondition: => Boolean): EventMonitor =
     applyImpl(state, delay, 40.milliseconds, terminationCondition, NullLogger, closeService = false)
 
-  private trait HasWatchState {
+  private trait HasState {
     def state(): WatchState
-    def incrementCount(): Unit
   }
   private def newEventsThread(delay: FiniteDuration,
-                              antiEntropy: FiniteDuration,
                               s: WatchState,
-                              events: ArrayBlockingQueue[Event],
-                              logger: Logger): Looper with HasWatchState = {
-    var recentEvents = Map.empty[Path, Deadline]
+                              trigger: Trigger,
+                              logger: Logger): Looper with HasState = {
     var registered = s.registered
-    var count = s.count
     val lock = new Object
-    new Looper(s"watch-state-event-thread-${eventThreadId.incrementAndGet()}") with HasWatchState {
-      def incrementCount(): Unit = lock.synchronized { count += 1 }
-      def state(): WatchState = lock.synchronized(s.withCount(count).withRegistered(registered))
+    new Looper(s"watch-state-event-thread-${eventThreadId.incrementAndGet()}") with HasState {
+      override def state(): WatchState = lock.synchronized(s.withRegistered(registered))
       override def loop(): Unit = {
-        recentEvents = recentEvents.filterNot(_._2.isOverdue)
-        getFilesForKey(s.service.poll(delay)).foreach(maybeTrigger)
+        trigger.updateRecentEvents()
+        getFilesForKey(s.service.poll(delay)).foreach(trigger.maybeTrigger)
       }
       def getFilesForKey(key: WatchKey): Vector[Path] = key match {
         case null => Vector.empty
@@ -218,25 +201,6 @@ private[sbt] object EventMonitor {
           Files.walk(dir).iterator.asScala
         } else Nil.iterator
       }
-      /*
-       * Triggers only if there is no pending Trigger and the file is not in an anti-entropy
-       * quarantine.
-       */
-      private def maybeTrigger(path: Path): Unit =
-        if (s.accept(path)) {
-          if (recentEvents.get(path).fold(false)(!_.isOverdue))
-            logger.debug(s"Ignoring watch event for $path due to anti-entropy constraint")
-          else
-            events.peek() match {
-              case Cancelled =>
-                logger.debug(s"Watch cancelled, not offering event for path $path")
-              case _ =>
-                recentEvents += path -> antiEntropy.fromNow
-                if (!events.offer(Triggered(path))) {
-                  logger.debug(s"Event already pending, dropping event for path: $path")
-                }
-            }
-        }
     }
   }
   // Shutup the compiler about unused arguments
@@ -264,34 +228,71 @@ private[sbt] object EventMonitor {
       }
     }
 
+  private[this] abstract class AntiEntropyEventMonitor(trigger: Trigger,
+                                                       s: WatchState,
+                                                       logger: Logger)
+      extends EventMonitor {
+    private[this] var _count = s.count
+    def count: Int = _count
+    override def awaitEvent(): Boolean = trigger.events.take() match {
+      case Cancelled => false
+      case Triggered(path) =>
+        _count += 1
+        logger.debug(s"Triggered event for path $path")
+        true
+    }
+  }
+
+  private class Trigger(val events: ArrayBlockingQueue[Event],
+                        accept: Path => Boolean,
+                        antiEntropy: FiniteDuration,
+                        logger: Logger) {
+    private[this] var recentEvents: Map[Path, Deadline] = Map.empty[Path, Deadline]
+    val maybeTrigger: Path => Unit = path => {
+      updateRecentEvents()
+      if (accept(path)) {
+        if (recentEvents.get(path).fold(false)(!_.isOverdue)) {
+          logger.debug(s"Ignoring watch event for $path due to anti-entropy constraint")
+        } else
+          events.peek() match {
+            case Cancelled =>
+              logger.debug(s"Watch cancelled, not offering event for path $path")
+            case _ =>
+              recentEvents = recentEvents + (path -> antiEntropy.fromNow)
+              if (!events.offer(Triggered(path))) {
+                logger.debug(s"Event already pending, dropping event for path: $path")
+              }
+          }
+      }
+    }
+    def updateRecentEvents(): Unit = { recentEvents = recentEvents.filterNot(_._2.isOverdue) }
+  }
+
   private abstract class Looper(name: String) extends Thread(name) with AutoCloseable {
-    private[this] var stopped = false
+    private[this] val stopped = new AtomicBoolean(false)
     private[this] var started = false
     private[this] val lock = new Object()
-    def isStopped: Boolean = this.synchronized(stopped)
     def loop(): Unit
     @tailrec
     private final def runImpl(firstTime: Boolean): Unit = {
-      if (firstTime) {
+      if (firstTime) lock.synchronized {
         started = true
-        lock.synchronized(lock.notifyAll)
+        lock.notifyAll()
       }
       try {
-        if (!isStopped) {
+        if (!stopped.get) {
           loop()
         }
       } catch {
-        case (_: ClosedWatchServiceException | _: InterruptedException) =>
-          this.synchronized { stopped = true }
+        case _: ClosedWatchServiceException | _: InterruptedException => stopped.set(true)
       }
-      if (!isStopped) {
+      if (!stopped.get) {
         runImpl(firstTime = false)
       }
     }
     override final def run(): Unit = runImpl(firstTime = true)
-    def close(): Unit = this.synchronized {
-      if (!stopped) {
-        stopped = true
+    def close(): Unit = {
+      if (stopped.compareAndSet(false, true)) {
         this.interrupt()
         this.join(5000)
       }
