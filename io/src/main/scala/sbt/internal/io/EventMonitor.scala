@@ -186,6 +186,7 @@ private[sbt] object EventMonitor {
                                  logger: Logger): Looper =
     new Looper(s"watch-state-user-input-${userInputId.incrementAndGet}") {
       override final def loop(): Unit = {
+        Thread.sleep(10)
         if (terminationCondition) {
           logger.debug("Received termination condition. Stopping watch...")
           events.peek match {
