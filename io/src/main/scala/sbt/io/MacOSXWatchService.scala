@@ -75,15 +75,15 @@ class MacOSXWatchService extends WatchService with Unregisterable {
       readyKeys.poll(timeout.toNanos, TimeUnit.NANOSECONDS)
     } else throw new ClosedWatchServiceException
 
-  override def pollEvents(): Map[WatchKey, Seq[WatchEvent[JPath]]] =
+  override def pollEvents(): Map[WatchKey, collection.Seq[WatchEvent[JPath]]] =
     registered
       .synchronized(registered.flatMap {
         case (_, (k, _)) =>
           val events = k.pollEvents()
-          if (events.isEmpty) None
-          else Some(k -> events.asScala.map(_.asInstanceOf[WatchEvent[JPath]]))
+          if (events.isEmpty) Nil
+          else Seq(k -> events.asScala.map(_.asInstanceOf[WatchEvent[JPath]]))
       })
-      .toMap[WatchKey, Seq[WatchEvent[JPath]]]
+      .toMap[WatchKey, collection.Seq[WatchEvent[JPath]]]
 
   override def register(path: JPath, events: WatchEvent.Kind[JPath]*): WatchKey = {
     if (isOpen) {

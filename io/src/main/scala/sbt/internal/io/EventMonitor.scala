@@ -127,7 +127,7 @@ private[sbt] object EventMonitor {
         recentEvents = recentEvents.filterNot(_._2.isOverdue)
         getFilesForKey(s.service.poll(delay)).foreach(maybeTrigger)
       }
-      def getFilesForKey(key: WatchKey): Seq[Path] = key match {
+      def getFilesForKey(key: WatchKey): collection.Seq[Path] = key match {
         case null => Nil
         case k =>
           val allEvents = k.pollEvents.asScala
