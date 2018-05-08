@@ -103,7 +103,7 @@ trait WatchService {
    * Does not wait if no event is available.
    * @return The pending events.
    */
-  def pollEvents(): Map[WatchKey, Seq[WatchEvent[JPath]]]
+  def pollEvents(): Map[WatchKey, collection.Seq[WatchEvent[JPath]]]
 
   /**
    * Retrieves the next `WatchKey` that has a `WatchEvent` waiting. Waits
