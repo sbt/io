@@ -106,10 +106,8 @@ private[sbt] object EventMonitor {
 
   private[io] def legacy(state: WatchState,
                          delay: FiniteDuration,
-                         terminationCondition: => Boolean): EventMonitor = {
-    val tc = () => { val res = terminationCondition; if (!res) Thread.sleep(10); res }
-    applyImpl(state, delay, 40.milliseconds, tc(), NullLogger, closeService = false)
-  }
+                         terminationCondition: => Boolean): EventMonitor =
+    applyImpl(state, delay, 40.milliseconds, terminationCondition, NullLogger, closeService = false)
 
   private trait HasWatchState {
     def state(): WatchState
