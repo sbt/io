@@ -7,7 +7,6 @@ import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
 import sbt.io.WatchService
 
 import scala.annotation.tailrec
-import scala.collection.Iterable
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
@@ -128,10 +127,10 @@ private[sbt] object EventMonitor {
         recentEvents = recentEvents.filterNot(_._2.isOverdue)
         getFilesForKey(s.service.poll(delay)).foreach(maybeTrigger)
       }
-      def getFilesForKey(key: WatchKey): Iterable[Path] = key match {
-        case null => Nil
+      def getFilesForKey(key: WatchKey): Vector[Path] = key match {
+        case null => Vector.empty
         case k =>
-          val allEvents = k.pollEvents.asScala
+          val allEvents = k.pollEvents.asScala.toVector
             .map(e => k.watchable.asInstanceOf[Path].resolve(e.context.asInstanceOf[Path]))
           logger.debug(s"Received events:\n${allEvents.mkString("\n")}")
           val (exist, notExist) = allEvents.partition(Files.exists(_))
@@ -145,15 +144,15 @@ private[sbt] object EventMonitor {
        * Returns new files found in new directory and any subdirectories, assuming that there is
        * a recursive source with a base that is parent to the directory.
        */
-      def filesForNewDirectory(dir: Path): Iterable[Path] = {
+      def filesForNewDirectory(dir: Path): Iterator[Path] = {
         lazy val recursive =
           s.sources.exists(src => dir.startsWith(src.base.toPath) && src.recursive)
         if (!registered.contains(dir) && recursive) {
           val dirs = Files.walk(dir).iterator.asScala.filter(Files.isDirectory(_))
           val newDirs = dirs.map(d => d -> s.register(d)).toIndexedSeq
           lock.synchronized { registered ++= newDirs }
-          Files.walk(dir).iterator.asScala.toIterable
-        } else Nil
+          Files.walk(dir).iterator.asScala
+        } else Nil.iterator
       }
       /*
        * Triggers only if there is no pending Trigger and the file is not in an anti-entropy
