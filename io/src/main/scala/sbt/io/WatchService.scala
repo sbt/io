@@ -29,12 +29,12 @@ object WatchService {
     override def init(): Unit =
       ()
 
-    override def pollEvents(): Map[WatchKey, Seq[WatchEvent[JPath]]] = {
+    override def pollEvents(): Map[WatchKey, immutable.Seq[WatchEvent[JPath]]] = {
       val values = registered.synchronized(registered.values.toIndexedSeq)
       values.flatMap { k =>
         val events = k.pollEvents()
         if (events.isEmpty) None
-        else Some((k, events.asScala.asInstanceOf[Seq[WatchEvent[JPath]]]))
+        else Some((k, events.asScala.asInstanceOf[Seq[WatchEvent[JPath]]].toIndexedSeq))
       }.toMap
     }
 
