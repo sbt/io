@@ -155,7 +155,7 @@ private class MacOSXWatchKey(val watchable: JPath, queueSize: Int, kinds: WatchE
     Collections.unmodifiableList(result)
   }
 
-  override def reset(): Boolean = { events.clear(); true }
+  override def reset(): Boolean = true
 
   override def toString = s"MacOSXWatchKey($watchable)"
 

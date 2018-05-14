@@ -348,6 +348,30 @@ abstract class SourceModificationWatchSpec(
     } finally monitor.close()
   }
 
+  it should "reset keys" in IO.withTemporaryDirectory { dir =>
+    val parentDir = dir / "src" / "watchme"
+    val file = parentDir / "Foo.scala"
+
+    writeNewFile(file, "foo")
+    // Longer timeout because there are many file system operations
+    val deadline = 5.seconds.fromNow
+    val monitor = defaultMonitor(getService, parentDir, tc = () => deadline.isOverdue)
+    try {
+      val n = 1000
+      val triggered0 = watchTest(monitor) {
+        (0 to n).foreach(i => IO.write(parentDir / s"Foo$i.scala", s"foo$i"))
+      }
+      assert(triggered0)
+      assert(IO.read(file) == s"foo")
+
+      val triggered1 = watchTest(monitor) {
+        IO.write(file, "baz")
+      }
+      assert(triggered1)
+      assert(IO.read(file) == "baz")
+    } finally monitor.close()
+  }
+
   "WatchService.poll" should "throw a `ClosedWatchServiceException` if used after `close`" in {
     val service = getService
     service.close()
