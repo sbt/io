@@ -130,8 +130,11 @@ private[sbt] object EventMonitor {
       def getFilesForKey(key: WatchKey): Vector[Path] = key match {
         case null => Vector.empty
         case k =>
-          val allEvents = k.pollEvents.asScala.toVector
-            .map(e => k.watchable.asInstanceOf[Path].resolve(e.context.asInstanceOf[Path]))
+          val rawEvents = k.pollEvents.asScala.toVector
+          k.reset()
+          val allEvents = rawEvents.flatMap { e =>
+            Option(e.context).map(c => k.watchable.asInstanceOf[Path].resolve(c.asInstanceOf[Path]))
+          }
           logger.debug(s"Received events:\n${allEvents.mkString("\n")}")
           val (exist, notExist) = allEvents.partition(Files.exists(_))
           val (updatedDirectories, updatedFiles) = exist.partition(Files.isDirectory(_))
