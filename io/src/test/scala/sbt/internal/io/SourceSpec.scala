@@ -26,7 +26,7 @@ class SourceSpec extends FlatSpec with Matchers {
   it should "apply exclude filter" in {
     val source = new Source(new File("/foo"),
                             new SimpleFileFilter(_.toString.endsWith(".scala")),
-                            new SimpleFileFilter(_.toString == "/foo/bar/buzz.scala"),
+                            new SimpleFileFilter(_ == sbt.io.syntax.file("/foo/bar/buzz.scala")),
                             true)
     source.accept(Paths.get("/foo/bar/baz.scala")) shouldBe true
     source.accept(Paths.get("/foo/bar/buzz.scala")) shouldBe false

@@ -21,8 +21,8 @@ class IOSpec extends FlatSpec with Matchers {
 
     val relativeRootDir = new File(nestedDir, "..")
 
-    IO.relativize(rootDir.toFile, nestedFile) shouldBe Some("meh.file")
-    IO.relativize(relativeRootDir, nestedFile) shouldBe Some("../../meh.file")
+    IO.relativize(rootDir.toFile, nestedFile).map(file) shouldBe Some(file("meh.file"))
+    IO.relativize(relativeRootDir, nestedFile).map(file) shouldBe Some(file("../../meh.file"))
   }
 
   it should "relativize . dirs" in {
@@ -43,8 +43,8 @@ class IOSpec extends FlatSpec with Matchers {
   }
 
   "toURI" should "make URI" in {
-    val u = IO.toURI(file("/etc/hosts"))
-    assert(u.toString == "file:///etc/hosts")
+    val u = IO.toURI(file("/etc/hosts").getAbsoluteFile)
+    assert(u.toString.startsWith("file:///") && u.toString.endsWith("etc/hosts"))
   }
 
   it should "make u0 URI from a relative path" in {
@@ -53,8 +53,8 @@ class IOSpec extends FlatSpec with Matchers {
   }
 
   it should "make URI that roundtrips" in {
-    val u = IO.toURI(file("/etc/hosts"))
-    assert(IO.toFile(u) == file("/etc/hosts"))
+    val u = IO.toURI(file("/etc/hosts").getAbsoluteFile)
+    assert(IO.toFile(u) == file("/etc/hosts").getAbsoluteFile)
   }
 
   it should "make u0 URI that roundtrips" in {
