@@ -130,8 +130,11 @@ private[sbt] object EventMonitor {
       def getFilesForKey(key: WatchKey): Vector[Path] = key match {
         case null => Vector.empty
         case k =>
-          val rawEvents = k.pollEvents.asScala.toVector
-          k.reset()
+          val rawEvents = k.synchronized {
+            val events = k.pollEvents.asScala.toVector
+            k.reset()
+            events
+          }
           val allEvents = rawEvents.flatMap { e =>
             Option(e.context).map(c => k.watchable.asInstanceOf[Path].resolve(c.asInstanceOf[Path]))
           }
