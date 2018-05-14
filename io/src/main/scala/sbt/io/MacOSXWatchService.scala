@@ -18,7 +18,7 @@ import com.swoval.files.apple.FileEventsApi.Consumer
 import com.swoval.files.apple.{ FileEvent, FileEventsApi, Flags }
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
+import scala.collection.{ immutable, mutable }
 import scala.concurrent.duration._
 
 class MacOSXWatchService extends WatchService with Unregisterable {
@@ -75,15 +75,15 @@ class MacOSXWatchService extends WatchService with Unregisterable {
       readyKeys.poll(timeout.toNanos, TimeUnit.NANOSECONDS)
     } else throw new ClosedWatchServiceException
 
-  override def pollEvents(): Map[WatchKey, collection.Seq[WatchEvent[JPath]]] =
+  override def pollEvents(): Map[WatchKey, immutable.Seq[WatchEvent[JPath]]] =
     registered
       .synchronized(registered.flatMap {
         case (_, (k, _)) =>
           val events = k.pollEvents()
           if (events.isEmpty) Nil
-          else Seq(k -> events.asScala.map(_.asInstanceOf[WatchEvent[JPath]]))
+          else Seq(k -> events.iterator.asScala.map(_.asInstanceOf[WatchEvent[JPath]]).toIndexedSeq)
       })
-      .toMap[WatchKey, collection.Seq[WatchEvent[JPath]]]
+      .toMap[WatchKey, immutable.Seq[WatchEvent[JPath]]]
 
   override def register(path: JPath, events: WatchEvent.Kind[JPath]*): WatchKey = {
     if (isOpen) {

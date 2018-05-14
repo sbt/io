@@ -10,7 +10,7 @@ import java.nio.file.{
 import java.util.concurrent.TimeUnit
 
 import scala.annotation.tailrec
-import scala.collection.mutable
+import scala.collection.{ immutable, mutable }
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.Duration
 
@@ -103,7 +103,7 @@ trait WatchService {
    * Does not wait if no event is available.
    * @return The pending events.
    */
-  def pollEvents(): Map[WatchKey, collection.Seq[WatchEvent[JPath]]]
+  def pollEvents(): Map[WatchKey, immutable.Seq[WatchEvent[JPath]]]
 
   /**
    * Retrieves the next `WatchKey` that has a `WatchEvent` waiting. Waits
