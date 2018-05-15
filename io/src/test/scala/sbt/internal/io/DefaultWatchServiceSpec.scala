@@ -13,6 +13,6 @@ object DefaultWatchServiceSpec {
 
 class DefaultWatchServiceSpec
     extends SourceModificationWatchSpec(
-      if (Properties.isMac) new MacOSXWatchService else FileSystems.getDefault.newWatchService,
+      _ => if (Properties.isMac) new MacOSXWatchService else FileSystems.getDefault.newWatchService,
       DefaultWatchServiceSpec.pollDelay
     )

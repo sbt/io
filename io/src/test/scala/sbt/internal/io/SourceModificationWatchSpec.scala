@@ -1,7 +1,7 @@
 package sbt.internal.io
 
 import java.io.IOException
-import java.nio.file.{ ClosedWatchServiceException, Paths }
+import java.nio.file.{ ClosedWatchServiceException, Files, Paths }
 
 import org.scalatest.{ Assertion, FlatSpec, Matchers }
 import sbt.io.syntax._
@@ -11,10 +11,11 @@ import scala.annotation.tailrec
 import scala.concurrent.duration._
 
 abstract class SourceModificationWatchSpec(
-    getService: => WatchService,
+    getServiceWithPollDelay: FiniteDuration => WatchService,
     pollDelay: FiniteDuration
 ) extends FlatSpec
     with Matchers {
+  def getService = getServiceWithPollDelay(10.milliseconds)
   val maxWait = 2 * pollDelay
   it should "detect modified files" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
@@ -348,28 +349,42 @@ abstract class SourceModificationWatchSpec(
     } finally monitor.close()
   }
 
-  it should "reset keys" in IO.withTemporaryDirectory { dir =>
-    val parentDir = dir / "src" / "watchme"
-    val file = parentDir / "Foo.scala"
+  it should "handle rapid creation of many subdirectories and files" in IO.withTemporaryDirectory {
+    dir =>
+      val parentDir = dir / "src" / "watchme"
+      Files.createDirectories(parentDir.toPath)
+      val subdirCount = 2000
+      val subdirFileCount = 4
+      var files = Seq.empty[File]
 
-    writeNewFile(file, "foo")
-    // Longer timeout because there are many file system operations
-    val deadline = 5.seconds.fromNow
-    val monitor = defaultMonitor(getService, parentDir, tc = () => deadline.isOverdue)
-    try {
-      val n = 1000
-      val triggered0 = watchTest(monitor) {
-        (0 to n).foreach(i => IO.write(parentDir / s"Foo$i.scala", s"foo$i"))
-      }
-      assert(triggered0)
-      assert(IO.read(file) == s"foo")
+      // Longer timeout because there are many file system operations. This can be very expensive
+      // especially in the PollingWatchSpec since both the PollingWatchService and the EventMonitor
+      // overflow handler are hammering the file system. To minimize the conflicts, we set a long
+      // interval between polls in the PollingWatchService using getServiceWithPollDelay.
+      val deadline = 20.seconds.fromNow
+      val monitor =
+        defaultMonitor(getServiceWithPollDelay(1.second), parentDir, tc = () => deadline.isOverdue)
+      try {
+        val triggered0 = watchTest(monitor) {
+          val subdirs =
+            (1 to subdirCount).map(i =>
+              Files.createDirectories(parentDir.toPath.resolve(s"subdir-$i")))
+          files = subdirs.flatMap { subdir =>
+            subdir.toFile +: (1 to subdirFileCount).map { j =>
+              Files.write(subdir.resolve(s"file-$j.scala"), s"foo".getBytes).toFile
+            }
+          }
+        }
+        val lastFile = files.last
+        assert(triggered0)
+        assert(IO.read(lastFile) == s"foo")
 
-      val triggered1 = watchTest(monitor) {
-        IO.write(file, "baz")
-      }
-      assert(triggered1)
-      assert(IO.read(file) == "baz")
-    } finally monitor.close()
+        val triggered1 = watchTest(monitor) {
+          IO.write(lastFile, "baz")
+        }
+        assert(triggered1)
+        assert(IO.read(lastFile) == "baz")
+      } finally monitor.close()
   }
 
   "WatchService.poll" should "throw a `ClosedWatchServiceException` if used after `close`" in {
