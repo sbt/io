@@ -331,7 +331,7 @@ abstract class SourceModificationWatchSpec(
       Source(parentDir.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
     var lines: Seq[String] = Nil
     val logger = new EventMonitor.Logger {
-      override def debug(msg: => Any): Unit = {
+      override def debug(msg: => Any): Unit = lines.synchronized {
         lines :+= msg.toString
       }
     }
