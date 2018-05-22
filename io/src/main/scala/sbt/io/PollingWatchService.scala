@@ -14,7 +14,7 @@ import java.util.{ List => JList }
 
 import sbt.io.syntax._
 
-import scala.collection.mutable
+import scala.collection.{ immutable, mutable }
 import scala.concurrent.duration.{ Duration, FiniteDuration }
 
 /** A `WatchService` that polls the filesystem every `delay`. */
@@ -51,11 +51,12 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
     }.orNull
   }
 
-  override def pollEvents(): Map[WatchKey, Seq[WatchEvent[JPath]]] =
+  override def pollEvents(): Map[WatchKey, immutable.Seq[WatchEvent[JPath]]] =
     thread.withKeys { keys =>
       import scala.collection.JavaConverters._
       ensureNotClosed()
-      val events = keys.map(k => k -> k.pollEvents().asScala.asInstanceOf[Seq[WatchEvent[JPath]]])
+      val events =
+        keys.map(k => k -> k.pollEvents().asScala.asInstanceOf[Seq[WatchEvent[JPath]]].toIndexedSeq)
       keys.clear()
       events.toMap
     }

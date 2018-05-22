@@ -10,7 +10,7 @@ import java.nio.file.{
 import java.util.concurrent.TimeUnit
 
 import scala.annotation.tailrec
-import scala.collection.mutable
+import scala.collection.{ immutable, mutable }
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.Duration
 
@@ -29,12 +29,12 @@ object WatchService {
     override def init(): Unit =
       ()
 
-    override def pollEvents(): Map[WatchKey, Seq[WatchEvent[JPath]]] = {
+    override def pollEvents(): Map[WatchKey, immutable.Seq[WatchEvent[JPath]]] = {
       val values = registered.synchronized(registered.values.toIndexedSeq)
       values.flatMap { k =>
         val events = k.pollEvents()
         if (events.isEmpty) None
-        else Some((k, events.asScala.asInstanceOf[Seq[WatchEvent[JPath]]]))
+        else Some((k, events.asScala.asInstanceOf[Seq[WatchEvent[JPath]]].toIndexedSeq))
       }.toMap
     }
 
@@ -103,7 +103,7 @@ trait WatchService {
    * Does not wait if no event is available.
    * @return The pending events.
    */
-  def pollEvents(): Map[WatchKey, collection.Seq[WatchEvent[JPath]]]
+  def pollEvents(): Map[WatchKey, immutable.Seq[WatchEvent[JPath]]]
 
   /**
    * Retrieves the next `WatchKey` that has a `WatchEvent` waiting. Waits
