@@ -58,4 +58,18 @@ val io = (project in file("io"))
       // protected[this]
       exclude[DirectMissingMethodProblem]("sbt.io.CopyOptions.copy*"),
     ),
+    scalacOptions := {
+      val old = scalacOptions.value
+      scalaBinaryVersion.value match {
+        case "2.12" => old
+        case _ =>
+          old filterNot Set(
+            "-Xfatal-warnings",
+            "-deprecation",
+            "-Ywarn-unused",
+            "-Ywarn-unused-import",
+            "-Yno-adapted-args",
+          )
+      }
+    }
   )
