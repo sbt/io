@@ -9,7 +9,9 @@ import java.nio.file.{
   Watchable,
   Path => JPath
 }
+import java.nio.file.StandardWatchEventKinds.OVERFLOW
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.{ List => JList }
 
 import sbt.io.syntax._
@@ -63,7 +65,7 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
 
   override def register(path: JPath, events: WatchEvent.Kind[JPath]*): WatchKey = {
     ensureNotClosed()
-    val key = new PollingWatchKey(path, new java.util.ArrayList[WatchEvent[_]])
+    val key = new PollingWatchKey(path)
     keys += path -> key
     thread.setFileTimes(path)
     watched += path -> events
@@ -80,11 +82,12 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
     if (closed) throw new ClosedWatchServiceException
 
   private class PollingThread(delay: FiniteDuration) extends Thread {
-    private[this] val _keysWithEvents = mutable.LinkedHashSet.empty[WatchKey]
+    private[this] val _keysWithEvents = mutable.LinkedHashSet.empty[PollingWatchKey]
     private[this] val _initDone = new AtomicBoolean(false)
     private[this] var fileTimes: Map[JPath, Long] = Map.empty
 
-    private[PollingWatchService] def withKeys[R](f: mutable.LinkedHashSet[WatchKey] => R): R =
+    private[PollingWatchService] def withKeys[R](
+        f: mutable.LinkedHashSet[PollingWatchKey] => R): R =
       _keysWithEvents.synchronized(f(_keysWithEvents))
 
     @deprecated("The initDone variable should not be accessed externally", "1.1.17")
@@ -92,7 +95,7 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
     @deprecated("The initDone variable should not be set externally", "1.1.17")
     def initDone_=(initDone: Boolean) = _initDone.set(initDone)
     @deprecated("Use withKeys instead of directly accessing keysWithEvents", "1.1.17")
-    def keysWithEvents: mutable.LinkedHashSet[WatchKey] = _keysWithEvents
+    def keysWithEvents: mutable.LinkedHashSet[PollingWatchKey] = _keysWithEvents
 
     override def run(): Unit =
       while (!closed) {
@@ -124,7 +127,7 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
     private def addEvent(path: JPath, ev: WatchEvent[JPath]): Unit = _keysWithEvents.synchronized {
       keys.get(path).foreach { k =>
         _keysWithEvents += k
-        k.events.add(ev)
+        k.offer(ev)
         _keysWithEvents.notifyAll()
       }
     }
@@ -173,30 +176,37 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
           }
       }
 
-      modifiedFiles.foreach {
-        case file =>
-          val parent = file.getParent
-          if (watched.getOrElse(parent, Seq.empty).contains(ENTRY_MODIFY)) {
-            val ev = new PollingWatchEvent(parent.relativize(file), ENTRY_MODIFY)
-            addEvent(parent, ev)
-          }
+      modifiedFiles.foreach { file =>
+        val parent = file.getParent
+        if (watched.getOrElse(parent, Seq.empty).contains(ENTRY_MODIFY)) {
+          val ev = new PollingWatchEvent(parent.relativize(file), ENTRY_MODIFY)
+          addEvent(parent, ev)
+        }
       }
     }
 
   }
 
-  private class PollingWatchKey(
-      override val watchable: Watchable,
-      val events: JList[WatchEvent[_]]
-  ) extends WatchKey {
+  private object Overflow
+      extends PollingWatchEvent(null, OVERFLOW.asInstanceOf[WatchEvent.Kind[JPath]])
+  private class PollingWatchKey(override val watchable: Watchable) extends WatchKey {
+    private[this] val events = new ArrayBlockingQueue[WatchEvent[_]](256)
+    private[this] val hasOverflow = new AtomicBoolean(false)
     override def cancel(): Unit = ()
     override def isValid(): Boolean = true
-    override def pollEvents(): java.util.List[WatchEvent[_]] = {
-      val evs = new java.util.ArrayList[WatchEvent[_]](events)
-      events.clear()
+    override def pollEvents(): JList[WatchEvent[_]] = this.synchronized {
+      val evs = new java.util.ArrayList[WatchEvent[_]]()
+      val overflow = hasOverflow.getAndSet(false)
+      events.drainTo(evs)
+      if (overflow) evs.add(Overflow)
       evs
     }
     override def reset(): Boolean = true
+    def offer(ev: WatchEvent[_]): Unit = this.synchronized {
+      if (!hasOverflow.get && !events.offer(ev)) {
+        hasOverflow.set(true)
+      }
+    }
   }
 
 }

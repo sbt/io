@@ -3,11 +3,20 @@
  */
 package sbt.io
 
-import java.io.File
+import java.io.{ File, IOException }
 import java.net.URL
+
 import scala.collection.mutable
 import java.nio.file.attribute._
-import java.nio.file.{ Path => NioPath, LinkOption, FileSystem, Files }
+import java.nio.file.{
+  FileSystem,
+  FileVisitResult,
+  FileVisitor,
+  Files,
+  LinkOption,
+  Path => NioPath
+}
+
 import scala.collection.JavaConverters._
 
 final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
@@ -439,9 +448,27 @@ private class DescendantOrSelfPathFinder(val parent: PathFinder, val filter: Fil
   }
 
   private def handleFileDescendant(file: File, fileSet: mutable.Set[File]): Unit = {
-    handleFile(file, fileSet)
-    for (childDirectory <- IO.wrapNull(file listFiles DirectoryFilter))
-      handleFileDescendant(new File(file, childDirectory.getName), fileSet)
+    Files.walkFileTree(
+      file.toPath,
+      new FileVisitor[NioPath] {
+        override def preVisitDirectory(dir: NioPath,
+                                       attrs: BasicFileAttributes): FileVisitResult = {
+          val file = dir.toFile
+          if (filter.accept(file)) fileSet += file
+          FileVisitResult.CONTINUE
+        }
+        override def visitFile(file: NioPath, attrs: BasicFileAttributes): FileVisitResult = {
+          val ioFile = file.toFile
+          if (filter.accept(ioFile)) fileSet += ioFile
+          FileVisitResult.CONTINUE
+        }
+        override def visitFileFailed(file: NioPath, exc: IOException): FileVisitResult =
+          FileVisitResult.SKIP_SUBTREE
+        override def postVisitDirectory(dir: NioPath, exc: IOException): FileVisitResult =
+          FileVisitResult.CONTINUE
+      }
+    )
+    ()
   }
 }
 

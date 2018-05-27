@@ -1,6 +1,9 @@
 package sbt.internal.io
 
-import java.nio.file.{ ClosedWatchServiceException, Files, Path, WatchKey }
+import java.io.IOException
+import java.nio.file.StandardWatchEventKinds.OVERFLOW
+import java.nio.file._
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
 
@@ -8,6 +11,7 @@ import sbt.io.WatchService
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.concurrent.duration._
 
 /**
@@ -135,8 +139,13 @@ private[sbt] object EventMonitor {
             k.reset()
             events
           }
-          val allEvents = rawEvents.flatMap { e =>
-            Option(e.context).map(c => k.watchable.asInstanceOf[Path].resolve(c.asInstanceOf[Path]))
+          val keyPath = k.watchable.asInstanceOf[Path]
+          val allEvents = rawEvents.flatMap {
+            case e if e.kind.equals(OVERFLOW) =>
+              handleOverflow(k)
+            case e if !e.kind.equals(OVERFLOW) && e.context != null =>
+              Some(keyPath.resolve(e.context.asInstanceOf[Path]))
+            case _ => None
           }
           logger.debug(s"Received events:\n${allEvents.mkString("\n")}")
           val (exist, notExist) = allEvents.partition(Files.exists(_))
@@ -146,11 +155,62 @@ private[sbt] object EventMonitor {
           notExist.foreach(s.unregister)
           updatedFiles ++ newFiles ++ notExist
       }
+
+      /*
+       * In the case of an overflow, we must poll the file system to find out if there are added
+       * or removed directories. When there are new directories, we also want to return file
+       * events for the files that are found therein. Because an overflow is likely to occur while
+       * a directory is still being modified, we poll repeatedly until we get the same list of
+       * files consecutively. We will not trigger for any files that are updated while the WatchKey
+       * is in the OVERFLOW state. There is no good way to fix this without caching mtimes for
+       * all of the files, which I don't think is worth doing at this juncture.
+       */
+      private def handleOverflow(key: WatchKey): Vector[Path] = lock.synchronized {
+        val allFiles = new mutable.HashSet[Path]
+        def getNewFiles(): Unit = {
+          allFiles.clear()
+          val path = key.watchable.asInstanceOf[Path]
+          Files.walkFileTree(
+            path,
+            new FileVisitor[Path] {
+              override def preVisitDirectory(dir: Path,
+                                             attrs: BasicFileAttributes): FileVisitResult = {
+                allFiles += dir
+                if (!registered.contains(dir)) registered += dir -> s.register(dir)
+                FileVisitResult.CONTINUE
+              }
+              override def visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult = {
+                allFiles += file
+                FileVisitResult.CONTINUE
+              }
+              override def visitFileFailed(file: Path, exc: IOException): FileVisitResult =
+                FileVisitResult.SKIP_SUBTREE
+              override def postVisitDirectory(dir: Path, exc: IOException): FileVisitResult =
+                FileVisitResult.CONTINUE
+            }
+          )
+          ()
+        }
+
+        var oldFiles = mutable.Set.empty[Path]
+        do {
+          oldFiles = allFiles
+          getNewFiles()
+        } while (oldFiles != allFiles)
+        registered --= registered.collect {
+          case (d, k) if !Files.exists(d) =>
+            k.reset()
+            k.cancel()
+            d
+        }
+        allFiles.toVector
+      }
+
       /*
        * Returns new files found in new directory and any subdirectories, assuming that there is
        * a recursive source with a base that is parent to the directory.
        */
-      def filesForNewDirectory(dir: Path): Iterator[Path] = {
+      private def filesForNewDirectory(dir: Path): Iterator[Path] = {
         lazy val recursive =
           s.sources.exists(src => dir.startsWith(src.base.toPath) && src.recursive)
         if (!registered.contains(dir) && recursive) {
@@ -164,7 +224,7 @@ private[sbt] object EventMonitor {
        * Triggers only if there is no pending Trigger and the file is not in an anti-entropy
        * quarantine.
        */
-      def maybeTrigger(path: Path): Unit =
+      private def maybeTrigger(path: Path): Unit =
         if (s.accept(path)) {
           if (recentEvents.get(path).fold(false)(!_.isOverdue))
             logger.debug(s"Ignoring watch event for $path due to anti-entropy constraint")

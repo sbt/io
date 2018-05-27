@@ -145,7 +145,7 @@ private class MacOSXWatchKey(val watchable: JPath, queueSize: Int, kinds: WatchE
 
   override def isValid: Boolean = valid.get
 
-  override def pollEvents(): JList[WatchEvent[_]] = {
+  override def pollEvents(): JList[WatchEvent[_]] = this.synchronized {
     val result = new mutable.ArrayBuffer[WatchEvent[_]](events.size).asJava
     events.drainTo(result)
     val overflowCount = overflow.getAndSet(0)
@@ -167,8 +167,10 @@ private class MacOSXWatchKey(val watchable: JPath, queueSize: Int, kinds: WatchE
   private val overflow = new AtomicInteger()
   private val valid = new AtomicBoolean(true)
 
-  @inline def addEvent(event: Event[JPath]): Unit = if (!events.offer(event)) {
-    overflow.incrementAndGet()
-    ()
+  @inline def addEvent(event: Event[JPath]): Unit = this.synchronized {
+    if (!events.offer(event)) {
+      overflow.incrementAndGet()
+      ()
+    }
   }
 }
