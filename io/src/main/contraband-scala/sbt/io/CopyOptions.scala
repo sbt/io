@@ -30,7 +30,7 @@ final class CopyOptions private (
   override def toString: String = {
     "CopyOptions(" + overwrite + ", " + preserveLastModified + ", " + preserveExecutable + ")"
   }
-  protected[this] def copy(overwrite: Boolean = overwrite, preserveLastModified: Boolean = preserveLastModified, preserveExecutable: Boolean = preserveExecutable): CopyOptions = {
+  private[this] def copy(overwrite: Boolean = overwrite, preserveLastModified: Boolean = preserveLastModified, preserveExecutable: Boolean = preserveExecutable): CopyOptions = {
     new CopyOptions(overwrite, preserveLastModified, preserveExecutable)
   }
   def withOverwrite(overwrite: Boolean): CopyOptions = {
@@ -45,6 +45,6 @@ final class CopyOptions private (
 }
 object CopyOptions {
   
-  def apply(): CopyOptions = new CopyOptions(false, false, true)
+  def apply(): CopyOptions = new CopyOptions()
   def apply(overwrite: Boolean, preserveLastModified: Boolean, preserveExecutable: Boolean): CopyOptions = new CopyOptions(overwrite, preserveLastModified, preserveExecutable)
 }
