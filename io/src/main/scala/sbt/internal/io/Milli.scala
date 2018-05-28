@@ -28,6 +28,7 @@ import com.sun.jna.platform.win32.WinBase.INVALID_HANDLE_VALUE
 import com.sun.jna.platform.win32.WinBase.FILETIME
 import com.sun.jna.platform.win32.WinError.ERROR_FILE_NOT_FOUND
 import com.sun.jna.platform.win32.WinError.ERROR_PATH_NOT_FOUND
+import com.sun.jna.platform.win32.WinError.ERROR_ACCESS_DENIED
 
 import sbt.io.JavaMilli
 import sbt.internal.io.MacJNA._
@@ -281,7 +282,7 @@ private object WinMilli extends MilliNative[FILETIME] {
                            null)
     if (hFile == INVALID_HANDLE_VALUE) {
       val err = GetLastError()
-      if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
+      if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND || err == ERROR_ACCESS_DENIED)
         throw new FileNotFoundException("Not found: " + lpFileName)
       else
         throw new IOException("CreateFile() failed with error " + GetLastError())
