@@ -30,9 +30,13 @@ import com.sun.jna.platform.win32.WinBase.INVALID_HANDLE_VALUE
 import com.sun.jna.platform.win32.WinBase.FILETIME
 import com.sun.jna.platform.win32.WinError.ERROR_FILE_NOT_FOUND
 import com.sun.jna.platform.win32.WinError.ERROR_PATH_NOT_FOUND
+import com.sun.jna.platform.win32.WinError.ERROR_ACCESS_DENIED
+import com.sun.jna.platform.win32.WinError.ERROR_SHARING_VIOLATION
 
 import sbt.io.JavaMilli
 import sbt.internal.io.MacJNA._
+
+import scala.annotation.tailrec
 
 private abstract class Stat[Time_T](size: Int) extends NativeMapped {
   val buffer = ByteBuffer.allocate(size).order(ByteOrder.nativeOrder())
@@ -272,8 +276,13 @@ private object MacMilli extends PosixMilliLong[Mac] {
 
 private object WinMilli extends MilliNative[FILETIME] {
   import Kernel32.INSTANCE.{ CreateFile, GetLastError, CloseHandle, GetFileTime, SetFileTime }
+  private final val MAX_GET_HANDLE_ATTEMPTS: Int = 10
 
-  private def getHandle(lpFileName: String, dwDesiredAccess: Int, dwShareMode: Int): HANDLE = {
+  @tailrec
+  private def getHandle(lpFileName: String,
+                        dwDesiredAccess: Int,
+                        dwShareMode: Int,
+                        attempt: Int = 0): HANDLE = {
     val hFile = CreateFile(lpFileName,
                            dwDesiredAccess,
                            dwShareMode,
@@ -283,12 +292,16 @@ private object WinMilli extends MilliNative[FILETIME] {
                            null)
     if (hFile == INVALID_HANDLE_VALUE) {
       val err = GetLastError()
-      if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
+      if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND || err == ERROR_ACCESS_DENIED)
         throw new FileNotFoundException("Not found: " + lpFileName)
-      else
+      else if (err == ERROR_SHARING_VIOLATION && attempt < MAX_GET_HANDLE_ATTEMPTS) {
+        Thread.sleep(1)
+        getHandle(lpFileName, dwDesiredAccess, dwShareMode, attempt + 1)
+      } else
         throw new IOException("CreateFile() failed with error " + GetLastError())
+    } else {
+      hFile
     }
-    hFile
   }
 
   protected def getModifiedTimeNative(filePath: String): FILETIME = {
