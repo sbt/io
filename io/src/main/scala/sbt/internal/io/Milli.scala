@@ -17,7 +17,6 @@ import com.sun.jna.{ Native => JNANative }
 import com.sun.jna.Platform
 
 import com.sun.jna.platform.win32.Kernel32
-import com.sun.jna.platform.win32.WinNT.GENERIC_READ
 import com.sun.jna.platform.win32.WinNT.FILE_SHARE_READ
 import com.sun.jna.platform.win32.WinNT.FILE_SHARE_WRITE
 import com.sun.jna.platform.win32.WinNT.FILE_SHARE_DELETE
@@ -30,6 +29,7 @@ import com.sun.jna.platform.win32.WinBase.INVALID_HANDLE_VALUE
 import com.sun.jna.platform.win32.WinBase.FILETIME
 import com.sun.jna.platform.win32.WinError.ERROR_FILE_NOT_FOUND
 import com.sun.jna.platform.win32.WinError.ERROR_PATH_NOT_FOUND
+import com.sun.jna.platform.win32.WinError.ERROR_ACCESS_DENIED
 
 import sbt.io.JavaMilli
 import sbt.internal.io.MacJNA._
@@ -285,6 +285,8 @@ private object WinMilli extends MilliNative[FILETIME] {
       val err = GetLastError()
       if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
         throw new FileNotFoundException("Not found: " + lpFileName)
+      else if (err == ERROR_ACCESS_DENIED)
+        throw new FileNotFoundException("Access denied: " + lpFileName)
       else
         throw new IOException("CreateFile() failed with error " + GetLastError())
     }
