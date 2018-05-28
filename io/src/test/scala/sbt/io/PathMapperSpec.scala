@@ -39,14 +39,14 @@ class PathMapperSpec extends fixture.FlatSpec with Matchers {
     IO.createDirectory(nestedDir.toFile)
     IO.touch(nestedDirFile)
 
-    val mappings = Path.directory(tempDirectory.toFile)
+    val mappings = Path.directory(tempDirectory.toFile).map { case (f, s) => (f, file(s)) }
 
-    mappings should contain theSameElementsAs List[(File, String)](
-      tempDirectory.toFile -> s"${tempDirectory.getFileName}",
-      nestedFile1 -> s"${tempDirectory.getFileName}/file1",
-      nestedFile2 -> s"${tempDirectory.getFileName}/file2",
-      nestedDir.toFile -> s"${tempDirectory.getFileName}/dir1",
-      nestedDirFile -> s"${tempDirectory.getFileName}/dir1/dir1-file1"
+    mappings should contain theSameElementsAs List(
+      tempDirectory.toFile -> file(s"${tempDirectory.getFileName}"),
+      nestedFile1 -> file(s"${tempDirectory.getFileName}/file1"),
+      nestedFile2 -> file(s"${tempDirectory.getFileName}/file2"),
+      nestedDir.toFile -> file(s"${tempDirectory.getFileName}/dir1"),
+      nestedDirFile -> file(s"${tempDirectory.getFileName}/dir1/dir1-file1")
     )
   }
 
@@ -86,13 +86,13 @@ class PathMapperSpec extends fixture.FlatSpec with Matchers {
     IO.createDirectory(nestedDir.toFile)
     IO.touch(nestedDirFile)
 
-    val mappings = Path.contentOf(tempDirectory.toFile)
+    val mappings = Path.contentOf(tempDirectory.toFile).map { case (f, s) => (f, file(s)) }
 
-    mappings should contain theSameElementsAs List[(File, String)](
-      nestedFile1 -> s"file1",
-      nestedFile2 -> s"file2",
-      nestedDir.toFile -> s"dir1",
-      nestedDirFile -> s"dir1/dir1-file1"
+    mappings should contain theSameElementsAs List(
+      nestedFile1 -> file(s"file1"),
+      nestedFile2 -> file(s"file2"),
+      nestedDir.toFile -> file(s"dir1"),
+      nestedDirFile -> file(s"dir1/dir1-file1")
     )
   }
 

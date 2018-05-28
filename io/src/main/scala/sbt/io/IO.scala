@@ -213,8 +213,8 @@ object IO {
     val created = translate("Could not create file " + absFile) { absFile.createNewFile() }
     if (created || absFile.isDirectory)
       ()
-    else if (setModified)
-      setModifiedTime(absFile, System.currentTimeMillis) // will throw exception if it cannot set the timestamp
+    else if (setModified && !setModifiedTimeOrFalse(absFile, System.currentTimeMillis))
+      sys.error("Could not update last modified time for file " + absFile)
   }
 
   /** Creates directories `dirs` and all parent directories.  It tries to work around a race condition in `File.mkdirs()` by retrying up to a limit.*/
@@ -1241,7 +1241,7 @@ object IO {
    */
   def getModifiedTimeOrZero(file: File): Long =
     try {
-      getModifiedTime(file)
+      Milli.getModifiedTime(file)
     } catch {
       case _: FileNotFoundException => 0L
     }

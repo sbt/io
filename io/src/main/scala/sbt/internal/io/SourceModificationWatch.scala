@@ -3,73 +3,33 @@
  */
 package sbt.internal.io
 
-import java.nio.file.{ Files, Path, WatchEvent, WatchKey }
 import java.nio.file.StandardWatchEventKinds._
+import java.nio.file.{ WatchService => _, _ }
 
-import sbt.io.{ DirectoryFilter, FileFilter, WatchService, AllPassFilter, NothingFilter }
+import sbt.io._
 import sbt.io.syntax._
 
-import scala.annotation.tailrec
-import scala.concurrent.duration.FiniteDuration
+import scala.collection.JavaConverters._
+import scala.concurrent.duration._
 
 private[sbt] object SourceModificationWatch {
 
   /**
    * Checks for modifications on the file system every `delay`,
    * until changes are detected or `terminationCondition` evaluates to `true`.
+   * Uses default anti-entropy time of 40.milliseconds.
    */
-  @tailrec
+  @deprecated("This is superseded by EventMonitor.watch", "1.1.7")
   def watch(delay: FiniteDuration, state: WatchState)(
-      terminationCondition: => Boolean
-  ): (Boolean, WatchState) = {
-    if (state.count == 0) (true, state.withCount(1))
-    else {
-      val events =
-        state.pollEvents().map(expandEvent)
-
-      if (events.isEmpty) {
-        if (terminationCondition) {
-          (false, state)
-        } else {
-          Thread.sleep(delay.toMillis)
-          watch(delay, state)(terminationCondition)
-        }
-      } else {
-        val previousFiles = state.registered.keySet
-        val newFiles = state.sources.flatMap(_.getUnfilteredPaths()).toSet
-        val createdFiles = newFiles diff previousFiles
-        val deletedFiles = previousFiles diff newFiles
-
-        // We may have events that are not relevant (e.g., created an empty directory.)
-        // We filter out those changes, so that we don't trigger unnecessarily.
-        val filteredDeleted = deletedFiles.filter(p => state.sources.exists(_.accept(p, false)))
-        val filteredCreated = createdFiles.filter(p => state.sources.exists(_.accept(p, false)))
-        val filteredModified = events.collect {
-          case (p, ENTRY_MODIFY) if state.sources.exists(_.accept(p, false)) => p
-        }
-
-        // Register and remove _unfiltered_ files. This is correct because directories
-        // are likely to be filtered out (for instance), but we should still add them
-        // to the files that are watched.
-        // We don't increment count because we don't know yet if we'll trigger.
-        val newState = state ++ createdFiles -- deletedFiles
-
-        if (filteredCreated.nonEmpty || filteredDeleted.nonEmpty || filteredModified.nonEmpty) {
-          (true, newState.withCount(newState.count + 1))
-        } else {
-          Thread.sleep(delay.toMillis)
-          watch(delay, newState)(terminationCondition)
-        }
-      }
-    }
-  }
-
-  private def expandEvent(event: (Path, WatchEvent[_])): (Path, WatchEvent.Kind[Path]) = {
-    event match {
-      case (base, ev) =>
-        val fullPath = base.resolve(ev.context().asInstanceOf[Path])
-        val kind = ev.kind().asInstanceOf[WatchEvent.Kind[Path]]
-        (fullPath, kind)
+      terminationCondition: => Boolean): (Boolean, WatchState) = {
+    if (state.count == 0) {
+      (true, state.withCount(1))
+    } else {
+      val eventMonitor = EventMonitor.legacy(state, delay, terminationCondition)
+      try {
+        val triggered = eventMonitor.awaitEvent()
+        (triggered, eventMonitor.state())
+      } finally eventMonitor.close()
     }
   }
 }
@@ -78,17 +38,22 @@ private[sbt] object SourceModificationWatch {
 private[sbt] final class WatchState private (
     val count: Int,
     private[sbt] val sources: Seq[Source],
-    service: WatchService,
+    private[sbt] val service: WatchService,
     private[sbt] val registered: Map[Path, WatchKey]
-) {
+) extends AutoCloseable {
+  def accept(p: Path): Boolean = sources.exists(_.accept(p))
+  def unregister(path: Path): Unit = service match {
+    case s: Unregisterable => s.unregister(path)
+    case _                 =>
+  }
 
   /** Removes all of `fs` from the watched paths. */
   private[sbt] def --(fs: Iterable[Path]): WatchState = {
     for {
-      f <- fs;
-      wk <- registered.get(f);
-      if (registered.values.count(_ == wk)) <= 1
-    } wk.cancel()
+      f <- fs
+      wk <- registered.get(f)
+      if registered.values.count(_ == wk) <= 1
+    } unregister(wk.watchable().asInstanceOf[Path])
     withRegistered(registered -- fs)
   }
 
@@ -98,12 +63,11 @@ private[sbt] final class WatchState private (
       fs.filter(Files.exists(_)).foldLeft(registered) {
         case (ks, d) if Files.isDirectory(d) =>
           if (ks.contains(d)) ks
-          else ks + (d -> service.register(d, WatchState.events: _*))
-
+          else ks + (d -> register(d))
         case (ks, f) =>
           val parent = f.getParent
-          if (ks.contains(parent)) ks + (f -> ks(parent))
-          else ks + (f -> service.register(parent, WatchState.events: _*))
+          if (!ks.contains(parent)) ks + (parent -> register(parent))
+          else ks
       }
     withRegistered(newKeys)
   }
@@ -116,6 +80,9 @@ private[sbt] final class WatchState private (
     }
   }
 
+  /** register a path with the watch service */
+  private[sbt] def register(path: Path): WatchKey = service.register(path, WatchState.events: _*)
+
   /** A new state, with a new `count`. */
   private[sbt] def withCount(count: Int): WatchState =
     new WatchState(count, sources, service, registered)
@@ -123,6 +90,11 @@ private[sbt] final class WatchState private (
   /** A new state, with new keys registered. */
   private[sbt] def withRegistered(registered: Map[Path, WatchKey]): WatchState =
     new WatchState(count, sources, service, registered)
+
+  /** Shutsdown the EventMonitor and the watch service. */
+  override def close(): Unit = {
+    service.close()
+  }
 }
 
 /**
@@ -153,7 +125,8 @@ final class Source(
       if (includeDirs) DirectoryFilter || includeFilter
       else includeFilter
 
-    p.startsWith(base.toPath) && inc.accept(p.toFile) && !excludeFilter.accept(p.toFile)
+    (if (!recursive) p.getParent == base.toPath else p.startsWith(base.toPath)) && inc.accept(
+      p.toFile) && !excludeFilter.accept(p.toFile)
   }
 
   /**
@@ -168,7 +141,7 @@ final class Source(
   def withRecursive(recursive: Boolean): Source =
     new Source(base, includeFilter, excludeFilter, recursive)
 
-  override def toString =
+  override def toString: String =
     s"""Source(
        |  base = $base,
        |  includeFilter = $includeFilter,
@@ -198,9 +171,18 @@ private[sbt] object WatchState {
    * @return An initial `WatchState`.
    */
   def empty(service: WatchService, sources: Seq[Source]): WatchState = {
-    val initFiles = sources.flatMap(_.getUnfilteredPaths())
+    val initFiles = sources.flatMap {
+      case s if s.recursive =>
+        val base = s.base.toPath
+        if (Files.exists(base)) {
+          Files.walk(base).iterator.asScala.collect {
+            case d if Files.isDirectory(d) => d.toRealPath()
+          }
+        } else Seq(base)
+      case s => Seq(s.base.toPath)
+    }.sorted
     assert(initFiles.nonEmpty)
-    val initState = new WatchState(0, sources, service, Map.empty) ++ initFiles
+    val initState = new WatchState(count = 1, sources, service, Map.empty) ++ initFiles
     service.init()
     initState
   }

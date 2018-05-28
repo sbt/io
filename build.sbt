@@ -30,7 +30,10 @@ val io = (project in file("io"))
   .settings(
     commonSettings,
     name := "IO",
-    libraryDependencies ++= Seq(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test),
+    libraryDependencies ++= {
+      if (scalaVersion.value startsWith "2.13.") Vector()
+      else Vector(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test)
+    } ++ Vector(appleFileEvents),
     libraryDependencies ++= Seq(jna, jnaPlatform),
     sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",
     initialCommands in console += "\nimport sbt.io._, syntax._",
@@ -51,12 +54,36 @@ val io = (project in file("io"))
       // MiMa doesn't understand private inner classes?
       // method this(sbt.io.PollingWatchService,sbt.io.PollingWatchService#PollingThread,java.nio.file.Watchable,java.util.List)Unit in class sbt.io.PollingWatchService#PollingWatchKey does not have a correspondent in current version
       exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingWatchKey.this"),
+
+      // This is a private class
+      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingWatchKey.events"),
+
+      // moved JavaMilli to sbt.io
+      exclude[MissingClassProblem]("sbt.internal.io.JavaMilli$"),
+      exclude[MissingClassProblem]("sbt.internal.io.JavaMilli"),
+
+      // protected[this]
+      exclude[DirectMissingMethodProblem]("sbt.io.CopyOptions.copy*"),
     ),
     BuildInfoPlugin.buildInfoDefaultSettings, // avoids BuildInfo generated in Compile scope
     addBuildInfoToConfig(Test),
     buildInfoKeys in Test := Seq[BuildInfoKey](target),
     buildInfoPackage in Test := "sbt.internal.io",
     buildInfoUsePackageAsPath in Test := true,
+    scalacOptions := {
+      val old = scalacOptions.value
+      scalaBinaryVersion.value match {
+        case "2.12" => old
+        case _ =>
+          old filterNot Set(
+            "-Xfatal-warnings",
+            "-deprecation",
+            "-Ywarn-unused",
+            "-Ywarn-unused-import",
+            "-Yno-adapted-args",
+          )
+      }
+    }
   )
 
 inThisBuild(Seq(
