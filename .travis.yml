@@ -46,16 +46,16 @@ matrix:
      language: java
      osx_image: xcode9.3
 
-   - scala: 2.13.0-M3
+   - scala: 2.13.0-M4
      env: CMD=compile
      os: linux
      dist: trusty
 
-   - scala: 2.13.0-M3
+   - scala: 2.13.0-M4
      os: osx
      env:
        CMD="compile"
-       TRAVIS_SCALA_VERSION=2.13.0-M3
+       TRAVIS_SCALA_VERSION=2.13.0-M4
      language: java
      osx_image: xcode9.3
 
