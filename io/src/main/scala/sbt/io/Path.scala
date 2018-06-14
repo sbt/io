@@ -10,6 +10,7 @@ import scala.collection.mutable
 import java.nio.file.attribute._
 import java.nio.file.{
   FileSystem,
+  FileVisitOption,
   FileVisitResult,
   FileVisitor,
   Files,
@@ -450,6 +451,8 @@ private class DescendantOrSelfPathFinder(val parent: PathFinder, val filter: Fil
   private def handleFileDescendant(file: File, fileSet: mutable.Set[File]): Unit = {
     Files.walkFileTree(
       file.toPath,
+      mutable.Set(FileVisitOption.FOLLOW_LINKS).asJava,
+      java.lang.Integer.MAX_VALUE,
       new FileVisitor[NioPath] {
         override def preVisitDirectory(dir: NioPath,
                                        attrs: BasicFileAttributes): FileVisitResult = {
