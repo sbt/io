@@ -31,8 +31,7 @@ val io = (project in file("io"))
     commonSettings,
     name := "IO",
     libraryDependencies ++= {
-      if (scalaVersion.value startsWith "2.13.") Vector()
-      else Vector(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test)
+      Vector(scalaCompiler.value % Test, scalaCheck % Test, scalatest.value % Test)
     } ++ Vector(appleFileEvents),
     libraryDependencies ++= Seq(jna, jnaPlatform),
     sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",

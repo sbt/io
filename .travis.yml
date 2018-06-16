@@ -47,14 +47,16 @@ matrix:
      osx_image: xcode9.3
 
    - scala: 2.13.0-M4
-     env: CMD=compile
+     env:
+       CMD="scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+       TRAVIS_SCALA_VERSION=2.13.0-M4
      os: linux
      dist: trusty
 
    - scala: 2.13.0-M4
      os: osx
      env:
-       CMD="compile"
+       CMD="scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
        TRAVIS_SCALA_VERSION=2.13.0-M4
      language: java
      osx_image: xcode9.3
