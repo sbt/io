@@ -33,7 +33,7 @@ import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeSet
-import scala.collection.mutable.{ HashMap, HashSet }
+import scala.collection.mutable.{ ArrayBuffer, HashMap, HashSet }
 import scala.reflect.{ Manifest => SManifest }
 import scala.util.control.NonFatal
 import scala.util.control.Exception._
@@ -462,35 +462,42 @@ object IO {
 
   /** Deletes `file`, recursively if it is a directory. */
   def delete(file: File): Unit = {
-    object deleter extends SimpleFileVisitor[NioPath] {
-      def deletePath(path: NioPath) =
-        translate("Error deleting " + path.toFile + ": ") {
-          try {
-            Files.delete(path)
-          } catch {
-            case _: NoSuchFileException => // ignore missing files
+    translate("Error during a recursive delete of path " + file + ": ") {
+      val b = try {
+        file.delete
+      } catch {
+        case _: NoSuchFileException => true // ignore missing file or dir
+      }
+      if (!b) {
+        val xs = new ArrayBuffer[NioPath]()
+        object walker extends SimpleFileVisitor[NioPath] {
+          override def visitFile(filePath: NioPath, attr: BasicFileAttributes): FileVisitResult = {
+            xs += filePath
+            FileVisitResult.CONTINUE
+          }
+          override def postVisitDirectory(dirPath: NioPath, e: IOException): FileVisitResult = {
+            if (e eq null) {
+              xs += dirPath
+              FileVisitResult.CONTINUE
+            } else throw e // directory iteration failed
           }
         }
-
-      override def visitFile(filePath: NioPath, attr: BasicFileAttributes): FileVisitResult = {
-        deletePath(filePath)
-        FileVisitResult.CONTINUE
+        Files.walkFileTree(file.toPath, walker)
+        xs.toArray
+          .sorted(Ordering[NioPath].reverse)
+          .iterator
+          .foreach(x =>
+            try {
+              try {
+                Files.delete(x)
+              } catch {
+                case NonFatal(_) => x.toFile.delete()
+              }
+            } catch {
+              case _: NoSuchFileException => // ignore missing file or dir
+          })
       }
-
-      override def postVisitDirectory(dirPath: NioPath, e: IOException): FileVisitResult = {
-        if (e eq null) {
-          deletePath(dirPath)
-          FileVisitResult.CONTINUE
-        } else throw e // directory iteration failed
-      }
-    }
-    translate("Error during a recursive delete of path " + file + ": ") {
-      try {
-        Files.walkFileTree(file.toPath, deleter)
-        ()
-      } catch {
-        case _: NoSuchFileException => // ignore missing file or dir
-      }
+      ()
     }
   }
 
