@@ -12,22 +12,14 @@ import java.io.{
   BufferedWriter,
   File,
   InputStream,
-  IOException,
   OutputStream,
   PrintWriter
 }
 import java.io.{ ObjectInputStream, ObjectStreamClass, FileNotFoundException }
 import java.net.{ URI, URISyntaxException, URL }
 import java.nio.charset.Charset
-import java.nio.file.{
-  FileSystems,
-  Files,
-  Path => NioPath,
-  SimpleFileVisitor,
-  FileVisitResult,
-  NoSuchFileException
-}
-import java.nio.file.attribute.{ PosixFilePermissions, BasicFileAttributes }
+import java.nio.file.FileSystems
+import java.nio.file.attribute.PosixFilePermissions
 import java.util.Properties
 import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
@@ -462,34 +454,12 @@ object IO {
 
   /** Deletes `file`, recursively if it is a directory. */
   def delete(file: File): Unit = {
-    object deleter extends SimpleFileVisitor[NioPath] {
-      def deletePath(path: NioPath) =
-        translate("Error deleting " + path.toFile + ": ") {
-          try {
-            Files.delete(path)
-          } catch {
-            case _: NoSuchFileException => // ignore missing files
-          }
-        }
-
-      override def visitFile(filePath: NioPath, attr: BasicFileAttributes): FileVisitResult = {
-        deletePath(filePath)
-        FileVisitResult.CONTINUE
-      }
-
-      override def postVisitDirectory(dirPath: NioPath, e: IOException): FileVisitResult = {
-        if (e eq null) {
-          deletePath(dirPath)
-          FileVisitResult.CONTINUE
-        } else throw e // directory iteration failed
-      }
-    }
-    translate("Error during a recursive delete of path " + file + ": ") {
-      try {
-        Files.walkFileTree(file.toPath, deleter)
+    translate("Error deleting file " + file + ": ") {
+      val deleted = file.delete()
+      if (!deleted && file.isDirectory) {
+        delete(listFiles(file))
+        file.delete
         ()
-      } catch {
-        case _: NoSuchFileException => // ignore missing file or dir
       }
     }
   }
