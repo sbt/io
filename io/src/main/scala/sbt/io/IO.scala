@@ -12,15 +12,14 @@ import java.io.{
   BufferedWriter,
   File,
   InputStream,
-  IOException,
   OutputStream,
   PrintWriter
 }
 import java.io.{ ObjectInputStream, ObjectStreamClass, FileNotFoundException }
 import java.net.{ URI, URISyntaxException, URL }
 import java.nio.charset.Charset
-import java.nio.file.{FileSystems, Files, Paths, Path, SimpleFileVisitor, FileVisitResult}
-import java.nio.file.attribute.{PosixFilePermissions, BasicFileAttributes}
+import java.nio.file.FileSystems
+import java.nio.file.attribute.PosixFilePermissions
 import java.util.Properties
 import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
@@ -455,24 +454,14 @@ object IO {
 
   /** Deletes `file`, recursively if it is a directory. */
   def delete(file: File): Unit = {
-    object deleter extends SimpleFileVisitor[Path] {
-      override def visitFile(file: Path, attr: BasicFileAttributes): FileVisitResult = {
-        translate("Error deleting file " + file.toFile + ": "){
-          Files.delete(file)
-        }
-        FileVisitResult.CONTINUE
-      }
-
-      override def postVisitDirectory(dir: Path, e: IOException): FileVisitResult = {
-        if (e eq null) {
-          translate("Error deleting file " + dir.toFile + ": ") {
-            Files.delete(dir)
-          }
-          FileVisitResult.CONTINUE
-        } else throw e // directory iteration failed
+    translate("Error deleting file " + file + ": ") {
+      val deleted = file.delete()
+      if (!deleted && file.isDirectory) {
+        delete(listFiles(file))
+        file.delete
+        ()
       }
     }
-    Files.walkFileTree(file.toPath, deleter)
   }
 
   /** Returns the children of directory `dir` that match `filter` in a non-null array.*/
