@@ -19,15 +19,8 @@ import java.io.{
 import java.io.{ ObjectInputStream, ObjectStreamClass, FileNotFoundException }
 import java.net.{ URI, URISyntaxException, URL }
 import java.nio.charset.Charset
-import java.nio.file.{
-  FileSystems,
-  Files,
-  Path => NioPath,
-  SimpleFileVisitor,
-  FileVisitResult,
-  NoSuchFileException
-}
-import java.nio.file.attribute.{ PosixFilePermissions, BasicFileAttributes }
+import java.nio.file.{FileSystems, Files, Paths, Path, SimpleFileVisitor, FileVisitResult}
+import java.nio.file.attribute.{PosixFilePermissions, BasicFileAttributes}
 import java.util.Properties
 import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
@@ -462,36 +455,24 @@ object IO {
 
   /** Deletes `file`, recursively if it is a directory. */
   def delete(file: File): Unit = {
-    object deleter extends SimpleFileVisitor[NioPath] {
-      override def visitFile(file: NioPath, attr: BasicFileAttributes): FileVisitResult = {
-        translate("Error deleting file " + file.toFile + ": ") {
-          try {
-            Files.delete(file)
-          } catch {
-            case e: NoSuchFileException =>
-          }
+    object deleter extends SimpleFileVisitor[Path] {
+      override def visitFile(file: Path, attr: BasicFileAttributes): FileVisitResult = {
+        translate("Error deleting file " + file.toFile + ": "){
+          Files.delete(file)
         }
         FileVisitResult.CONTINUE
       }
 
-      override def postVisitDirectory(dir: NioPath, e: IOException): FileVisitResult = {
+      override def postVisitDirectory(dir: Path, e: IOException): FileVisitResult = {
         if (e eq null) {
           translate("Error deleting file " + dir.toFile + ": ") {
-            try {
-              Files.delete(dir)
-            } catch {
-              case e: NoSuchFileException =>
-            }
+            Files.delete(dir)
           }
           FileVisitResult.CONTINUE
         } else throw e // directory iteration failed
       }
     }
-    try {
-      Files.walkFileTree(file.toPath, deleter)
-    } catch {
-      case e: NoSuchFileException =>
-    }
+    Files.walkFileTree(file.toPath, deleter)
   }
 
   /** Returns the children of directory `dir` that match `filter` in a non-null array.*/
