@@ -463,34 +463,34 @@ object IO {
   /** Deletes `file`, recursively if it is a directory. */
   def delete(file: File): Unit = {
     object deleter extends SimpleFileVisitor[NioPath] {
-      def deletePath(path: NioPath) =
-        translate("Error deleting " + path.toFile + ": ") {
+      override def visitFile(file: NioPath, attr: BasicFileAttributes): FileVisitResult = {
+        translate("Error deleting file " + file.toFile + ": ") {
           try {
-            Files.delete(path)
+            Files.delete(file)
           } catch {
-            case _: NoSuchFileException => // ignore missing files
+            case e: NoSuchFileException =>
           }
         }
-
-      override def visitFile(filePath: NioPath, attr: BasicFileAttributes): FileVisitResult = {
-        deletePath(filePath)
         FileVisitResult.CONTINUE
       }
 
-      override def postVisitDirectory(dirPath: NioPath, e: IOException): FileVisitResult = {
+      override def postVisitDirectory(dir: NioPath, e: IOException): FileVisitResult = {
         if (e eq null) {
-          deletePath(dirPath)
+          translate("Error deleting file " + dir.toFile + ": ") {
+            try {
+              Files.delete(dir)
+            } catch {
+              case e: NoSuchFileException =>
+            }
+          }
           FileVisitResult.CONTINUE
         } else throw e // directory iteration failed
       }
     }
-    translate("Error during a recursive delete of path " + file + ": ") {
-      try {
-        Files.walkFileTree(file.toPath, deleter)
-        ()
-      } catch {
-        case _: NoSuchFileException => // ignore missing file or dir
-      }
+    try {
+      Files.walkFileTree(file.toPath, deleter)
+    } catch {
+      case e: NoSuchFileException =>
     }
   }
 
