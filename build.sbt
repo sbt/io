@@ -12,7 +12,7 @@ lazy val ioRoot = (project in file("."))
   .settings(
     inThisBuild(
       Seq(
-        git.baseVersion := "1.2.0",
+        git.baseVersion := "1.2.1",
         bintrayPackage := "io",
         homepage := Some(url("https://github.com/sbt/io")),
         description := "IO module for sbt",
@@ -38,10 +38,11 @@ val io = (project in file("io"))
     initialCommands in console += "\nimport sbt.io._, syntax._",
     mimaPreviousArtifacts := (CrossVersion partialVersion scalaVersion.value match {
       case Some((2, n)) if n >= 13 => Set.empty
-      case _                       => 
+      case _                       =>
         Set(
           "1.0.0", "1.0.1", "1.0.2",
           "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4",
+          "1.2.0",
         ) map (version => organization.value %% moduleName.value % version)
     }),
     mimaBinaryIssueFilters ++= Seq(
