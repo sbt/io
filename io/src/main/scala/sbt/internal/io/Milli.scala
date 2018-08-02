@@ -20,6 +20,8 @@ import com.sun.jna.platform.win32.Kernel32
 import com.sun.jna.platform.win32.WinNT.GENERIC_READ
 import com.sun.jna.platform.win32.WinNT.FILE_SHARE_READ
 import com.sun.jna.platform.win32.WinNT.FILE_SHARE_WRITE
+import com.sun.jna.platform.win32.WinNT.FILE_SHARE_DELETE
+import com.sun.jna.platform.win32.WinNT.FILE_READ_ATTRIBUTES
 import com.sun.jna.platform.win32.WinNT.FILE_WRITE_ATTRIBUTES
 import com.sun.jna.platform.win32.WinNT.FILE_FLAG_BACKUP_SEMANTICS
 import com.sun.jna.platform.win32.WinNT.OPEN_EXISTING
@@ -28,6 +30,7 @@ import com.sun.jna.platform.win32.WinBase.INVALID_HANDLE_VALUE
 import com.sun.jna.platform.win32.WinBase.FILETIME
 import com.sun.jna.platform.win32.WinError.ERROR_FILE_NOT_FOUND
 import com.sun.jna.platform.win32.WinError.ERROR_PATH_NOT_FOUND
+import com.sun.jna.platform.win32.WinError.ERROR_ACCESS_DENIED
 
 import sbt.io.JavaMilli
 import sbt.internal.io.MacJNA._
@@ -283,6 +286,8 @@ private object WinMilli extends MilliNative[FILETIME] {
       val err = GetLastError()
       if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
         throw new FileNotFoundException("Not found: " + lpFileName)
+      else if (err == ERROR_ACCESS_DENIED)
+        throw new FileNotFoundException("Access denied: " + lpFileName)
       else
         throw new IOException("CreateFile() failed with error " + GetLastError())
     }
@@ -290,7 +295,7 @@ private object WinMilli extends MilliNative[FILETIME] {
   }
 
   protected def getModifiedTimeNative(filePath: String): FILETIME = {
-    val hFile = getHandle(filePath, GENERIC_READ, FILE_SHARE_READ)
+    val hFile = getHandle(filePath, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
     val mtime = try {
       val modifiedTime = new FILETIME.ByReference()
       if (!GetFileTime(hFile, /*creationTime*/ null, /*accessTime*/ null, modifiedTime))
@@ -306,7 +311,7 @@ private object WinMilli extends MilliNative[FILETIME] {
   }
 
   protected def setModifiedTimeNative(filePath: String, fileTime: FILETIME): Unit = {
-    val hFile = getHandle(filePath, FILE_WRITE_ATTRIBUTES, FILE_SHARE_WRITE)
+    val hFile = getHandle(filePath, FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
     try {
       if (SetFileTime(hFile, null, null, fileTime) == 0)
         throw new IOException(
