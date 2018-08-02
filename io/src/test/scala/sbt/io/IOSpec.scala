@@ -22,7 +22,7 @@ class IOSpec extends FlatSpec with Matchers {
     val relativeRootDir = new File(nestedDir, "..")
 
     IO.relativize(rootDir.toFile, nestedFile).map(file) shouldBe Some(file("meh.file"))
-    IO.relativize(relativeRootDir, nestedFile).map(file) shouldBe Some(file("../../meh.file"))
+    IO.relativize(relativeRootDir, nestedFile).map(file) shouldBe Some(file("meh.file"))
   }
 
   it should "relativize . dirs" in {

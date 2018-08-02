@@ -608,12 +608,14 @@ object IO {
    * If `file` or `base` are not absolute, they are first resolved against the current working directory.
    */
   def relativize(base: File, file: File): Option[String] = {
-    val basePath = (if (base.isAbsolute) base else base.getCanonicalFile).toPath
-    val filePath = (if (file.isAbsolute) file else file.getCanonicalFile).toPath
-    if ((filePath startsWith basePath) || (filePath.normalize() startsWith basePath.normalize())) {
+    val basePath = (if (base.isAbsolute) base else base.getCanonicalFile).toPath.normalize()
+    val filePath = (if (file.isAbsolute) file else file.getCanonicalFile).toPath.normalize()
+    if (filePath startsWith basePath) {
       val relativePath = catching(classOf[IllegalArgumentException]) opt (basePath relativize filePath)
       relativePath map (_.toString)
-    } else None
+    } else {
+      None
+    }
   }
 
   def copy(sources: Traversable[(File, File)]): Set[File] = copy(sources, CopyOptions())
