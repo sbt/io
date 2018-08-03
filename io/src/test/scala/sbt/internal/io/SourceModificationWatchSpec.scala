@@ -360,8 +360,10 @@ abstract class SourceModificationWatchSpec(
       // Longer timeout because there are many file system operations. This can be very expensive
       // especially in the PollingWatchSpec since both the PollingWatchService and the EventMonitor
       // overflow handler are hammering the file system. To minimize the conflicts, we set a long
-      // interval between polls in the PollingWatchService using getServiceWithPollDelay.
-      val deadline = 20.seconds.fromNow
+      // interval between polls in the PollingWatchService using getServiceWithPollDelay. The
+      // timeout was increased from 20.seconds to 40.seconds to address transient failures of
+      // this test on Appveyor windows builds.
+      val deadline = 40.seconds.fromNow
       val monitor =
         defaultMonitor(getServiceWithPollDelay(1.second), parentDir, tc = () => deadline.isOverdue)
       try {
