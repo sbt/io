@@ -4,19 +4,21 @@ import java.io.IOException
 import java.nio.file.{ ClosedWatchServiceException, Files, Paths }
 
 import org.scalatest.{ Assertion, FlatSpec, Matchers }
+import sbt.internal.io.EventMonitor.{ Logger, NullLogger }
 import sbt.io.syntax._
 import sbt.io.{ IO, SimpleFilter, WatchService }
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
 
-abstract class SourceModificationWatchSpec(
-    getServiceWithPollDelay: FiniteDuration => WatchService,
-    pollDelay: FiniteDuration
-) extends FlatSpec
-    with Matchers {
-  def getService = getServiceWithPollDelay(10.milliseconds)
+private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
+  def pollDelay: FiniteDuration
+  def newEventMonitor(sources: Seq[Source],
+                      antiEntropy: FiniteDuration = 0.milliseconds,
+                      tc: () => Boolean = defaultTerminationCondition,
+                      logger: Logger = NullLogger): EventMonitor
   val maxWait = 2 * pollDelay
+
   it should "detect modified files" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val file = parentDir / "Foo.scala"
@@ -242,7 +244,7 @@ abstract class SourceModificationWatchSpec(
           secondDeadline.isOverdue()
         }
       }
-      val monitor = defaultMonitor(getService, parentDir, tc = tc)
+      val monitor = defaultMonitor(parentDir, tc = tc)
       try {
         val triggered0 = watchTest(monitor) {
           IO.createDirectory(subDir)
@@ -266,7 +268,7 @@ abstract class SourceModificationWatchSpec(
 
       IO.createDirectory(parentDir)
 
-      val monitor = defaultMonitor(getService, parentDir)
+      val monitor = defaultMonitor(parentDir)
       try {
         val triggered0 = watchTest(monitor) {
           IO.createDirectory(subDir)
@@ -289,7 +291,7 @@ abstract class SourceModificationWatchSpec(
       val file = parentDir / "Foo.scala"
 
       writeNewFile(file, "foo")
-      val monitor = defaultMonitor(getService, parentDir, antiEntropy = maxWait * 2)
+      val monitor = defaultMonitor(parentDir, antiEntropy = maxWait * 2)
       try {
         val triggered0 = watchTest(monitor) {
           IO.write(file, "bar")
@@ -312,7 +314,7 @@ abstract class SourceModificationWatchSpec(
         Source(dir.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith(".")))
           .withRecursive(false)
       val tc = defaultTerminationCondition
-      val monitor = addMonitor(WatchState.empty(getService, Seq(source)), 0.seconds, tc = tc())
+      val monitor: EventMonitor = newEventMonitor(Seq(source), 0.millis, tc)
       try {
         val triggered = watchTest(monitor) {
           IO.write(file, "foo")
@@ -337,8 +339,7 @@ abstract class SourceModificationWatchSpec(
       }
     }
     val tc = defaultTerminationCondition
-    val monitor =
-      EventMonitor(WatchState.empty(getService, sources), pollDelay, 0.seconds, tc(), logger)
+    val monitor = newEventMonitor(sources, 0.seconds, tc, logger)
     try {
       val triggered = watchTest(monitor) {
         IO.write(file, "bar")
@@ -364,8 +365,7 @@ abstract class SourceModificationWatchSpec(
       // timeout was increased from 20.seconds to 40.seconds to address transient failures of
       // this test on Appveyor windows builds.
       val deadline = 40.seconds.fromNow
-      val monitor =
-        defaultMonitor(getServiceWithPollDelay(1.second), parentDir, tc = () => deadline.isOverdue)
+      val monitor = defaultMonitor(parentDir, tc = () => deadline.isOverdue)
       try {
         val triggered0 = watchTest(monitor) {
           val subdirs =
@@ -388,6 +388,57 @@ abstract class SourceModificationWatchSpec(
         assert(IO.read(lastFile) == "baz")
       } finally monitor.close()
   }
+  def watchTest(eventMonitor: EventMonitor)(modifier: => Unit): Boolean = {
+    modifier
+    eventMonitor.awaitEvent()
+  }
+
+  def watchTest(base: File, expectedTrigger: Boolean = true)(modifier: => Unit): Assertion = {
+    val sources = Seq(
+      Source(base.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
+    val monitor = newEventMonitor(sources)
+    try {
+      val triggered = watchTest(monitor)(modifier)
+      triggered shouldBe expectedTrigger
+    } finally monitor.close()
+  }
+
+  def defaultTerminationCondition: () => Boolean = {
+    lazy val deadline = maxWait.fromNow
+    () =>
+      {
+        val res = deadline.isOverdue()
+        if (!res) Thread.sleep(5)
+        res
+      }
+  }
+
+  private def defaultMonitor(base: File,
+                             antiEntropy: FiniteDuration = 0.milliseconds,
+                             tc: () => Boolean = defaultTerminationCondition,
+                             logger: Logger = NullLogger): EventMonitor = {
+    val sources = Seq(
+      Source(base.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
+    newEventMonitor(sources, antiEntropy, tc, logger)
+  }
+  @tailrec
+  final def writeNewFile(file: File, content: String, attempt: Int = 0): Unit = {
+    if (attempt == 0) IO.write(file, content)
+    // IO.setModifiedTimeOrFalse sometimes throws an invalid argument exception
+    val res = try {
+      IO.setModifiedTimeOrFalse(file, (Deadline.now - 5.seconds).timeLeft.toMillis)
+    } catch { case _: IOException if attempt < 10 => false }
+    if (!res) writeNewFile(file, content, attempt + 1)
+  }
+
+}
+abstract class SourceModificationWatchSpec(
+    getServiceWithPollDelay: FiniteDuration => WatchService,
+    override val pollDelay: FiniteDuration
+) extends FlatSpec
+    with Matchers
+    with EventMonitorSpec {
+  def getService = getServiceWithPollDelay(10.milliseconds)
 
   "WatchService.poll" should "throw a `ClosedWatchServiceException` if used after `close`" in {
     val service = getService
@@ -407,50 +458,10 @@ abstract class SourceModificationWatchSpec(
     service.close()
   }
 
-  private def watchTest(eventMonitor: EventMonitor)(modifier: => Unit): Boolean = {
-    modifier
-    eventMonitor.awaitEvent()
-  }
-
-  private def watchTest(base: File, expectedTrigger: Boolean = true)(
-      modifier: => Unit): Assertion = {
-    val monitor = defaultMonitor(getService, base)
-    try {
-      val triggered = watchTest(monitor)(modifier)
-      triggered shouldBe expectedTrigger
-    } finally monitor.close()
-  }
-
-  private def defaultTerminationCondition: () => Boolean = {
-    lazy val deadline = maxWait.fromNow
-    () =>
-      {
-        val res = deadline.isOverdue()
-        if (!res) Thread.sleep(5)
-        res
-      }
-  }
-  private def addMonitor(s: WatchState,
-                         antiEntropy: FiniteDuration,
-                         tc: => Boolean): EventMonitor = {
-    EventMonitor(s, pollDelay, antiEntropy, tc)
-  }
-  private def defaultMonitor(service: WatchService,
-                             base: File,
-                             antiEntropy: FiniteDuration = 0.milliseconds,
-                             tc: () => Boolean = defaultTerminationCondition): EventMonitor = {
-    val sources = Seq(
-      Source(base.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
-    addMonitor(WatchState.empty(service, sources), antiEntropy, tc())
-  }
-
-  @tailrec
-  private def writeNewFile(file: File, content: String, attempt: Int = 0): Unit = {
-    if (attempt == 0) IO.write(file, content)
-    // IO.setModifiedTimeOrFalse sometimes throws an invalid argument exception
-    val res = try {
-      IO.setModifiedTimeOrFalse(file, (Deadline.now - 5.seconds).timeLeft.toMillis)
-    } catch { case _: IOException if attempt < 10 => false }
-    if (!res) writeNewFile(file, content, attempt + 1)
+  override def newEventMonitor(sources: Seq[Source],
+                               antiEntropy: FiniteDuration,
+                               tc: () => Boolean,
+                               logger: Logger): EventMonitor = {
+    EventMonitor(WatchState.empty(getService, sources), pollDelay, antiEntropy, tc(), logger)
   }
 }
