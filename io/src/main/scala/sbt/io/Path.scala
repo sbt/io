@@ -377,7 +377,7 @@ sealed abstract class PathFinder {
    * Typical usage is <code>descendantsExcept("*.jar", ".svn")</code>
    */
   def descendantsExcept(include: FileFilter, intermediateExclude: FileFilter): PathFinder =
-    (this ** include) --- (this ** intermediateExclude ** include)
+    this ** (include -- intermediateExclude)
 
   /**
    * Evaluates this finder and converts the results to a `Seq` of distinct `File`s.
