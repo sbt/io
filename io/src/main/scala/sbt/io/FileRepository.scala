@@ -1,7 +1,9 @@
 package sbt.io
 
 import java.io.IOException
-import java.nio.file.{ Path => JPath }
+import java.nio.file.LinkOption.NOFOLLOW_LINKS
+import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.{ Files, Path => JPath }
 
 import sbt.io.FileTreeDataView.{ Entry, Observable }
 
@@ -46,6 +48,30 @@ trait TypedPath {
   def isSymbolicLink: Boolean
 
   override def toString: String = s"TypedPath($getPath)"
+}
+
+object TypedPath {
+  def apply(path: JPath): TypedPath = new TypedPath {
+    private val attrs = try {
+      Some(Files.readAttributes(path, classOf[BasicFileAttributes], NOFOLLOW_LINKS))
+    } catch {
+      case _: IOException =>
+        None
+    }
+    override def getPath: JPath = path
+    override val exists: Boolean = attrs.isDefined
+    override val isDirectory: Boolean = attrs.fold(false)(_.isDirectory)
+    override val isFile: Boolean = attrs.fold(false)(_.isRegularFile)
+    override val isSymbolicLink: Boolean = attrs.fold(false)(_.isSymbolicLink)
+    override lazy val toRealPath: JPath = attrs
+      .flatMap(a =>
+        try {
+          if (a.isSymbolicLink) Some(path.toRealPath()) else Some(path)
+        } catch {
+          case _: IOException => None
+      })
+      .getOrElse(path)
+  }
 }
 
 /**
