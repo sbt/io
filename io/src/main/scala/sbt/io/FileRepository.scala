@@ -3,8 +3,9 @@ package sbt.io
 import java.io.IOException
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.nio.file.attribute.BasicFileAttributes
-import java.nio.file.{ Files, Path => JPath }
+import java.nio.file.{ Files, NoSuchFileException, Path => JPath }
 
+import sbt.internal.io.{ DefaultFileTreeView, FileRepositoryImpl }
 import sbt.io.FileTreeDataView.{ Entry, Observable }
 
 /**
@@ -63,14 +64,6 @@ object TypedPath {
     override val isDirectory: Boolean = attrs.fold(false)(_.isDirectory)
     override val isFile: Boolean = attrs.fold(false)(_.isRegularFile)
     override val isSymbolicLink: Boolean = attrs.fold(false)(_.isSymbolicLink)
-    override lazy val toRealPath: JPath = attrs
-      .flatMap(a =>
-        try {
-          if (a.isSymbolicLink) Some(path.toRealPath()) else Some(path)
-        } catch {
-          case _: IOException => None
-      })
-      .getOrElse(path)
   }
 }
 
@@ -99,6 +92,28 @@ trait FileTreeView extends AutoCloseable {
 object FileTreeView {
   object AllPass extends (Any => Boolean) {
     override def apply(e: Any): Boolean = true
+  }
+  val DEFAULT: FileTreeView = DefaultFileTreeView
+  private class FileTreeDataViewFromFileTreeView[+T](view: FileTreeView, converter: TypedPath => T)
+      extends FileTreeDataView[T] {
+    override def listEntries(path: JPath,
+                             maxDepth: Int,
+                             filter: Entry[T] => Boolean): Seq[Entry[T]] =
+      list(path, maxDepth, (_: TypedPath) => true)
+        .flatMap(tp => Some(Entry(tp, Entry.converter(converter))).filter(filter))
+    override def list(path: JPath, maxDepth: Int, filter: TypedPath => Boolean): Seq[TypedPath] =
+      try {
+        view.list(path, maxDepth, filter)
+      } catch {
+        case _: NoSuchFileException => Nil
+      }
+
+    override def close(): Unit = view.close()
+  }
+  implicit class FileTreeViewOps(val fileTreeView: FileTreeView) extends AnyVal {
+    // scala 2.10 wouldn't compile when this was implemented with an anonymous class
+    def asDataView[T](f: TypedPath => T): FileTreeDataView[T] =
+      new FileTreeDataViewFromFileTreeView[T](fileTreeView, f)
   }
 }
 
@@ -130,8 +145,8 @@ trait FileTreeDataView[+T] extends FileTreeView with AutoCloseable {
 }
 
 object FileTreeDataView {
-  abstract case class Entry[+T](path: JPath, value: Either[IOException, T]) extends TypedPath {
-    override def toString: String = s"Entry($path, $value)"
+  final case class Entry[+T](typedPath: TypedPath, value: Either[IOException, T]) {
+    override def toString: String = s"Entry(${typedPath.getPath}, $value)"
   }
 
   /**
@@ -217,6 +232,25 @@ object FileTreeDataView {
      */
     def removeObserver(handle: Int): Unit
   }
+
+  object Entry {
+
+    def converter[T](f: TypedPath => T): TypedPath => Either[IOException, T] =
+      (typedPath: TypedPath) =>
+        try {
+          Right(f(typedPath))
+        } catch {
+          case e: IOException => Left(e)
+      }
+    def apply[T](typedPath: TypedPath, converter: TypedPath => Either[IOException, T]): Entry[T] =
+      Entry(typedPath, converter(typedPath))
+  }
+
+  implicit class CallbackOps[-T](val callback: Entry[T] => Unit)
+      extends Observer.Impl[T](callback(_: Entry[T]),
+                               callback(_: Entry[T]),
+                               (_: Entry[T], newEntry: Entry[T]) => callback(newEntry))
+
 }
 
 /**
@@ -250,4 +284,17 @@ trait FileRepository[+T] extends Observable[T] with FileTreeDataView[T] with Aut
    * @param path the path to stop monitoring
    */
   def unregister(path: JPath): Unit
+}
+
+object FileRepository {
+
+  /**
+   * Create a [[FileRepository]]. The generated repository will cache the file system tree for the
+   * monitored directories.
+   * @param converter function to generate an [[FileTreeDataView.Entry.value]] from a [[TypedPath]]
+   * @tparam T the generic type of the [[FileTreeDataView.Entry.value]]
+   * @return a file repository.
+   */
+  def default[T](converter: TypedPath => T): FileRepository[T] =
+    new FileRepositoryImpl[T](converter)
 }
