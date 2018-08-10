@@ -32,7 +32,7 @@ val io = (project in file("io"))
     name := "IO",
     libraryDependencies ++= {
       Vector(scalaCompiler.value % Test, scalaCheck % Test, scalatest.value % Test)
-    } ++ Vector(appleFileEvents),
+    } ++ Vector(swovalFiles),
     libraryDependencies ++= Seq(jna, jnaPlatform),
     sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",
     initialCommands in console += "\nimport sbt.io._, syntax._",
