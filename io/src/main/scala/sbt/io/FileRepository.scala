@@ -3,8 +3,9 @@ package sbt.io
 import java.io.IOException
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.nio.file.attribute.BasicFileAttributes
-import java.nio.file.{ Files, Path => JPath }
+import java.nio.file.{ Files, NoSuchFileException, Path => JPath }
 
+import sbt.internal.io.{ DefaultFileTreeView, FileRepositoryImpl }
 import sbt.io.FileTreeDataView.{ Entry, Observable }
 
 /**
@@ -107,6 +108,28 @@ trait FileTreeView extends AutoCloseable {
 object FileTreeView {
   object AllPass extends (TypedPath => Boolean) {
     override def apply(e: TypedPath): Boolean = true
+  }
+  val DEFAULT: FileTreeView = DefaultFileTreeView
+  private class FileTreeDataViewFromFileTreeView[+T](view: FileTreeView, converter: TypedPath => T)
+      extends FileTreeDataView[T] {
+    override def listEntries(path: JPath,
+                             maxDepth: Int,
+                             filter: Entry[T] => Boolean): Seq[Entry[T]] =
+      list(path, maxDepth, (_: TypedPath) => true)
+        .flatMap(tp => Some(Entry(tp, Entry.converter(converter))).filter(filter))
+    override def list(path: JPath, maxDepth: Int, filter: TypedPath => Boolean): Seq[TypedPath] =
+      try {
+        view.list(path, maxDepth, filter)
+      } catch {
+        case _: NoSuchFileException => Nil
+      }
+
+    override def close(): Unit = view.close()
+  }
+  implicit class FileTreeViewOps(val fileTreeView: FileTreeView) extends AnyVal {
+    // scala 2.10 wouldn't compile when this was implemented with an anonymous class
+    def asDataView[T](f: TypedPath => T): FileTreeDataView[T] =
+      new FileTreeDataViewFromFileTreeView[T](fileTreeView, f)
   }
 }
 
@@ -225,6 +248,36 @@ object FileTreeDataView {
      */
     def removeObserver(handle: Int): Unit
   }
+
+  object Entry {
+
+    private[sbt] class EntryImpl[+T](typedPath: TypedPath,
+                                     override val value: Either[IOException, T])
+        extends Entry(typedPath.getPath, value) {
+      override def getPath: JPath = typedPath.getPath
+      override def exists: Boolean = typedPath.exists
+      override def isDirectory: Boolean = typedPath.isDirectory
+      override def isFile: Boolean = typedPath.isFile
+      override def isSymbolicLink: Boolean = typedPath.isSymbolicLink
+      override def toRealPath: JPath = typedPath.toRealPath
+    }
+
+    def converter[T](f: TypedPath => T): TypedPath => Either[IOException, T] =
+      (typedPath: TypedPath) =>
+        try {
+          Right(f(typedPath))
+        } catch {
+          case e: IOException => Left(e)
+      }
+    def apply[T](typedPath: TypedPath, converter: TypedPath => Either[IOException, T]): Entry[T] =
+      new EntryImpl[T](typedPath, converter(typedPath))
+  }
+
+  implicit class CallbackOps[-T](val callback: Entry[T] => Unit)
+      extends Observer.Impl[T](callback(_: Entry[T]),
+                               callback(_: Entry[T]),
+                               (_: Entry[T], newEntry: Entry[T]) => callback(newEntry))
+
 }
 
 /**
@@ -258,4 +311,17 @@ trait FileRepository[+T] extends Observable[T] with FileTreeDataView[T] with Aut
    * @param path the path to stop monitoring
    */
   def unregister(path: JPath): Unit
+}
+
+object FileRepository {
+
+  /**
+   * Create a [[FileRepository]]. The generated repository will cache the file system tree for the
+   * monitored directories.
+   * @param converter function to generate an [[Entry.value]] from a [[TypedPath]]
+   * @tparam T the generic type of the [[Entry.value]]
+   * @return a file repository.
+   */
+  def default[T](converter: TypedPath => T): FileRepository[T] =
+    new FileRepositoryImpl[T](converter)
 }
