@@ -5,7 +5,12 @@ import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.{ Files, NoSuchFileException, Path => JPath }
 
-import sbt.internal.io.{ DefaultFileTreeView, FileRepositoryImpl }
+import sbt.internal.io.{
+  DefaultFileTreeView,
+  FileRepositoryImpl,
+  HybridPollingFileRepository,
+  Source
+}
 import sbt.io.FileTreeDataView.{ Entry, Observable }
 
 /**
@@ -297,4 +302,16 @@ object FileRepository {
    */
   def default[T](converter: TypedPath => T): FileRepository[T] =
     new FileRepositoryImpl[T](converter)
+
+  /**
+   * Create a [[FileRepository]]. The generated repository will cache the file system tree for some
+   * of the paths under monitoring, but others will need to be polled.
+   * @param converter function to generate an [[FileTreeDataView.Entry.value]] from a [[TypedPath]]
+   * @param pollingSources do not cache any path contained in these [[sbt.internal.io.Source]]s.
+   * @tparam T the generic type of the [[FileTreeDataView.Entry.value]]
+   * @return a file repository.
+   */
+  def hybrid[T](converter: TypedPath => T,
+                pollingSources: Source*): HybridPollingFileRepository[T] =
+    HybridPollingFileRepository(converter, pollingSources: _*)
 }
