@@ -167,7 +167,7 @@ private[sbt] object EventMonitor {
        */
       private def handleOverflow(key: WatchKey): Vector[Path] = lock.synchronized {
         val allFiles = new mutable.HashSet[Path]
-        def getNewFiles(): Unit = {
+        def addNewFiles(): Unit = {
           allFiles.clear()
           val path = key.watchable.asInstanceOf[Path]
           Files.walkFileTree(
@@ -195,7 +195,7 @@ private[sbt] object EventMonitor {
         var oldFiles = mutable.Set.empty[Path]
         do {
           oldFiles = allFiles
-          getNewFiles()
+          addNewFiles()
         } while (oldFiles != allFiles)
         registered --= registered.collect {
           case (d, k) if !Files.exists(d) =>
