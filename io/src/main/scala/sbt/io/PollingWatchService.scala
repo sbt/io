@@ -17,11 +17,11 @@ import java.util.{ List => JList }
 import sbt.io.syntax._
 
 import scala.collection.{ immutable, mutable }
-import scala.concurrent.duration.{ Duration, FiniteDuration }
+import scala.concurrent.duration._
 
 /** A `WatchService` that polls the filesystem every `delay`. */
 class PollingWatchService(delay: FiniteDuration) extends WatchService with Unregisterable {
-  private var closed: Boolean = false
+  private val closed: AtomicBoolean = new AtomicBoolean(false)
   private val thread: PollingThread = new PollingThread(delay)
   private val keys: mutable.Map[JPath, PollingWatchKey] = mutable.Map.empty
   private val pathLengthOrdering: Ordering[JPath] =
@@ -34,8 +34,12 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
   private val watched: mutable.Map[JPath, Seq[WatchEvent.Kind[JPath]]] =
     mutable.Map.empty
 
-  override def close(): Unit =
-    closed = true
+  override def close(): Unit = {
+    if (closed.compareAndSet(false, true)) {
+      thread.interrupt()
+      thread.join(5.seconds.toMillis)
+    }
+  }
 
   override def init(): Unit = {
     ensureNotClosed()
@@ -79,7 +83,7 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
   }
 
   private def ensureNotClosed(): Unit =
-    if (closed) throw new ClosedWatchServiceException
+    if (closed.get()) throw new ClosedWatchServiceException
 
   private class PollingThread(delay: FiniteDuration) extends Thread {
     private[this] val _keysWithEvents = mutable.LinkedHashSet.empty[PollingWatchKey]
@@ -98,13 +102,17 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
     def keysWithEvents: mutable.LinkedHashSet[PollingWatchKey] = _keysWithEvents
 
     override def run(): Unit =
-      while (!closed) {
-        populateEvents()
-        _initDone.synchronized {
-          _initDone.set(true)
-          _initDone.notify()
+      try {
+        while (!closed.get()) {
+          populateEvents()
+          _initDone.synchronized {
+            _initDone.set(true)
+            _initDone.notify()
+          }
+          Thread.sleep(delay.toMillis)
         }
-        Thread.sleep(delay.toMillis)
+      } catch {
+        case _: InterruptedException =>
       }
     override def start(): Unit = {
       super.start()
