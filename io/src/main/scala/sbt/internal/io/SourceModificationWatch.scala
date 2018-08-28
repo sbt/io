@@ -11,6 +11,7 @@ import sbt.io._
 import sbt.io.syntax._
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable
 import scala.concurrent.duration._
 
 private[sbt] object SourceModificationWatch {
@@ -189,4 +190,14 @@ private[sbt] object WatchState {
     initState
   }
 
+  def empty(sources: Seq[Source]): WatchState = {
+    val service = new WatchService {
+      override def init(): Unit = {}
+      override def pollEvents(): Map[WatchKey, immutable.Seq[WatchEvent[Path]]] = Map.empty
+      override def poll(timeout: Duration): WatchKey = null
+      override def register(path: Path, events: WatchEvent.Kind[Path]*): WatchKey = null
+      override def close(): Unit = {}
+    }
+    new WatchState(count = 1, sources, service, Map.empty)
+  }
 }
