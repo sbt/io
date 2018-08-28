@@ -21,6 +21,7 @@ import scala.concurrent.duration._
  *
  * No implementation details are specified so that the EventMonitor may be treated as a black box.
  */
+@deprecated("This has been removed in favor of FileEventMonitor", "1.3.0")
 private[sbt] sealed trait EventMonitor extends AutoCloseable {
 
   /** Block indefinitely until the trigger receives a file event or the user stops the watch. */
@@ -46,6 +47,9 @@ private[sbt] object EventMonitor {
    * @param logger               Logs output
    * @return The new EventMonitor
    */
+  @deprecated("This method is no longer used in sbt. It exists for legacy binary compatibility " +
+                "within the 1.x series.",
+              "1.3.0")
   def apply(state: WatchState,
             delay: FiniteDuration,
             antiEntropy: FiniteDuration,
