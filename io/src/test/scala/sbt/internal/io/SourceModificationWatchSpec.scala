@@ -259,7 +259,8 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 
       IO.createDirectory(parentDir)
       val observable = newObservable(parentDir.scalaSource)
-      val monitor = FileEventMonitor(observable)
+      val logger = new CachingLogger
+      val monitor = FileEventMonitor(observable, logger)
       try {
         val triggered0 = watchTest(monitor) {
           IO.createDirectory(subDir)
@@ -270,6 +271,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
         val triggered1 = watchTest(monitor) {
           IO.delete(subDir)
         }
+        if (!triggered1) logger.printLines("Did not trigger when expected")
         triggered1 shouldBe true
       } finally monitor.close()
   }
@@ -282,7 +284,8 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       writeNewFile(file, "foo")
       val observable = newObservable(parentDir)
       // Choose a very long anti-entropy period to ensure that the second trigger doesn't happen
-      val monitor = FileEventMonitor.antiEntropy(observable, 10.seconds, NullLogger)
+      val logger = new CachingLogger
+      val monitor = FileEventMonitor.antiEntropy(observable, 10.seconds, logger)
       try {
         val triggered0 = watchTest(monitor) {
           IO.write(file, "bar")
@@ -303,6 +306,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
         monitor.drain(maxWait)
         IO.write(file, "baz")
         val triggered1 = poll()
+        if (triggered1) logger.printLines("Unexpected trigger during anti-entropy period.")
         assert(!triggered1)
         assert(IO.read(file) == "baz")
       } finally {
@@ -371,7 +375,8 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       // getServiceWithPollDelay. The timeout was increased from 20.seconds to 40.seconds to address
       // transient failures of this test on Appveyor windows builds.
       val observable = newObservable(realParent.toFile)
-      val monitor = FileEventMonitor(observable)
+      val logger = new CachingLogger
+      val monitor = FileEventMonitor(observable, logger)
       try {
         val subdirs =
           (1 to subdirCount).map(i => Files.createDirectories(realParent.resolve(s"subdir-$i")))
@@ -391,6 +396,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
         val triggeredPaths =
           monitor.drain(maxWait * 4).map(_.entry.typedPath.getPath).toSet.intersect(allPaths)
         if (triggeredPaths != allPaths) {
+          logger.printLines("Triggered paths did not contain all of the expected paths")
           val diff = allPaths diff triggeredPaths
           if (diff.size > 5)
             println(diff.take(5).mkString("", "\n", s"\n and ${diff.size - 5} more ..."))
@@ -420,7 +426,9 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       Source(base.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
     val observable = newObservable(sources)
     try {
-      val triggered = watchTest(FileEventMonitor(observable))(modifier)
+      val logger = new CachingLogger
+      val triggered = watchTest(FileEventMonitor(observable, logger))(modifier)
+      if (triggered != expectedTrigger) logger.printLines(s"Expected $expectedTrigger")
       triggered shouldBe expectedTrigger
     } finally {
       observable.close()
@@ -473,6 +481,11 @@ object EventMonitorSpec {
   }
   implicit class ObservableOps[T](val observable: Observable[T]) extends AnyVal {
     def filter(f: Entry[T] => Boolean): Observable[T] = new FilteredObservable[T](observable, f)
+  }
+  class CachingLogger extends Logger {
+    val lines = new scala.collection.mutable.ArrayBuffer[String]
+    override def debug(msg: => Any): Unit = lines.synchronized { lines += msg.toString; () }
+    def printLines(msg: String) = println(s"$msg. Log lines:\n${lines mkString "\n"}")
   }
 }
 
