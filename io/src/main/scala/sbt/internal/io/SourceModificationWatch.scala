@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import sbt.io._
 import sbt.io.syntax._
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.concurrent.duration._
@@ -21,17 +22,32 @@ private[sbt] object SourceModificationWatch {
    * until changes are detected or `terminationCondition` evaluates to `true`.
    * Uses default anti-entropy time of 40.milliseconds.
    */
-  @deprecated("This is superseded by EventMonitor.watch", "1.1.7")
+  @deprecated("This is superseded by FileEventMonitor.poll", "1.1.7")
   def watch(delay: FiniteDuration, state: WatchState)(
       terminationCondition: => Boolean): (Boolean, WatchState) = {
     if (state.count == 0) {
       (true, state.withCount(1))
     } else {
-      val eventMonitor = EventMonitor.legacy(state, delay, terminationCondition)
+      val observable = new WatchServiceBackedObservable[Path](state,
+                                                              delay,
+                                                              (_: TypedPath).getPath,
+                                                              closeService = false,
+                                                              NullLogger)
+      val monitor = FileEventMonitor.antiEntropy(observable, 200.milliseconds, NullLogger)
+      @tailrec
+      def poll(): Boolean = {
+        monitor.poll(10.millis) match {
+          case sources if sources.nonEmpty => true
+          case _ if terminationCondition   => false
+          case _                           => poll()
+        }
+      }
       try {
-        val triggered = eventMonitor.awaitEvent()
-        (triggered, eventMonitor.state())
-      } finally eventMonitor.close()
+        val triggered = poll()
+        (triggered, state.withCount(state.count + 1))
+      } finally {
+        monitor.close()
+      }
     }
   }
 }
@@ -94,7 +110,7 @@ private[sbt] final class WatchState private (
   private[sbt] def withRegistered(registered: Map[Path, WatchKey]): WatchState =
     new WatchState(count, sources, service, registered)
 
-  /** Shutsdown the EventMonitor and the watch service. */
+  /** Shuts down the watch service. */
   override def close(): Unit = if (closed.compareAndSet(false, true)) {
     service.close()
   }

@@ -93,18 +93,6 @@ private[sbt] object EventMonitor {
     }
   }
 
-  private[io] def legacy(state: WatchState,
-                         delay: FiniteDuration,
-                         terminationCondition: => Boolean): EventMonitor =
-    applyImpl(
-      state,
-      delay,
-      200.milliseconds,
-      terminationCondition,
-      sbt.io.NullLogger,
-      closeService = false
-    )
-
   // Shutup the compiler about unused arguments
   @inline private[this] def ignoreArg(arg: => Any): Unit = if (true) () else { arg; () }
   trait Logger {
