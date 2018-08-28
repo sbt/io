@@ -5,6 +5,7 @@ package sbt.internal.io
 
 import java.nio.file.StandardWatchEventKinds._
 import java.nio.file.{ WatchService => _, _ }
+import java.util.concurrent.atomic.AtomicBoolean
 
 import sbt.io._
 import sbt.io.syntax._
@@ -41,6 +42,7 @@ private[sbt] final class WatchState private (
     private[sbt] val service: WatchService,
     private[sbt] val registered: Map[Path, WatchKey]
 ) extends AutoCloseable {
+  private[this] val closed = new AtomicBoolean(false)
   def accept(p: Path): Boolean = sources.exists(_.accept(p))
   def unregister(path: Path): Unit = service match {
     case s: Unregisterable => s.unregister(path)
@@ -92,7 +94,7 @@ private[sbt] final class WatchState private (
     new WatchState(count, sources, service, registered)
 
   /** Shutsdown the EventMonitor and the watch service. */
-  override def close(): Unit = {
+  override def close(): Unit = if (closed.compareAndSet(false, true)) {
     service.close()
   }
 }
