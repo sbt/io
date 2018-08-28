@@ -1,23 +1,24 @@
 package sbt.internal.io
 
 import java.io.IOException
-import java.nio.file.{ ClosedWatchServiceException, Files, Paths }
+import java.nio.file.{ ClosedWatchServiceException, Files, Path, Paths }
 
 import org.scalatest.{ Assertion, FlatSpec, Matchers }
-import sbt.internal.io.EventMonitor.{ Logger, NullLogger }
+import sbt.internal.io.EventMonitorSpec._
+import sbt.io.FileTreeDataView.{ Entry, Observable, Observer }
 import sbt.io.syntax._
-import sbt.io.{ IO, SimpleFilter, WatchService }
+import sbt.io.{ FileTreeDataView, NullLogger, TypedPath, WatchService, _ }
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
+import EventMonitorSpec._
 
 private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
   def pollDelay: FiniteDuration
-  def newEventMonitor(sources: Seq[Source],
-                      antiEntropy: FiniteDuration = 0.milliseconds,
-                      tc: () => Boolean = defaultTerminationCondition,
-                      logger: Logger = NullLogger): EventMonitor
-  val maxWait = 2 * pollDelay
+  def newObservable(source: Seq[Source]): Observable[_]
+  def newObservable(file: File): Observable[_] =
+    newObservable(Seq(Source(file.toPath.toRealPath().toFile)))
+  private val maxWait = 2 * pollDelay
 
   it should "detect modified files" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
@@ -232,32 +233,22 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "subdir"
       IO.createDirectory(parentDir)
-      val firstDeadline = maxWait.fromNow
-      val secondDeadline = (2 * maxWait).fromNow
-      var firstDeadlinePassed = false
 
-      val tc = () => {
-        if (!firstDeadlinePassed) {
-          firstDeadlinePassed = firstDeadline.isOverdue()
-          firstDeadlinePassed
-        } else {
-          secondDeadline.isOverdue()
-        }
-      }
-      val monitor = defaultMonitor(parentDir, tc = tc)
+      val observable = newObservable(parentDir.scalaSource)
+      val monitor = FileEventMonitor(observable)
       try {
         val triggered0 = watchTest(monitor) {
           IO.createDirectory(subDir)
         }
         triggered0 shouldBe false
-        monitor.state().count shouldBe 1
 
         val triggered1 = watchTest(monitor) {
           IO.delete(subDir)
         }
         triggered1 shouldBe false
-        monitor.state().count shouldBe 1
-      } finally monitor.close()
+      } finally {
+        monitor.close()
+      }
   }
 
   it should "detect deletion of a directory containing watched files" in IO.withTemporaryDirectory {
@@ -267,21 +258,19 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val src = subDir / "src.scala"
 
       IO.createDirectory(parentDir)
-
-      val monitor = defaultMonitor(parentDir)
+      val observable = newObservable(parentDir.scalaSource)
+      val monitor = FileEventMonitor(observable)
       try {
         val triggered0 = watchTest(monitor) {
           IO.createDirectory(subDir)
           IO.touch(src)
         }
         triggered0 shouldBe true
-        monitor.state().count shouldBe 2
 
         val triggered1 = watchTest(monitor) {
           IO.delete(subDir)
         }
         triggered1 shouldBe true
-        monitor.state().count shouldBe 3
       } finally monitor.close()
   }
 
@@ -291,7 +280,9 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val file = parentDir / "Foo.scala"
 
       writeNewFile(file, "foo")
-      val monitor = defaultMonitor(parentDir, antiEntropy = maxWait * 2)
+      val observable = newObservable(parentDir)
+      // Choose a very long anti-entropy period to ensure that the second trigger doesn't happen
+      val monitor = FileEventMonitor.antiEntropy(observable, 10.seconds, NullLogger)
       try {
         val triggered0 = watchTest(monitor) {
           IO.write(file, "bar")
@@ -299,12 +290,23 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
         assert(triggered0)
         assert(IO.read(file) == "bar")
 
-        val triggered1 = watchTest(monitor) {
-          IO.write(file, "baz")
+        val deadline = maxWait.fromNow
+        @tailrec
+        def poll(): Boolean = {
+          val wait = deadline - Deadline.now
+          monitor.poll(wait) match {
+            case sources if sources.map(_.entry.getPath).contains(file.toPath) => true
+            case _ if Deadline.now < deadline                                  => poll()
+            case _                                                             => false
+          }
         }
+        IO.write(file, "baz")
+        val triggered1 = poll()
         assert(!triggered1)
         assert(IO.read(file) == "baz")
-      } finally monitor.close()
+      } finally {
+        monitor.close()
+      }
     }
 
   it should "ignore valid files in non-recursive subdirectories" in IO.withTemporaryDirectory {
@@ -313,15 +315,17 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val source =
         Source(dir.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith(".")))
           .withRecursive(false)
-      val tc = defaultTerminationCondition
-      val monitor: EventMonitor = newEventMonitor(Seq(source), 0.millis, tc)
+      val observable = newObservable(Seq(source))
+      val monitor = FileEventMonitor(observable)
       try {
         val triggered = watchTest(monitor) {
           IO.write(file, "foo")
         }
         assert(!triggered)
         assert(IO.read(file) == "foo")
-      } finally monitor.close()
+      } finally {
+        monitor.close()
+      }
   }
 
   it should "log triggered files" in IO.withTemporaryDirectory { dir =>
@@ -333,39 +337,40 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     val sources = Seq(
       Source(parentDir.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
     var lines: Seq[String] = Nil
-    val logger = new EventMonitor.Logger {
+    val logger = new Logger {
       override def debug(msg: => Any): Unit = lines.synchronized {
         lines :+= msg.toString
       }
     }
-    val tc = defaultTerminationCondition
-    val monitor = newEventMonitor(sources, 0.seconds, tc, logger)
+    val observable = newObservable(sources)
+    val monitor = FileEventMonitor(observable, logger)
     try {
       val triggered = watchTest(monitor) {
         IO.write(file, "bar")
       }
       assert(triggered)
-      assert(monitor.state().count == 2)
-      assert(lines.exists(_.startsWith("Triggered")))
-    } finally monitor.close()
+      assert(lines.exists(_.startsWith("Received")))
+    } finally {
+      monitor.close()
+    }
   }
 
   it should "handle rapid creation of many subdirectories and files" in IO.withTemporaryDirectory {
     dir =>
       val parentDir = dir / "src" / "watchme"
       Files.createDirectories(parentDir.toPath)
-      val subdirCount = 2000
+      val subdirCount = 200
       val subdirFileCount = 4
       var files = Seq.empty[File]
 
       // Longer timeout because there are many file system operations. This can be very expensive
-      // especially in the PollingWatchSpec since both the PollingWatchService and the EventMonitor
-      // overflow handler are hammering the file system. To minimize the conflicts, we set a long
-      // interval between polls in the PollingWatchService using getServiceWithPollDelay. The
-      // timeout was increased from 20.seconds to 40.seconds to address transient failures of
-      // this test on Appveyor windows builds.
-      val deadline = 40.seconds.fromNow
-      val monitor = defaultMonitor(parentDir, tc = () => deadline.isOverdue)
+      // especially in the PollingWatchSpec since both the PollingWatchService and the
+      // WatchServiceBackedObserable overflow handler are hammering the file system. To minimize the
+      // conflicts, we set a long interval between polls in the PollingWatchService using
+      // getServiceWithPollDelay. The timeout was increased from 20.seconds to 40.seconds to address
+      // transient failures of this test on Appveyor windows builds.
+      val observable = newObservable(parentDir.scalaSource)
+      val monitor = FileEventMonitor(observable)
       try {
         val triggered0 = watchTest(monitor) {
           val subdirs =
@@ -381,46 +386,32 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
         assert(triggered0)
         assert(IO.read(lastFile) == s"foo")
 
-        val triggered1 = watchTest(monitor) {
-          IO.write(lastFile, "baz")
-        }
+        IO.write(lastFile, "baz")
+        val triggered1 = monitor.poll(maxWait * 4).nonEmpty
         assert(triggered1)
         assert(IO.read(lastFile) == "baz")
-      } finally monitor.close()
+      } finally {
+        monitor.close()
+      }
   }
-  def watchTest(eventMonitor: EventMonitor)(modifier: => Unit): Boolean = {
+
+  def watchTest(monitor: FileEventMonitor[_])(modifier: => Unit): Boolean = {
     modifier
-    eventMonitor.awaitEvent()
+    monitor.poll(maxWait).nonEmpty
   }
 
   def watchTest(base: File, expectedTrigger: Boolean = true)(modifier: => Unit): Assertion = {
     val sources = Seq(
       Source(base.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
-    val monitor = newEventMonitor(sources)
+    val observable = newObservable(sources)
     try {
-      val triggered = watchTest(monitor)(modifier)
+      val triggered = watchTest(FileEventMonitor(observable))(modifier)
       triggered shouldBe expectedTrigger
-    } finally monitor.close()
+    } finally {
+      observable.close()
+    }
   }
 
-  def defaultTerminationCondition: () => Boolean = {
-    lazy val deadline = maxWait.fromNow
-    () =>
-      {
-        val res = deadline.isOverdue()
-        if (!res) Thread.sleep(5)
-        res
-      }
-  }
-
-  private def defaultMonitor(base: File,
-                             antiEntropy: FiniteDuration = 0.milliseconds,
-                             tc: () => Boolean = defaultTerminationCondition,
-                             logger: Logger = NullLogger): EventMonitor = {
-    val sources = Seq(
-      Source(base.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
-    newEventMonitor(sources, antiEntropy, tc, logger)
-  }
   @tailrec
   final def writeNewFile(file: File, content: String, attempt: Int = 0): Unit = {
     if (attempt == 0) IO.write(file, content)
@@ -431,6 +422,42 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     if (!res) writeNewFile(file, content, attempt + 1)
   }
 
+}
+
+object EventMonitorSpec {
+  implicit class FileOps(val file: File) extends AnyVal {
+    def scalaSource: Seq[Source] =
+      Seq(Source(file.toPath.toRealPath().toFile, "*.scala", HiddenFileFilter))
+  }
+  private class FilteredObservable[T](observable: Observable[T], filter: Entry[T] => Boolean)
+      extends Observable[T] {
+    override def addObserver(observer: FileTreeDataView.Observer[T]): Int =
+      observable.addObserver(new Observer[T] {
+        override def onCreate(newEntry: Entry[T]): Unit =
+          if (filter(newEntry)) observer.onDelete(newEntry)
+        override def onDelete(oldEntry: Entry[T]): Unit =
+          if (filter(oldEntry)) observer.onDelete(oldEntry)
+        override def onUpdate(oldEntry: Entry[T], newEntry: Entry[T]): Unit = {
+          if (filter(newEntry)) observer.onUpdate(oldEntry, newEntry)
+        }
+      })
+    override def removeObserver(handle: Int): Unit = observable.removeObserver(handle)
+    override def close(): Unit = observable.close()
+  }
+  implicit class ObservableOps[T](val observable: Observable[T]) extends AnyVal {
+    def filter(f: Entry[T] => Boolean): Observable[T] = new FilteredObservable[T](observable, f)
+  }
+}
+
+class FileRepositoryEventMonitorSpec extends FlatSpec with Matchers with EventMonitorSpec {
+  override def pollDelay: FiniteDuration = 100.millis
+
+  override def newObservable(sources: Seq[Source]): Observable[_] = {
+    val repository = FileRepository.default((_: TypedPath).getPath)
+    sources foreach (s =>
+      repository.register(s.base.toPath, if (s.recursive) Integer.MAX_VALUE else 0))
+    repository.filter((tp: TypedPath) => sources.exists(s => s.accept(tp.getPath)))
+  }
 }
 abstract class SourceModificationWatchSpec(
     getServiceWithPollDelay: FiniteDuration => WatchService,
@@ -458,10 +485,16 @@ abstract class SourceModificationWatchSpec(
     service.close()
   }
 
-  override def newEventMonitor(sources: Seq[Source],
-                               antiEntropy: FiniteDuration,
-                               tc: () => Boolean,
-                               logger: Logger): EventMonitor = {
-    EventMonitor(WatchState.empty(getService, sources), pollDelay, antiEntropy, tc(), logger)
+  override def newObservable(sources: Seq[Source]): FileTreeDataView.Observable[_] = {
+    val watchState = WatchState.empty(getService, sources)
+    val observable = new WatchServiceBackedObservable[Path](watchState,
+                                                            5.millis,
+                                                            (_: TypedPath).getPath,
+                                                            closeService = true,
+                                                            NullLogger)
+    observable.filter((entry: Entry[Path]) => {
+      val path = entry.getPath
+      sources.exists(_.accept(path))
+    })
   }
 }
