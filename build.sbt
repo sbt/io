@@ -64,6 +64,16 @@ val io = (project in file("io"))
 
       // protected[this]
       exclude[DirectMissingMethodProblem]("sbt.io.CopyOptions.copy*"),
+
+      // private class
+      exclude[MissingClassProblem]("sbt.io.Event"),
+      exclude[MissingClassProblem]("sbt.io.Event$"),
+      exclude[MissingClassProblem]("sbt.io.MacOSXWatchKey"),
+
+      // private internal classes whose functionality has been replaced
+      exclude[MissingClassProblem]("sbt.internal.io.EventMonitor$*"),
+      exclude[DirectMissingMethodProblem]("sbt.internal.io.EventMonitor.legacy"),
+      exclude[DirectMissingMethodProblem]("sbt.internal.io.EventMonitor.applyImpl")
     ),
     BuildInfoPlugin.buildInfoDefaultSettings, // avoids BuildInfo generated in Compile scope
     addBuildInfoToConfig(Test),
