@@ -412,7 +412,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 
   def watchTest(monitor: FileEventMonitor[_])(modifier: => Unit): Boolean = {
     modifier
-    monitor.poll(maxWait).nonEmpty
+    monitor.poll(maxWait * 2).nonEmpty
   }
 
   def watchTest(base: File, expectedTrigger: Boolean = true)(modifier: => Unit): Assertion = {
