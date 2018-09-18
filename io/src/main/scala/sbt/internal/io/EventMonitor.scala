@@ -38,7 +38,7 @@ private[sbt] object EventMonitor {
   /**
    * Create a new EventMonitor
    *
-   * @param state                The initial watch state for the monitor
+   * @param watchState           The initial watch state for the monitor
    * @param delay                Maximum duration that the monitor will poll the watch service for events
    * @param antiEntropy          Minimum duration that must elapse before a build may by re-triggered by
    *                             the same file
@@ -46,31 +46,18 @@ private[sbt] object EventMonitor {
    * @param logger               Logs output
    * @return The new EventMonitor
    */
-  def apply(state: WatchState,
+  def apply(watchState: WatchState,
             delay: FiniteDuration,
             antiEntropy: FiniteDuration,
             terminationCondition: => Boolean,
-            logger: Logger = NullLogger): EventMonitor =
-    applyImpl(state, delay, antiEntropy, terminationCondition, logger, closeService = true)
-
-  private[io] def legacy(state: WatchState,
-                         delay: FiniteDuration,
-                         terminationCondition: => Boolean): EventMonitor =
-    applyImpl(state, delay, 40.milliseconds, terminationCondition, NullLogger, closeService = false)
-
-  private[EventMonitor] def applyImpl(watchState: WatchState,
-                                      delay: FiniteDuration,
-                                      antiEntropy: FiniteDuration,
-                                      terminationCondition: => Boolean,
-                                      logger: Logger,
-                                      closeService: Boolean): EventMonitor = {
+            logger: Logger = NullLogger): EventMonitor = {
     val eventLogger = new io.Logger {
       override def debug(msg: => Any): Unit = logger.debug(msg)
     }
     val observable = new WatchServiceBackedObservable[Path](watchState,
                                                             delay,
                                                             (_: TypedPath).getPath,
-                                                            closeService,
+                                                            closeService = true,
                                                             eventLogger)
     val monitor = FileEventMonitor.antiEntropy(observable, antiEntropy, eventLogger)
     new EventMonitor {
