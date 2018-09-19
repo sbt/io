@@ -4,18 +4,18 @@
 
 // DO NOT EDIT MANUALLY
 package sbt.io
-/** The options for the copy operation in `IO`. */
+/**
+ * The options for the copy operation in `IO`.
+ * @param overwrite A source file is always copied if `overwrite` is true.
+                    If `overwrite` is false, the source is only copied if the target is missing or is older than the
+                    source file according to last modified times.
+                    If the source is a directory, the corresponding directory is created.
+ * @param preserveLastModified If `true` the last modified times are copied.
+ * @param preserveExecutable If `true` the executable properties are copied.
+ */
 final class CopyOptions private (
-  /**
-   * A source file is always copied if `overwrite` is true.
-   * If `overwrite` is false, the source is only copied if the target is missing or is older than the
-   * source file according to last modified times.
-   * If the source is a directory, the corresponding directory is created.
-   */
   val overwrite: Boolean,
-  /** If `true` the last modified times are copied. */
   val preserveLastModified: Boolean,
-  /** If `true` the executable properties are copied. */
   val preserveExecutable: Boolean) extends Serializable {
   
   private def this() = this(false, false, true)
