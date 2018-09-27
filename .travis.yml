@@ -33,12 +33,18 @@ matrix:
      language: java
      osx_image: xcode9.3
 
-   - scala: 2.12.4
+   - scala: 2.12.7
      env: CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test whitesourceCheckPolicies"
      os: linux
      dist: trusty
 
-   - scala: 2.12.4
+   - scala: 2.12.7
+     env: CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+     os: linux
+     dist: trusty
+     jdk: openjdk11
+
+   - scala: 2.12.7
      os: osx
      env:
        CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
