@@ -54,30 +54,68 @@ object IO {
 
   val utf8 = Charset.forName("UTF-8")
 
+  private lazy val jrtFs = FileSystems.getFileSystem(URI.create("jrt:/"))
+
+  /**
+   * Returns the NIO Path to the directory or jar file containing the class file `cl`.
+   * If the location cannot be determined or it is not a file, an error is generated.
+   * Note that Java standard library classes typically do not have a location associated with them.
+   */
+  def classLocationPath(cl: Class[_]): NioPath = {
+    val u = classfileLocation(cl)
+    val p = u.getProtocol match {
+      case FileScheme => Option(toFile(u).toPath)
+      case "jar"      => urlAsFile(u) map { _.toPath }
+      case "jrt"      => Option(IO.jrtFs.getPath("/modules" + u.getPath))
+      case _          => None
+    }
+    p.getOrElse(sys.error(s"Unable to create File from $u for $cl"))
+  }
+
+  /**
+   * Returns a NIO Path for the classfile containing the given class file for type `A` (as determined by an implicit Manifest).
+   * If the location cannot be determined, an error is generated.
+   */
+  def classLocationPath[A](implicit mf: SManifest[A]): NioPath =
+    classLocationPath(mf.runtimeClass)
+
   /**
    * Returns the directory or jar file containing the class file `cl`.
    * If the location cannot be determined or it is not a file, an error is generated.
    * Note that Java standard library classes typically do not have a location associated with them.
    */
-  def classLocationFile(cl: Class[_]): File =
-    Option(cl.getProtectionDomain.getCodeSource) match {
-      case Some(codeSource) =>
-        val classURL = codeSource.getLocation
-        toFile(classURL)
-      case None =>
-        // NB: This assumes that classes without code sources are System classes, and thus located in
-        // jars. It assumes that `urlAsFile` will truncate to the containing jar file.
-        val clsfile = s"${cl.getName.replace('.', '/')}.class"
-        Option(ClassLoader.getSystemClassLoader.getResource(clsfile))
-          .flatMap(urlAsFile)
-          .getOrElse(sys.error("No class location for " + cl))
-    }
+  def classLocationFileOption(cl: Class[_]): Option[File] = {
+    val u = classfileLocation(cl)
+    urlAsFile(u)
+  }
 
   /**
    * Returns the directory or jar file containing the class file for type `T` (as determined by an implicit Manifest).
    * If the location cannot be determined, an error is generated.
    * Note that Java standard library classes typically do not have a location associated with them.
    */
+  def classLocationFileOption[A](implicit mf: SManifest[A]): Option[File] =
+    classLocationFileOption(mf.runtimeClass)
+
+  /**
+   * Returns the directory or jar file containing the class file `cl`.
+   * If the location cannot be determined or it is not a file, an error is generated.
+   * Note that Java standard library classes typically do not have a location associated with them.
+   */
+  @deprecated(
+    "classLocationFile may not work on JDK 11. Use classfileLocation, classLocationFileOption, or classLocationPath instead.",
+    "1.2.2")
+  def classLocationFile(cl: Class[_]): File =
+    classLocationFileOption(cl).getOrElse(sys.error(s"Unable to create File from $cl"))
+
+  /**
+   * Returns the directory or jar file containing the class file for type `T` (as determined by an implicit Manifest).
+   * If the location cannot be determined, an error is generated.
+   * Note that Java standard library classes typically do not have a location associated with them.
+   */
+  @deprecated(
+    "classLocationFile may not work on JDK 11. Use classfileLocation, classLocationFileOption, or classLocationPath instead.",
+    "1.2.2")
   def classLocationFile[T](implicit mf: SManifest[T]): File = classLocationFile(mf.runtimeClass)
 
   /**
@@ -92,13 +130,20 @@ object IO {
    */
   def classfileLocation(cl: Class[_]): URL = {
     val clsfile = s"${cl.getName.replace('.', '/')}.class"
+    def localcl: Option[URL] =
+      Option(cl.getProtectionDomain.getCodeSource) flatMap { codeSource =>
+        Option(codeSource.getLocation)
+      }
+    def syscl: Option[URL] =
+      Option(ClassLoader.getSystemClassLoader) flatMap { classLoader =>
+        Option(classLoader.getResource(clsfile))
+      }
     try {
-      Stream(Option(cl.getClassLoader), Some(ClassLoader.getSystemClassLoader)).flatten
-        .flatMap(classLoader => Option(classLoader.getResource(clsfile)))
-        .headOption
+      localcl
+        .orElse(syscl)
         .getOrElse(sys.error("No class location for " + cl))
     } catch {
-      case e: Throwable =>
+      case NonFatal(e) =>
         e.printStackTrace()
         throw e
     }
