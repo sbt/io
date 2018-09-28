@@ -28,7 +28,7 @@ object WriteContentSpecification extends Properties("Write content") {
   }
 
   private def testUnzip[T](implicit mf: Manifest[T]) =
-    unzipFile(IO.classLocationFile(mf.runtimeClass))
+    unzipFile(IO.classLocationFileOption(mf.runtimeClass).getOrElse(sys.error(s"$mf")))
 
   private def unzipFile(jar: File) = IO.withTemporaryDirectory(tmp => IO.unzip(jar, tmp))
 
