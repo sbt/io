@@ -2,10 +2,11 @@ package sbt.io
 
 import java.io.File
 import java.nio.file.Files
-import org.scalatest.{ FlatSpec, Matchers }
+import org.scalatest.FlatSpec
 import sbt.io.syntax._
 
-class IOSpec extends FlatSpec with Matchers {
+class IOSpec extends FlatSpec {
+
   "IO" should "relativize" in {
     // Given:
     // io-relativize/
@@ -15,14 +16,17 @@ class IOSpec extends FlatSpec with Matchers {
     // and
     // relativeRootDir referring to io-relativize/inside-dir/../
 
-    val rootDir = Files.createTempDirectory("io-relativize")
+    val rootDir = Files.createTempDirectory("io-relativize").normalize
     val nestedFile = Files.createFile(rootDir resolve "meh.file").toFile
     val nestedDir = Files.createDirectory(rootDir resolve "inside-dir").toFile
 
     val relativeRootDir = new File(nestedDir, "..")
-
-    IO.relativize(rootDir.toFile, nestedFile).map(file) shouldBe Some(file("meh.file"))
-    IO.relativize(relativeRootDir, nestedFile).map(file) shouldBe Some(file("../../meh.file"))
+    assert(
+      IO.relativize(rootDir.toFile, nestedFile)
+        .map(normalizeForWindows) === Option("meh.file"))
+    assert(
+      IO.relativize(relativeRootDir, nestedFile).map(normalizeForWindows) === Option("meh.file"))
+    IO.delete(rootDir.toFile)
   }
 
   it should "relativize . dirs" in {
@@ -31,15 +35,15 @@ class IOSpec extends FlatSpec with Matchers {
     val file2 = new File(".", ".git")
     val file3 = new File(base, ".git")
 
-    IO.relativize(base, file1) shouldBe Some(".git")
-    IO.relativize(base, file2) shouldBe Some(".git")
-    IO.relativize(base, file3) shouldBe Some(".git")
+    assert(IO.relativize(base, file1) == Some(".git"))
+    assert(IO.relativize(base, file2) == Some(".git"))
+    assert(IO.relativize(base, file3) == Some(".git"))
   }
 
   it should "relativize relative paths" in {
     val base = new File(".").getCanonicalFile
     val file = new File("build.sbt")
-    IO.relativize(base, file) shouldBe Some("build.sbt")
+    assert(IO.relativize(base, file) == Some("build.sbt"))
   }
 
   "toURI" should "make URI" in {
@@ -64,5 +68,9 @@ class IOSpec extends FlatSpec with Matchers {
 
   "getModifiedTimeOrZero" should "return 0L if the file doesn't exists" in {
     assert(IO.getModifiedTimeOrZero(file("/not/existing/path")) == 0L)
+  }
+
+  def normalizeForWindows(s: String): String = {
+    s.replaceAllLiterally("""\""", "/")
   }
 }
