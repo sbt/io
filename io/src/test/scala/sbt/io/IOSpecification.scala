@@ -2,13 +2,21 @@ package sbt.io
 
 import scala.util.Try
 import org.scalacheck._, Prop._
+import java.net.URI
+import java.nio.file.{ FileSystems, Files }
 
 object IOSpecification extends Properties("IO") {
-  property("IO.classLocationFile able to determine containing directories") = forAll(classes) {
+  private lazy val jrtFs = FileSystems.getFileSystem(URI.create("jrt:/"))
+
+  property("IO.classLocationPath able to determine containing directories") = forAll(classes) {
     (c: Class[_]) =>
-      Try(IO.classLocationFile(c)).toOption.exists {
-        case jar if jar.getName.endsWith(".jar") => jar.isFile
-        case dir                                 => dir.isDirectory
+      Try(IO.classLocationPath(c)).toOption.exists {
+        case jar if jar.getFileName.toString.endsWith(".jar") =>
+          Files.isRegularFile(jar)
+        case jrt if jrt.getFileSystem == jrtFs =>
+          jrt.toString.contains("/java.base")
+        case dir =>
+          Files.isDirectory(dir)
       }
   }
 
