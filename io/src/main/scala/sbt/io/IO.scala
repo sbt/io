@@ -104,7 +104,7 @@ object IO {
    */
   @deprecated(
     "classLocationFile may not work on JDK 11. Use classfileLocation, classLocationFileOption, or classLocationPath instead.",
-    "1.3.0")
+    "1.2.2")
   def classLocationFile(cl: Class[_]): File =
     classLocationFileOption(cl).getOrElse(sys.error(s"Unable to create File from $cl"))
 
@@ -115,7 +115,7 @@ object IO {
    */
   @deprecated(
     "classLocationFile may not work on JDK 11. Use classfileLocation, classLocationFileOption, or classLocationPath instead.",
-    "1.3.0")
+    "1.2.2")
   def classLocationFile[T](implicit mf: SManifest[T]): File = classLocationFile(mf.runtimeClass)
 
   /**
