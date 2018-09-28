@@ -1,10 +1,10 @@
 package sbt.io
 
 import java.nio.file._
-import org.scalatest.{ FlatSpec, Matchers }
+import org.scalatest.{ FlatSpec, DiagrammedAssertions }
 import sbt.io.syntax._
 
-class CopyDirectorySpec extends FlatSpec with Matchers {
+class CopyDirectorySpec extends FlatSpec with DiagrammedAssertions {
   it should "copy symlinks" in IO.withTemporaryDirectory { dir =>
     // Given:
     // src/
@@ -25,6 +25,6 @@ class CopyDirectorySpec extends FlatSpec with Matchers {
     IO.copyDirectory(dir / "src", dir / "dst")
 
     // Then: dst/lib/a.txt should have been created and have the correct contents
-    IO.read(dir / "dst" / "lib" / "a.txt") shouldBe "this is the file contents"
+    assert(IO.read(dir / "dst" / "lib" / "a.txt") == "this is the file contents")
   }
 }

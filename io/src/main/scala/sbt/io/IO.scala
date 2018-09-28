@@ -18,7 +18,7 @@ import java.io.{
 import java.io.{ ObjectInputStream, ObjectStreamClass, FileNotFoundException }
 import java.net.{ URI, URISyntaxException, URL }
 import java.nio.charset.Charset
-import java.nio.file.FileSystems
+import java.nio.file.{ FileSystems, Path => NioPath }
 import java.nio.file.attribute.PosixFilePermissions
 import java.util.Properties
 import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
@@ -608,8 +608,22 @@ object IO {
    * If `file` or `base` are not absolute, they are first resolved against the current working directory.
    */
   def relativize(base: File, file: File): Option[String] = {
-    val basePath = (if (base.isAbsolute) base else base.getCanonicalFile).toPath.normalize()
-    val filePath = (if (file.isAbsolute) file else file.getCanonicalFile).toPath.normalize()
+    // "On UNIX systems, a pathname is absolute if its prefix is "/"."
+    // https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/io/File.html#isAbsolute
+    // "This typically involves removing redundant names such as "." and ".." from the pathname, resolving symbolic links (on UNIX platforms)"
+    // https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/io/File.html#getCanonicalPath()
+    // We do not want to use getCanonicalPath because if we resolve the symbolic link, that could change
+    // the outcome of copyDirectory's target structure.
+    // Path#normailize is able to expand ".." without expanding the symlink.
+    // https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/nio/file/Path.html#normalize()
+    // "Returns a path that is this path with redundant name elements eliminated."
+    def toAbsolutePath(x: File): NioPath = {
+      val p = x.toPath
+      if (!p.isAbsolute) p.toAbsolutePath
+      else p
+    }
+    val basePath = toAbsolutePath(base).normalize
+    val filePath = toAbsolutePath(file).normalize
     if (filePath startsWith basePath) {
       val relativePath = catching(classOf[IllegalArgumentException]) opt (basePath relativize filePath)
       relativePath map (_.toString)
