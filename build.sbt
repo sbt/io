@@ -32,7 +32,7 @@ val io = (project in file("io"))
     name := "IO",
     libraryDependencies ++= {
       Vector(scalaCompiler.value % Test, scalaCheck % Test, scalatest.value % Test)
-    } ++ Vector(appleFileEvents),
+    } ++ Vector(swovalFiles),
     libraryDependencies ++= Seq(jna, jnaPlatform),
     sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",
     initialCommands in console += "\nimport sbt.io._, syntax._",
@@ -54,9 +54,18 @@ val io = (project in file("io"))
       // MiMa doesn't understand private inner classes?
       // method this(sbt.io.PollingWatchService,sbt.io.PollingWatchService#PollingThread,java.nio.file.Watchable,java.util.List)Unit in class sbt.io.PollingWatchService#PollingWatchKey does not have a correspondent in current version
       exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingWatchKey.this"),
+      exclude[IncompatibleMethTypeProblem]("sbt.io.PollingWatchService#PollingWatchKey.this"),
 
       // This is a private class
       exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingWatchKey.events"),
+      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingWatchKey.offer"),
+
+      // This is a private class
+      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingThread.events"),
+      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingThread.initDone"),
+      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingThread.initDone_="),
+      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingThread.keysWithEvents"),
+      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingThread.getFileTimes"),
 
       // moved JavaMilli to sbt.io
       exclude[MissingClassProblem]("sbt.internal.io.JavaMilli$"),
@@ -64,6 +73,16 @@ val io = (project in file("io"))
 
       // protected[this]
       exclude[DirectMissingMethodProblem]("sbt.io.CopyOptions.copy*"),
+
+      // private class
+      exclude[MissingClassProblem]("sbt.io.Event"),
+      exclude[MissingClassProblem]("sbt.io.Event$"),
+      exclude[MissingClassProblem]("sbt.io.MacOSXWatchKey"),
+
+      // private internal classes whose functionality has been replaced
+      exclude[MissingClassProblem]("sbt.internal.io.EventMonitor$*"),
+      exclude[DirectMissingMethodProblem]("sbt.internal.io.EventMonitor.legacy"),
+      exclude[DirectMissingMethodProblem]("sbt.internal.io.EventMonitor.applyImpl")
     ),
     BuildInfoPlugin.buildInfoDefaultSettings, // avoids BuildInfo generated in Compile scope
     addBuildInfoToConfig(Test),

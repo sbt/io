@@ -3,8 +3,10 @@
  */
 package sbt.io
 
-import java.io.File
+import java.io.{ File, IOException }
+import java.nio.file.Files
 import java.util.regex.Pattern
+
 import scala.language.implicitConversions
 
 /** A `java.io.FileFilter` with additional methods for combining filters. */
@@ -69,19 +71,21 @@ trait NameFilter extends FileFilter {
 
 }
 
-/** A [[FileFilter]] that selects files that are hidden according to `java.io.File.isHidden` or if they start with a dot (`.`). */
+/** A [[FileFilter]] that selects files that are hidden according to `java.nio.file.Files.isHidden` or if they start with a dot (`.`). */
 object HiddenFileFilter extends FileFilter {
-  def accept(file: File) = file.isHidden && file.getName != "."
+  def accept(file: File): Boolean =
+    try Files.isHidden(file.toPath) && file.getName != "."
+    catch { case _: IOException => false }
 }
 
 /** A [[FileFilter]] that selects files that exist according to `java.io.File.exists`. */
 object ExistsFileFilter extends FileFilter {
-  def accept(file: File) = file.exists
+  def accept(file: File): Boolean = file.exists
 }
 
 /** A [[FileFilter]] that selects files that are a directory according to `java.io.File.isDirectory`. */
 object DirectoryFilter extends FileFilter {
-  def accept(file: File) = file.isDirectory
+  def accept(file: File): Boolean = file.isDirectory
 }
 
 /** A [[FileFilter]] that selects files according the predicate `acceptFunction`. */
@@ -91,7 +95,7 @@ sealed class SimpleFileFilter(val acceptFunction: File => Boolean) extends FileF
 
 /** A [[NameFilter]] that accepts a name if it is exactly equal to `matchName`. */
 final class ExactFilter(val matchName: String) extends NameFilter {
-  def accept(name: String) = matchName == name
+  def accept(name: String): Boolean = matchName == name
   override def toString = s"ExactFilter($matchName)"
 }
 
@@ -102,7 +106,7 @@ sealed class SimpleFilter(val acceptFunction: String => Boolean) extends NameFil
 
 /** A [[NameFilter]] that accepts a name if it matches the regular expression defined by `pattern`. */
 final class PatternFilter(val pattern: Pattern) extends NameFilter {
-  def accept(name: String) = pattern.matcher(name).matches
+  def accept(name: String): Boolean = pattern.matcher(name).matches
   override def toString = s"PatternFilter($pattern)"
 }
 
