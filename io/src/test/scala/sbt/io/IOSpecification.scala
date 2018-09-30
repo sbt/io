@@ -12,8 +12,8 @@ object IOSpecification extends Properties("IO") {
           Files.isRegularFile(jar)
         case jrt if jrt.toUri.getScheme == "jrt" =>
           jrt.toString.contains("/java.base")
-        case dir =>
-          Files.isDirectory(dir)
+        case f =>
+          f.endsWith(c.getName.replaceAll("\\.", "/") + ".class")
       }
   }
 

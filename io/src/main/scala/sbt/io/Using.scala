@@ -37,7 +37,10 @@ private[sbt] abstract class WrapUsing[Source, T](
 private[sbt] trait OpenFile[T] extends Using[File, T] {
   protected def openImpl(file: File): T
   protected final def open(file: File): T = {
-    val parent = file.getParentFile
+    val parent: File = (file.toString match {
+      case f if f contains "jar!" => IO.urlAsFile(file.toURI.toURL).getOrElse(file)
+      case _                      => file
+    }).getParentFile
     if (parent != null)
       IO.createDirectory(parent)
     openImpl(file)

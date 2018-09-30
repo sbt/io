@@ -32,6 +32,7 @@ import scala.util.control.Exception._
 import scala.collection.JavaConverters._
 import Function.tupled
 import sbt.internal.io.Milli
+import syntax._
 
 /** A collection of File, URL, and I/O utility methods.*/
 object IO {
@@ -132,7 +133,14 @@ object IO {
     val clsfile = s"${cl.getName.replace('.', '/')}.class"
     def localcl: Option[URL] =
       Option(cl.getProtectionDomain.getCodeSource) flatMap { codeSource =>
-        Option(codeSource.getLocation)
+        codeSource.getLocation match {
+          case null => None
+          case url if url.getProtocol == "file" =>
+            val file = toFile(url)
+            // The url will correspond either to a jar or the directory containing the classfile.
+            Some(if (file.ext == "jar") url else file.toPath.resolve(clsfile).toUri.toURL)
+          case url => Some(url)
+        }
       }
     def syscl: Option[URL] =
       Option(ClassLoader.getSystemClassLoader) flatMap { classLoader =>
