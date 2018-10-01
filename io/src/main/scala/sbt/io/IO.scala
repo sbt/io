@@ -125,18 +125,33 @@ object IO {
   def classfileLocation[T](implicit mf: SManifest[T]): URL = classfileLocation(mf.runtimeClass)
 
   /**
-   * Returns a URL for the classfile containing the given class
-   * If the location cannot be determined, an error is generated.
+   * Returns a URL for the classfile containing the given class.
+   * If the location cannot be determined, an error is generated. The returned location will
+   * be the base, e.g. the jar file itself or the directory containing the class file, not a fully
+   * path to the class file.
    */
   def classfileLocation(cl: Class[_]): URL = {
     val clsfile = s"${cl.getName.replace('.', '/')}.class"
     def localcl: Option[URL] =
       Option(cl.getProtectionDomain.getCodeSource) flatMap { codeSource =>
-        Option(codeSource.getLocation)
+        codeSource.getLocation match {
+          case null                                => None
+          case url if url.getPath.endsWith(".jar") =>
+            // the file: prefix is consistent with the results from syscl.
+            Some(new URL("jar", "", s"file:${url.getFile}"))
+          case url => Some(url)
+        }
       }
     def syscl: Option[URL] =
       Option(ClassLoader.getSystemClassLoader) flatMap { classLoader =>
-        Option(classLoader.getResource(clsfile))
+        classLoader.getResource(clsfile) match {
+          case null => None
+          case url =>
+            Some(url.getFile.indexOf("jar!") match {
+              case -1 => url
+              case i  => new URL("jar", "", url.getFile.substring(0, i + 3))
+            })
+        }
       }
     try {
       localcl
