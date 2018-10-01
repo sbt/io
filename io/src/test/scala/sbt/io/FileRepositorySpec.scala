@@ -182,14 +182,15 @@ class FileRepositorySpec(implicit factory: RepositoryFactory) extends FlatSpec w
 
   "updates" should "be detected" in withTempFile { file =>
     val latch = new CountDownLatch(1)
+    val updatedLastModified = 2000L
     using(FileRepository.default[LastModified]((p: TypedPath) =>
       LastModified(Files.getLastModifiedTime(p.getPath).toMillis))) { c =>
       c.addObserver(
         FileTreeDataView.Observer[LastModified](
           (_: Entry[LastModified]) => {},
           (_: Entry[LastModified]) => {},
-          (oldEntry: Entry[LastModified], newEntry: Entry[LastModified]) =>
-            if (oldEntry != newEntry) latch.countDown()
+          (_: Entry[LastModified], newEntry: Entry[LastModified]) =>
+            if (newEntry.value.fold(_ => 0L, _.at) == updatedLastModified) latch.countDown()
         )
       )
       c.register(file.getParent, maxDepth = Integer.MAX_VALUE)
@@ -197,7 +198,6 @@ class FileRepositorySpec(implicit factory: RepositoryFactory) extends FlatSpec w
       val lastModified = fileEntry.value
       lastModified.right.map((_: LastModified).at) shouldBe Right(
         Files.getLastModifiedTime(file).toMillis)
-      val updatedLastModified = 2000L
       Files.setLastModifiedTime(file, FileTime.fromMillis(updatedLastModified))
       assert(latch.await(DEFAULT_TIMEOUT))
       val Seq(newFileEntry) = c.listEntries(file.getParent, maxDepth = Integer.MAX_VALUE, AllPass)
