@@ -2,12 +2,12 @@ package sbt.io
 
 import java.io.File
 import java.nio.file.Files
-import org.scalatest.FlatSpec
+import org.scalatest.FunSuite
 import sbt.io.syntax._
 
-class IOSpec extends FlatSpec {
+class IOSpec extends FunSuite {
 
-  "IO" should "relativize" in {
+  test("IO should relativize") {
     // Given:
     // io-relativize/
     //     meh.file
@@ -29,7 +29,7 @@ class IOSpec extends FlatSpec {
     IO.delete(rootDir.toFile)
   }
 
-  it should "relativize . dirs" in {
+  test("it should relativize . dirs") {
     val base = new File(".")
     val file1 = new File("./.git")
     val file2 = new File(".", ".git")
@@ -40,34 +40,129 @@ class IOSpec extends FlatSpec {
     assert(IO.relativize(base, file3) == Some(".git"))
   }
 
-  it should "relativize relative paths" in {
+  test("it should relativize relative paths") {
     val base = new File(".").getCanonicalFile
     val file = new File("build.sbt")
     assert(IO.relativize(base, file) == Some("build.sbt"))
   }
 
-  "toURI" should "make URI" in {
+  test("toURI should make URI") {
     val u = IO.toURI(file("/etc/hosts").getAbsoluteFile)
     assert(u.toString.startsWith("file:///") && u.toString.endsWith("etc/hosts"))
   }
 
-  it should "make u0 URI from a relative path" in {
+  test("it should make u0 URI from a relative path") {
     val u = IO.toURI(file("src") / "main" / "scala")
     assert(u.toString == "src/main/scala")
   }
 
-  it should "make URI that roundtrips" in {
+  test("it should make URI that roundtrips") {
     val u = IO.toURI(file("/etc/hosts").getAbsoluteFile)
     assert(IO.toFile(u) == file("/etc/hosts").getAbsoluteFile)
   }
 
-  it should "make u0 URI that roundtrips" in {
+  test("it should make u0 URI that roundtrips") {
     val u = IO.toURI(file("src") / "main" / "scala")
     assert(IO.toFile(u) == (file("src") / "main" / "scala"))
   }
 
-  "getModifiedTimeOrZero" should "return 0L if the file doesn't exists" in {
+  test("getModifiedTimeOrZero should return 0L if the file doesn't exists") {
     assert(IO.getModifiedTimeOrZero(file("/not/existing/path")) == 0L)
+  }
+
+  // classLocation -----------
+
+  test("classLocation[Integer] should return a URL pointing to the rt.jar or java.base") {
+    val u = IO.classLocation[java.lang.Integer]
+    assert(
+      (u.toString == "jrt:/java.base") ||
+        (u.toString.startsWith("file:") && u.toString.endsWith("rt.jar") && IO.asFile(u).isFile))
+  }
+
+  test(
+    "classLocation[AbstractMap.SimpleEntry] should return a URL pointing to the rt.jar or java.base") {
+    val u = IO.classLocation[java.util.AbstractMap.SimpleEntry[String, String]]
+    assert(
+      (u.toString == "jrt:/java.base") ||
+        (u.toString.startsWith("file:") && u.toString.endsWith("rt.jar") && IO.asFile(u).isFile))
+  }
+
+  test("classLocation[this.type] should return a URL pointing to a directory or a JAR") {
+    val u = IO.classLocation[this.type]
+    assert(IO.asFile(u).exists)
+  }
+
+  // classLocationPath -----------
+
+  test("classLocationPath[Integer] should return NIO path pointing to the rt.jar or java.base") {
+    val p = IO.classLocationPath[java.lang.Integer]
+    assert(
+      ((p.toString == "/java.base") && (p.getFileSystem.toString == "jrt:/"))
+        || (p.toString.endsWith("rt.jar") && p.toFile.isFile)
+    )
+  }
+
+  test(
+    "classLocationPath[AbstractMap.SimpleEntry] should return NIO path pointing to the rt.jar or java.base") {
+    val p = IO.classLocationPath[java.util.AbstractMap.SimpleEntry[String, String]]
+    assert(
+      ((p.toString == "/java.base") && (p.getFileSystem.toString == "jrt:/"))
+        || (p.toString.endsWith("rt.jar") && p.toFile.isFile)
+    )
+  }
+
+  test("classLocationPath[this.type] should return NIO path pointing to a directory or a JAR") {
+    val p = IO.classLocationPath[this.type]
+    assert(p.toFile.exists)
+  }
+
+  // classLocationFileOption -----------
+
+  test("classLocationFileOption[Integer] should return File pointing to the rt.jar or None") {
+    val opt = IO.classLocationFileOption[java.lang.Integer]
+    assert(
+      opt match {
+        case Some(x) => x.getName == "rt.jar"
+        case None    => true
+      }
+    )
+  }
+
+  test(
+    "classLocationFileOption[AbstractMap.SimpleEntry] should return File pointing to the rt.jar or None") {
+    val opt = IO.classLocationFileOption[java.util.AbstractMap.SimpleEntry[String, String]]
+    assert(
+      opt match {
+        case Some(x) => x.getName == "rt.jar"
+        case None    => true
+      }
+    )
+  }
+
+  test("classLocationFileOption[this.type] should return File pointing to a directory or a JAR") {
+    val opt = IO.classLocationFileOption[this.type]
+    assert(opt.get.exists)
+  }
+
+  // classfileLocation -----------
+
+  test("classfileLocation[Integer] should return a URL pointing to *.class") {
+    val s = IO.classfileLocation[java.lang.Integer].toString
+    assert(
+      (s == "jrt:/java.base/java/lang/Integer.class") ||
+        (s.startsWith("jar:file:") && s.endsWith("!/java/lang/Integer.class")))
+  }
+
+  test("classfileLocation[AbstractMap.SimpleEntry] should return a URL pointing to *.class") {
+    val s = IO.classfileLocation[java.util.AbstractMap.SimpleEntry[String, String]].toString
+    assert(
+      (s == "jrt:/java.base/java/util/AbstractMap$SimpleEntry.class") ||
+        (s.startsWith("jar:file:") && s.endsWith("!/java/util/AbstractMap$SimpleEntry.class")))
+  }
+
+  test("classfileLocation[this.type] should return a URL pointing to *.class") {
+    val s = IO.classfileLocation[this.type].toString
+    assert(s.startsWith("file:") && s.endsWith("/sbt/io/IOSpec.class"))
   }
 
   def normalizeForWindows(s: String): String = {

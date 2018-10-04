@@ -34,6 +34,9 @@ val io = (project in file("io"))
       Vector(scalaCompiler.value % Test, scalaCheck % Test, scalatest.value % Test)
     } ++ Vector(swovalFiles),
     libraryDependencies ++= Seq(jna, jnaPlatform),
+
+    Test / fork := true,
+
     sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",
     initialCommands in console += "\nimport sbt.io._, syntax._",
     mimaPreviousArtifacts := (CrossVersion partialVersion scalaVersion.value match {
