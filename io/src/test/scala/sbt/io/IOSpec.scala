@@ -2,12 +2,12 @@ package sbt.io
 
 import java.io.File
 import java.nio.file.Files
-import org.scalatest.FlatSpec
+import org.scalatest.FunSuite
 import sbt.io.syntax._
 
-class IOSpec extends FlatSpec {
+class IOSpec extends FunSuite {
 
-  "IO" should "relativize" in {
+  test("IO should relativize") {
     // Given:
     // io-relativize/
     //     meh.file
@@ -29,7 +29,7 @@ class IOSpec extends FlatSpec {
     IO.delete(rootDir.toFile)
   }
 
-  it should "relativize . dirs" in {
+  test("it should relativize . dirs") {
     val base = new File(".")
     val file1 = new File("./.git")
     val file2 = new File(".", ".git")
@@ -40,33 +40,33 @@ class IOSpec extends FlatSpec {
     assert(IO.relativize(base, file3) == Some(".git"))
   }
 
-  it should "relativize relative paths" in {
+  test("it should relativize relative paths") {
     val base = new File(".").getCanonicalFile
     val file = new File("build.sbt")
     assert(IO.relativize(base, file) == Some("build.sbt"))
   }
 
-  "toURI" should "make URI" in {
+  test("toURI should make URI") {
     val u = IO.toURI(file("/etc/hosts").getAbsoluteFile)
     assert(u.toString.startsWith("file:///") && u.toString.endsWith("etc/hosts"))
   }
 
-  it should "make u0 URI from a relative path" in {
+  test("it should make u0 URI from a relative path") {
     val u = IO.toURI(file("src") / "main" / "scala")
     assert(u.toString == "src/main/scala")
   }
 
-  it should "make URI that roundtrips" in {
+  test("it should make URI that roundtrips") {
     val u = IO.toURI(file("/etc/hosts").getAbsoluteFile)
     assert(IO.toFile(u) == file("/etc/hosts").getAbsoluteFile)
   }
 
-  it should "make u0 URI that roundtrips" in {
+  test("it should make u0 URI that roundtrips") {
     val u = IO.toURI(file("src") / "main" / "scala")
     assert(IO.toFile(u) == (file("src") / "main" / "scala"))
   }
 
-  "getModifiedTimeOrZero" should "return 0L if the file doesn't exists" in {
+  test("getModifiedTimeOrZero should return 0L if the file doesn't exists") {
     assert(IO.getModifiedTimeOrZero(file("/not/existing/path")) == 0L)
   }
 
