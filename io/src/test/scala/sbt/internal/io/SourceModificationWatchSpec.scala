@@ -8,7 +8,7 @@ import sbt.internal.io.EventMonitorSpec._
 import sbt.io.FileEventMonitor.Event
 import sbt.io.FileTreeDataView.{ Entry, Observable, Observer }
 import sbt.io.syntax._
-import sbt.io.{ FileTreeDataView, NullLogger, TypedPath, WatchService, _ }
+import sbt.io.{ FileTreeDataView, NullWatchLogger, TypedPath, WatchService, _ }
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -259,7 +259,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 
       IO.createDirectory(parentDir)
       val observable = newObservable(parentDir.scalaSource)
-      val logger = new CachingLogger
+      val logger = new CachingWatchLogger
       val monitor = FileEventMonitor(observable, logger)
       try {
         val triggered0 = watchTest(monitor) {
@@ -284,7 +284,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       writeNewFile(file, "foo")
       val observable = newObservable(parentDir)
       // Choose a very long anti-entropy period to ensure that the second trigger doesn't happen
-      val logger = new CachingLogger
+      val logger = new CachingWatchLogger
       val monitor = FileEventMonitor.antiEntropy(observable, 10.seconds, logger)
       try {
         val triggered0 = watchTest(monitor) {
@@ -342,7 +342,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     val sources = Seq(
       Source(parentDir.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
     var lines: Seq[String] = Nil
-    val logger = new Logger {
+    val logger = new WatchLogger {
       override def debug(msg: => Any): Unit = lines.synchronized {
         lines :+= msg.toString
       }
@@ -375,7 +375,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       // getServiceWithPollDelay. The timeout was increased from 20.seconds to 40.seconds to address
       // transient failures of this test on Appveyor windows builds.
       val observable = newObservable(realParent.toFile)
-      val logger = new CachingLogger
+      val logger = new CachingWatchLogger
       val monitor = FileEventMonitor(observable, logger)
       try {
         val subdirs =
@@ -426,7 +426,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       Source(base.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
     val observable = newObservable(sources)
     try {
-      val logger = new CachingLogger
+      val logger = new CachingWatchLogger
       val triggered = watchTest(FileEventMonitor(observable, logger))(modifier)
       if (triggered != expectedTrigger) logger.printLines(s"Expected $expectedTrigger")
       triggered shouldBe expectedTrigger
@@ -482,7 +482,7 @@ object EventMonitorSpec {
   implicit class ObservableOps[T](val observable: Observable[T]) extends AnyVal {
     def filter(f: Entry[T] => Boolean): Observable[T] = new FilteredObservable[T](observable, f)
   }
-  class CachingLogger extends Logger {
+  class CachingWatchLogger extends WatchLogger {
     val lines = new scala.collection.mutable.ArrayBuffer[String]
     override def debug(msg: => Any): Unit = lines.synchronized { lines += msg.toString; () }
     def printLines(msg: String) = println(s"$msg. Log lines:\n${lines mkString "\n"}")
@@ -531,7 +531,7 @@ abstract class SourceModificationWatchSpec(
                                                             5.millis,
                                                             (_: TypedPath).getPath,
                                                             closeService = true,
-                                                            NullLogger)
+                                                            NullWatchLogger)
     observable.filter((entry: Entry[Path]) => {
       val path = entry.typedPath.getPath
       sources.exists(_.accept(path))

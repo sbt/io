@@ -64,7 +64,7 @@ object HybridEventMonitorSpec {
       f: FileEventMonitor[_] => T): T = {
     val monitor = observable match {
       case r: HybridPollingFileRepository[_] =>
-        FileEventMonitor(r.toPollingObservable(pollDelay, sources, NullLogger))
+        FileEventMonitor(r.toPollingObservable(pollDelay, sources, NullWatchLogger))
     }
     try {
       f(monitor)
