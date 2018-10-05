@@ -7,6 +7,8 @@ import java.io.File
 import org.scalacheck._, Arbitrary.arbitrary, Prop._
 
 object WriteContentSpecification extends Properties("Write content") {
+  sys.props.put("jna.nosys", "true")
+
   property("Round trip string") = forAll(writeAndCheckString _)
   property("Round trip bytes") = forAll(writeAndCheckBytes _)
   property("Write string overwrites") = forAll(overwriteAndCheckStrings _)

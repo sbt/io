@@ -57,50 +57,51 @@ object IO {
   private lazy val jrtFs = FileSystems.getFileSystem(URI.create("jrt:/"))
 
   /**
-   * Returns the NIO Path to the directory or jar file containing the class file `cl`.
-   * If the location cannot be determined or it is not a file, an error is generated.
-   * Note that Java standard library classes typically do not have a location associated with them.
+   * Returns the NIO Path to the directory, Java module, or the JAR file containing the class file `cl`.
+   * If the location cannot be determined, an error is generated.
+   * Note that for JDK 11 onwards, a module will return a jrt path.
    */
   def classLocationPath(cl: Class[_]): NioPath = {
-    val u = classfileLocation(cl)
+    val u = classLocation(cl)
     val p = u.getProtocol match {
       case FileScheme => Option(toFile(u).toPath)
       case "jar"      => urlAsFile(u) map { _.toPath }
-      case "jrt"      => Option(IO.jrtFs.getPath("/modules" + u.getPath))
+      case "jrt"      => Option(IO.jrtFs.getPath(u.getPath))
       case _          => None
     }
     p.getOrElse(sys.error(s"Unable to create File from $u for $cl"))
   }
 
   /**
-   * Returns a NIO Path for the classfile containing the given class file for type `A` (as determined by an implicit Manifest).
+   * Returns a NIO Path to the directory, Java module, or the JAR file for type `A` (as determined by an implicit Manifest).
    * If the location cannot be determined, an error is generated.
+   * Note that for JDK 11 onwards, a module will return a jrt path.
    */
   def classLocationPath[A](implicit mf: SManifest[A]): NioPath =
     classLocationPath(mf.runtimeClass)
 
   /**
-   * Returns the directory or jar file containing the class file `cl`.
+   * Returns the directory, Java module, or the JAR containing the class file `cl`.
    * If the location cannot be determined or it is not a file, an error is generated.
-   * Note that Java standard library classes typically do not have a location associated with them.
+   * Note that for JDK 11 onwards, the returned module path cannot be expressed as `File`, so it will return `None`.
    */
   def classLocationFileOption(cl: Class[_]): Option[File] = {
-    val u = classfileLocation(cl)
+    val u = classLocation(cl)
     urlAsFile(u)
   }
 
   /**
-   * Returns the directory or jar file containing the class file for type `T` (as determined by an implicit Manifest).
-   * If the location cannot be determined, an error is generated.
-   * Note that Java standard library classes typically do not have a location associated with them.
+   * Returns the directory, Java module, or the JAR containing the class file for type `T` (as determined by an implicit Manifest).
+   * If the location cannot be determined or it is not a file, an error is generated.
+   * Note that for JDK 11 onwards, the returned module path cannot be expressed as `File`, so it will return `None`.
    */
   def classLocationFileOption[A](implicit mf: SManifest[A]): Option[File] =
     classLocationFileOption(mf.runtimeClass)
 
   /**
-   * Returns the directory or jar file containing the class file `cl`.
+   * Returns the directory, Java module, or the JAR file containing the class file `cl`.
    * If the location cannot be determined or it is not a file, an error is generated.
-   * Note that Java standard library classes typically do not have a location associated with them.
+   * Note that for JDK 11 onwards, the returned module path cannot be expressed as `File`.
    */
   @deprecated(
     "classLocationFile may not work on JDK 11. Use classfileLocation, classLocationFileOption, or classLocationPath instead.",
@@ -109,14 +110,67 @@ object IO {
     classLocationFileOption(cl).getOrElse(sys.error(s"Unable to create File from $cl"))
 
   /**
-   * Returns the directory or jar file containing the class file for type `T` (as determined by an implicit Manifest).
+   * Returns the directory, Java module, or the JAR file containing the class file for type `T` (as determined by an implicit Manifest).
    * If the location cannot be determined, an error is generated.
-   * Note that Java standard library classes typically do not have a location associated with them.
+   * Note that for JDK 11 onwards, the returned module path cannot be expressed as `File`.
    */
   @deprecated(
     "classLocationFile may not work on JDK 11. Use classfileLocation, classLocationFileOption, or classLocationPath instead.",
     "1.2.2")
   def classLocationFile[T](implicit mf: SManifest[T]): File = classLocationFile(mf.runtimeClass)
+
+  /**
+   * Returns the URL to the directory, Java module, or the JAR file containing the class file `cl`.
+   * If the location cannot be determined or it is not a file, an error is generated.
+   * Note that for JDK 11 onwards, a module will return a jrt URL such as `jrt:/java.base`.
+   */
+  def classLocation(cl: Class[_]): URL = {
+    def localcl: Option[URL] =
+      Option(cl.getProtectionDomain.getCodeSource) flatMap { codeSource =>
+        Option(codeSource.getLocation)
+      }
+    // This assumes that classes without code sources are System classes, and thus located in jars.
+    // It returns a URL that looks like jar:file:/Library/Java/JavaVirtualMachines/jdk1.8.0_131.jdk/Contents/Home/jre/lib/rt.jar!/java/lang/Integer.class
+    val clsfile = s"${cl.getName.replace('.', '/')}.class"
+    def syscl: Option[URL] =
+      Option(ClassLoader.getSystemClassLoader) flatMap { classLoader =>
+        Option(classLoader.getResource(clsfile))
+      }
+    try {
+      localcl
+        .orElse(syscl)
+        .map(url =>
+          url.getProtocol match {
+            case "jar" =>
+              val path = url.getPath
+              val end = path.indexOf('!')
+              new URL(
+                if (end == -1) path
+                else path.substring(0, end))
+            case "jrt" =>
+              val path = url.getPath
+              val end = path.indexOf('/', 1)
+              new URL("jrt",
+                      null,
+                      if (end == -1) path
+                      else path.substring(0, end))
+            case _ => url
+        })
+        .getOrElse(sys.error("No class location for " + cl))
+    } catch {
+      case NonFatal(e) =>
+        e.printStackTrace()
+        throw e
+    }
+  }
+
+  /**
+   * Returns the URL to the directory, Java module, or the JAR file containing the class file `cl`.
+   * If the location cannot be determined or it is not a file, an error is generated.
+   * Note that for JDK 11 onwards, a module will return a jrt path.
+   */
+  def classLocation[A](implicit mf: SManifest[A]): URL =
+    classLocation(mf.runtimeClass)
 
   /**
    * Returns a URL for the classfile containing the given class file for type `T` (as determined by an implicit Manifest).
@@ -131,8 +185,8 @@ object IO {
   def classfileLocation(cl: Class[_]): URL = {
     val clsfile = s"${cl.getName.replace('.', '/')}.class"
     def localcl: Option[URL] =
-      Option(cl.getProtectionDomain.getCodeSource) flatMap { codeSource =>
-        Option(codeSource.getLocation)
+      Option(cl.getClassLoader) flatMap { classLoader =>
+        Option(classLoader.getResource(clsfile))
       }
     def syscl: Option[URL] =
       Option(ClassLoader.getSystemClassLoader) flatMap { classLoader =>
