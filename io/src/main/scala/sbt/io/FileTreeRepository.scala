@@ -7,8 +7,8 @@ import java.nio.file.{ Files, NoSuchFileException, Path => JPath }
 
 import sbt.internal.io.{
   DefaultFileTreeView,
-  FileRepositoryImpl,
-  HybridPollingFileRepository,
+  FileTreeRepositoryImpl,
+  HybridPollingFileTreeRepository,
   Source
 }
 import sbt.io.FileTreeDataView.{ Entry, Observable }
@@ -155,8 +155,9 @@ object FileTreeDataView {
   }
 
   /**
-   * A FileRepository observer that receives callbacks
-   * @tparam T the generic type of [[Entry.value]] instances for the [[FileRepository]]
+   * A FileTreeRepository observer that receives callbacks
+   *
+   * @tparam T the generic type of [[Entry.value]] instances for the [[FileTreeRepository]]
    */
   trait Observer[-T] {
 
@@ -260,15 +261,15 @@ object FileTreeDataView {
 
 /**
  * Monitors registered directories for file changes. A typical implementation will keep an
- * in memory cache of the file system that can be queried in [[FileRepository#listEntries]]. The
- * [[FileRepository#register]] method adds monitoring for a particular cache. A filter may be provided
+ * in memory cache of the file system that can be queried in [[FileTreeRepository#listEntries]]. The
+ * [[FileTreeRepository#register]] method adds monitoring for a particular cache. A filter may be provided
  * so that the cache doesn't waste memory on files the user doesn't care about. The
  * cache may be shared across a code base so there additional apis for adding filters or changing
  * the recursive property of a directory.
  *
  * @tparam T the type of the [[FileTreeDataView.Entry.value]]s.
  */
-trait FileRepository[+T] extends Observable[T] with FileTreeDataView[T] with AutoCloseable {
+trait FileTreeRepository[+T] extends Observable[T] with FileTreeDataView[T] with AutoCloseable {
 
   /**
    * Register a directory for monitoring
@@ -291,27 +292,29 @@ trait FileRepository[+T] extends Observable[T] with FileTreeDataView[T] with Aut
   def unregister(path: JPath): Unit
 }
 
-object FileRepository {
+object FileTreeRepository {
 
   /**
-   * Create a [[FileRepository]]. The generated repository will cache the file system tree for the
+   * Create a [[FileTreeRepository]]. The generated repository will cache the file system tree for the
    * monitored directories.
+   *
    * @param converter function to generate an [[FileTreeDataView.Entry.value]] from a [[TypedPath]]
    * @tparam T the generic type of the [[FileTreeDataView.Entry.value]]
    * @return a file repository.
    */
-  def default[T](converter: TypedPath => T): FileRepository[T] =
-    new FileRepositoryImpl[T](converter)
+  def default[T](converter: TypedPath => T): FileTreeRepository[T] =
+    new FileTreeRepositoryImpl[T](converter)
 
   /**
-   * Create a [[FileRepository]]. The generated repository will cache the file system tree for some
+   * Create a [[FileTreeRepository]]. The generated repository will cache the file system tree for some
    * of the paths under monitoring, but others will need to be polled.
+   *
    * @param converter function to generate an [[FileTreeDataView.Entry.value]] from a [[TypedPath]]
    * @param pollingSources do not cache any path contained in these [[sbt.internal.io.Source]]s.
    * @tparam T the generic type of the [[FileTreeDataView.Entry.value]]
    * @return a file repository.
    */
   def hybrid[T](converter: TypedPath => T,
-                pollingSources: Source*): HybridPollingFileRepository[T] =
-    HybridPollingFileRepository(converter, pollingSources: _*)
+                pollingSources: Source*): HybridPollingFileTreeRepository[T] =
+    HybridPollingFileTreeRepository(converter, pollingSources: _*)
 }

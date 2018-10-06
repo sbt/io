@@ -4,18 +4,18 @@ import java.nio.file.{ Files, Path }
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import org.scalatest.{ FlatSpec, Matchers }
-import sbt.io.FileRepositorySpec.FileRepositoryOps
+import sbt.io.FileTreeRepositorySpec.FileRepositoryOps
 import sbt.io.FileTreeDataView.Observer
 import sbt.io._
 
-class HybridPollingFileRepositorySpec extends FlatSpec with Matchers {
+class HybridPollingFileTreeRepositorySpec extends FlatSpec with Matchers {
   val allPass: TypedPath => Boolean = (_: TypedPath) => true
   it should "poll specified directories " in IO.withTemporaryDirectory { baseDir =>
     val dir = Files.createDirectory(baseDir.toPath.resolve("regular")).toRealPath()
     val pollingDir = Files.createDirectory(baseDir.toPath.resolve("polling")).toRealPath()
     val latch = new CountDownLatch(1)
     val repo =
-      FileRepository.hybrid((_: TypedPath).getPath, Source(pollingDir.toFile))
+      FileTreeRepository.hybrid((_: TypedPath).getPath, Source(pollingDir.toFile))
     try {
       repo.register(dir, maxDepth = Integer.MAX_VALUE)
       repo.register(pollingDir, maxDepth = Integer.MAX_VALUE)
@@ -53,7 +53,8 @@ class HybridPollingFileRepositorySpec extends FlatSpec with Matchers {
     val file = Files.createFile(nested.resolve("file"))
     val filter: FileFilter = new SimpleFileFilter(_.getName != subdir.toFile.getName)
     val repo =
-      FileRepository.hybrid((_: TypedPath).getPath, Source(subdir.toFile, filter, NothingFilter))
+      FileTreeRepository.hybrid((_: TypedPath).getPath,
+                                Source(subdir.toFile, filter, NothingFilter))
     try {
       repo.register(dir, Integer.MAX_VALUE)
       repo.ls(dir).sorted shouldBe Seq(subdir, nested, file)
