@@ -9,15 +9,15 @@ import sbt.io._
 import scala.concurrent.duration.FiniteDuration
 
 /**
- * A hybrid [[FileRepository]] that caches some paths and monitors them with os notifications and
+ * A hybrid [[FileTreeRepository]] that caches some paths and monitors them with os notifications and
  * does not cache the paths that are filtered using the provided shouldPoll function. As a general
  * rule, the paths to be polled should ideally not be in the same directory tree as any of the
- * paths that are being cached. The [[FileRepository.list]] method should do the right thing in this
+ * paths that are being cached. The [[FileTreeRepository.list]] method should do the right thing in this
  * case, but it's possible that there may be some bugs in handling the overlapping paths.
  *
  * @tparam T the type of the [[Entry.value]]s.
  */
-private[sbt] trait HybridPollingFileRepository[+T] extends FileRepository[T] { self =>
+private[sbt] trait HybridPollingFileTreeRepository[+T] extends FileTreeRepository[T] { self =>
   def shouldPoll(path: Path): Boolean
   def shouldPoll(typedPath: TypedPath): Boolean = shouldPoll(typedPath.getPath)
   def shouldPoll(source: Source): Boolean = shouldPoll(source.base.toPath)
@@ -26,10 +26,10 @@ private[sbt] trait HybridPollingFileRepository[+T] extends FileRepository[T] { s
                           logger: WatchLogger): Observable[T]
 }
 
-private[io] case class HybridPollingFileRepositoryImpl[+T](converter: TypedPath => T,
-                                                           pollingSources: Seq[Source])
-    extends HybridPollingFileRepository[T] { self =>
-  private val repo = new FileRepositoryImpl[T](converter)
+private[io] case class HybridPollingFileTreeRepositoryImpl[+T](converter: TypedPath => T,
+                                                               pollingSources: Seq[Source])
+    extends HybridPollingFileTreeRepository[T] { self =>
+  private val repo = new FileTreeRepositoryImpl[T](converter)
   private val view = DefaultFileTreeView.asDataView(converter)
   private val shouldPollEntry: Entry[_] => Boolean = (e: Entry[_]) => shouldPoll(e.typedPath)
 
@@ -107,7 +107,8 @@ private[io] case class HybridPollingFileRepositoryImpl[+T](converter: TypedPath 
   }
 }
 
-private[sbt] object HybridPollingFileRepository {
-  def apply[T](converter: TypedPath => T, pollingSources: Source*): HybridPollingFileRepository[T] =
-    HybridPollingFileRepositoryImpl(converter, pollingSources)
+private[sbt] object HybridPollingFileTreeRepository {
+  def apply[T](converter: TypedPath => T,
+               pollingSources: Source*): HybridPollingFileTreeRepository[T] =
+    HybridPollingFileTreeRepositoryImpl(converter, pollingSources)
 }

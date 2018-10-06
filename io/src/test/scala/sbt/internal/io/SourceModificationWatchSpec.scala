@@ -489,11 +489,11 @@ object EventMonitorSpec {
   }
 }
 
-class FileRepositoryEventMonitorSpec extends FlatSpec with Matchers with EventMonitorSpec {
+class FileTreeRepositoryEventMonitorSpec extends FlatSpec with Matchers with EventMonitorSpec {
   override def pollDelay: FiniteDuration = 100.millis
 
   override def newObservable(sources: Seq[Source]): Observable[_] = {
-    val repository = FileRepository.default((_: TypedPath).getPath)
+    val repository = FileTreeRepository.default((_: TypedPath).getPath)
     sources foreach (s =>
       repository.register(s.base.toPath, if (s.recursive) Integer.MAX_VALUE else 0))
     repository.filter(e => sources.exists(s => s.accept(e.typedPath.getPath)))

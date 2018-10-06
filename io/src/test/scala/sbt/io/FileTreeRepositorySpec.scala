@@ -6,16 +6,16 @@ import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import org.scalatest.{ FlatSpec, Matchers }
 import sbt.io.FileTreeDataView.Entry
-import sbt.io.FileRepositorySpec._
+import sbt.io.FileTreeRepositorySpec._
 
 import scala.concurrent.duration._
 import sbt.io.FileTreeView.AllPass
 
 private[io] trait RepositoryFactory {
-  def newRepository[T](converter: TypedPath => T): FileRepository[T]
+  def newRepository[T](converter: TypedPath => T): FileTreeRepository[T]
 }
-object FileRepositorySpec {
-  implicit class FileRepositoryOps[T](val fileCache: FileRepository[T]) extends AnyVal {
+object FileTreeRepositorySpec {
+  implicit class FileRepositoryOps[T](val fileCache: FileTreeRepository[T]) extends AnyVal {
     def ls(path: JPath,
            maxDepth: Int = Integer.MAX_VALUE,
            filter: TypedPath => Boolean = AllPass): Seq[JPath] =
@@ -26,7 +26,7 @@ object FileRepositorySpec {
   }
   def asPath(typedPath: TypedPath): JPath = typedPath.getPath
   private val DEFAULT_TIMEOUT = 1.second
-  def using[T, R](fileCache: => FileRepository[T])(f: FileRepository[T] => R): R = {
+  def using[T, R](fileCache: => FileTreeRepository[T])(f: FileTreeRepository[T] => R): R = {
     val cache = fileCache
     try f(cache)
     finally cache.close()
@@ -49,20 +49,20 @@ object FileRepositorySpec {
   }
   def withTempFile[R](f: JPath => R): R = withTempDir(withTempFile(_)(f))
   def simpleCache(f: Entry[JPath] => Unit = _ => {})(
-      implicit factory: RepositoryFactory): FileRepository[JPath] = {
+      implicit factory: RepositoryFactory): FileTreeRepository[JPath] = {
     val res = factory.newRepository(asPath)
     res.addObserver(f)
     res
   }
   def simpleCache(observer: FileTreeDataView.Observer[JPath])(
-      implicit factory: RepositoryFactory): FileRepository[JPath] = {
+      implicit factory: RepositoryFactory): FileTreeRepository[JPath] = {
     val res = factory.newRepository(asPath)
     res.addObserver(observer)
     res
   }
   case class LastModified(at: Long)
 }
-class FileRepositorySpec(implicit factory: RepositoryFactory) extends FlatSpec with Matchers {
+class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSpec with Matchers {
   "register" should "see existing files" in withTempFile { file =>
     using(simpleCache()) { c =>
       c.register(file.getParent, Integer.MAX_VALUE)
@@ -183,7 +183,7 @@ class FileRepositorySpec(implicit factory: RepositoryFactory) extends FlatSpec w
   "updates" should "be detected" in withTempFile { file =>
     val latch = new CountDownLatch(1)
     val updatedLastModified = 2000L
-    using(FileRepository.default[LastModified]((p: TypedPath) =>
+    using(FileTreeRepository.default[LastModified]((p: TypedPath) =>
       LastModified(Files.getLastModifiedTime(p.getPath).toMillis))) { c =>
       c.addObserver(
         FileTreeDataView.Observer[LastModified](
@@ -206,7 +206,7 @@ class FileRepositorySpec(implicit factory: RepositoryFactory) extends FlatSpec w
   }
 
   private def withThread[R](name: String)(body: => Unit)(f: => R): Unit = {
-    val thread = new Thread(s"FileRepositorySpec-$name") {
+    val thread = new Thread(s"FileTreeRepositorySpec-$name") {
       override def run(): Unit = body
       setDaemon(true)
       start()
@@ -221,8 +221,8 @@ class FileRepositorySpec(implicit factory: RepositoryFactory) extends FlatSpec w
   }
 
 }
-class DefaultFileRepositorySpec
-    extends FileRepositorySpec()(new RepositoryFactory {
-      override def newRepository[T](converter: TypedPath => T): FileRepository[T] =
-        FileRepository.default(converter)
+class DefaultFileTreeRepositorySpec
+    extends FileTreeRepositorySpec()(new RepositoryFactory {
+      override def newRepository[T](converter: TypedPath => T): FileTreeRepository[T] =
+        FileTreeRepository.default(converter)
     })

@@ -14,7 +14,7 @@ class HybridEventMonitorSpec extends FlatSpec with Matchers {
     val dir = baseDir.toPath.toRealPath()
     val pollingDir = Files.createDirectory(dir.resolve("polling"))
     val monitoredDir = Files.createDirectory(dir.resolve("monitored"))
-    val repo = FileRepository.hybrid((_: TypedPath).getPath, Source(pollingDir.toFile))
+    val repo = FileTreeRepository.hybrid((_: TypedPath).getPath, Source(pollingDir.toFile))
     val sources = Seq(Source(pollingDir.toFile), Source(monitoredDir.toFile))
     repo.register(pollingDir, Integer.MAX_VALUE)
     repo.register(monitoredDir, Integer.MAX_VALUE)
@@ -63,7 +63,7 @@ object HybridEventMonitorSpec {
   def withMonitor[T](observable: Observable[_], sources: Seq[Source])(
       f: FileEventMonitor[_] => T): T = {
     val monitor = observable match {
-      case r: HybridPollingFileRepository[_] =>
+      case r: HybridPollingFileTreeRepository[_] =>
         FileEventMonitor(r.toPollingObservable(pollDelay, sources, NullWatchLogger))
     }
     try {
@@ -72,7 +72,7 @@ object HybridEventMonitorSpec {
       monitor.close()
     }
   }
-  implicit class FileRepositoryOps[+T](val fileRepository: FileRepository[T]) {
+  implicit class FileRepositoryOps[+T](val fileRepository: FileTreeRepository[T]) {
     def ls(path: Path): Seq[Path] =
       fileRepository.list(path, Integer.MAX_VALUE, (_: TypedPath) => true).map(_.getPath)
   }

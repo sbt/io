@@ -7,18 +7,20 @@ import com.swoval.files.FileTreeDataViews.Converter
 import com.swoval.files.{ FileTreeRepositories, TypedPath => STypedPath }
 import com.swoval.functional.Filters
 import sbt.internal.io.SwovalConverters.{ SwovalEitherOps, SwovalEntryOps, ObserverOps }
-import sbt.io.{ FileRepository, FileTreeDataView, TypedPath }
+import sbt.io.{ FileTreeRepository, FileTreeDataView, TypedPath }
 import FileTreeDataView.Entry
 
 import scala.collection.immutable.VectorBuilder
 
 /**
- * The default implemenation of [[FileRepository]]. It delegates all of its methods to the
+ * The default implemenation of [[FileTreeRepository]]. It delegates all of its methods to the
  * [[https://swoval.github.io/files/jvm/com/swoval/files/FileTreeRepository.html swoval FileTreeRepository]].
+ *
  * @param converter the function to convert paths to
  * @tparam T the type of the [[FileTreeDataView.Entry.value]]s.
  */
-private[sbt] class FileRepositoryImpl[+T](converter: TypedPath => T) extends FileRepository[T] {
+private[sbt] class FileTreeRepositoryImpl[+T](converter: TypedPath => T)
+    extends FileTreeRepository[T] {
   private[this] val underlying = FileTreeRepositories.get[T](new Converter[T] {
     import SwovalConverters.SwovalTypedPathOps
     override def apply(path: STypedPath): T = converter(path.asSbt)
