@@ -1,6 +1,11 @@
 import Dependencies._
 import com.typesafe.tools.mima.core._, ProblemFilters._
 
+
+ThisBuild / scalafmtOnCompile := true
+ThisBuild / Sbt / scalafmtOnCompile := false
+ThisBuild / scalafmtVersion := "1.4.0"
+
 def commonSettings: Seq[Setting[_]] = Seq(
   scalaVersion := scala212,
   javacOptions in compile ++= Seq("-Xlint", "-Xlint:-serial"),
