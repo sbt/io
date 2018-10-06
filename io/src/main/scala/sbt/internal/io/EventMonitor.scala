@@ -55,7 +55,7 @@ private[sbt] object EventMonitor {
             antiEntropy: FiniteDuration,
             terminationCondition: => Boolean,
             logger: Logger = NullLogger): EventMonitor = {
-    val eventLogger = new io.Logger {
+    val eventLogger = new io.WatchLogger {
       override def debug(msg: => Any): Unit = logger.debug(msg)
     }
     val observable = new WatchServiceBackedObservable[Path](watchState,

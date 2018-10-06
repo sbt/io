@@ -64,11 +64,12 @@ object FileEventMonitor {
     override def hashCode(): Int = entry.hashCode()
   }
 
-  def apply[T](observable: Observable[T], logger: Logger = NullLogger): FileEventMonitor[T] =
+  def apply[T](observable: Observable[T],
+               logger: WatchLogger = NullWatchLogger): FileEventMonitor[T] =
     new FileEventMonitorImpl[T](observable, logger)
   def antiEntropy[T](observable: Observable[T],
                      period: FiniteDuration,
-                     logger: Logger,
+                     logger: WatchLogger,
                      quarantinePeriod: FiniteDuration = 50.millis): FileEventMonitor[T] = {
     new AntiEntropyFileEventMonitor(period,
                                     new FileEventMonitorImpl[T](observable, logger),
@@ -76,7 +77,7 @@ object FileEventMonitor {
                                     quarantinePeriod)
   }
 
-  private class FileEventMonitorImpl[T](observable: Observable[T], logger: Logger)
+  private class FileEventMonitorImpl[T](observable: Observable[T], logger: WatchLogger)
       extends FileEventMonitor[T] {
     private case object Trigger
     private val events =
@@ -162,7 +163,7 @@ object FileEventMonitor {
   }
   private class AntiEntropyFileEventMonitor[T](period: FiniteDuration,
                                                fileEventMonitor: FileEventMonitor[T],
-                                               logger: Logger,
+                                               logger: WatchLogger,
                                                quarantinePeriod: FiniteDuration)
       extends FileEventMonitor[T] {
     private[this] val recentEvents = mutable.Map.empty[JPath, Deadline]

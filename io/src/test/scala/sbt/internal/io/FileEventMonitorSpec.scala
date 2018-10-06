@@ -3,7 +3,7 @@ package sbt.internal.io
 import java.nio.file.{ Path, Paths }
 
 import org.scalatest.{ FlatSpec, Matchers }
-import sbt.io.{ FileEventMonitor, NullLogger, TypedPath }
+import sbt.io.{ FileEventMonitor, NullWatchLogger, TypedPath }
 import sbt.io.FileEventMonitor.{ Creation, Deletion, Update }
 import sbt.io.FileTreeDataView.Entry
 
@@ -30,7 +30,7 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
   "anti-entropy" should "ignore redundant events" in {
     val observers = new Observers[Path]
     val antiEntropyPeriod = 20.millis
-    val monitor = FileEventMonitor.antiEntropy(observers, antiEntropyPeriod, NullLogger)
+    val monitor = FileEventMonitor.antiEntropy(observers, antiEntropyPeriod, NullWatchLogger)
     val entry = TestEntry("foo", FILE | EXISTS)
     val start = Deadline.now
     observers.onCreate(entry)
@@ -48,7 +48,7 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
     val antiEntropyPeriod = 40.millis
     val quarantinePeriod = antiEntropyPeriod / 2
     val monitor =
-      FileEventMonitor.antiEntropy(observers, antiEntropyPeriod, NullLogger, quarantinePeriod)
+      FileEventMonitor.antiEntropy(observers, antiEntropyPeriod, NullWatchLogger, quarantinePeriod)
     val entry = TestEntry("foo", FILE)
     observers.onDelete(entry)
     monitor.poll(0.millis) shouldBe Nil
@@ -59,7 +59,7 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
     val antiEntropyPeriod = 40.millis
     val quarantinePeriod = antiEntropyPeriod / 2
     val monitor =
-      FileEventMonitor.antiEntropy(observers, antiEntropyPeriod, NullLogger, quarantinePeriod)
+      FileEventMonitor.antiEntropy(observers, antiEntropyPeriod, NullWatchLogger, quarantinePeriod)
     val deletedEntry = TestEntry("foo", FILE)
     val newEntry = TestEntry("foo", FILE | EXISTS)
     observers.onDelete(deletedEntry)

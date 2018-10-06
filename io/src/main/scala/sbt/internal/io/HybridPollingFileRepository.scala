@@ -23,7 +23,7 @@ private[sbt] trait HybridPollingFileRepository[+T] extends FileRepository[T] { s
   def shouldPoll(source: Source): Boolean = shouldPoll(source.base.toPath)
   def toPollingObservable(delay: FiniteDuration,
                           sources: Seq[Source],
-                          logger: Logger): Observable[T]
+                          logger: WatchLogger): Observable[T]
 }
 
 private[io] case class HybridPollingFileRepositoryImpl[+T](converter: TypedPath => T,
@@ -81,7 +81,7 @@ private[io] case class HybridPollingFileRepositoryImpl[+T](converter: TypedPath 
   }
   def toPollingObservable(delay: FiniteDuration,
                           sources: Seq[Source],
-                          logger: Logger): Observable[T] = {
+                          logger: WatchLogger): Observable[T] = {
     val pollingSources = sources.filter(shouldPoll)
     if (pollingSources.isEmpty) self
     else {

@@ -7,7 +7,7 @@ import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import sbt.io.FileTreeDataView.{ Entry, Observable }
 import sbt.io.FileTreeView.AllPass
-import sbt.io.{ FileTreeDataView, FileTreeView, Logger, TypedPath }
+import sbt.io.{ FileTreeDataView, FileTreeView, WatchLogger, TypedPath }
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -22,7 +22,7 @@ private[sbt] class WatchServiceBackedObservable[+T](s: WatchState,
                                                     delay: FiniteDuration,
                                                     converter: TypedPath => T,
                                                     closeService: Boolean,
-                                                    logger: Logger)
+                                                    logger: WatchLogger)
     extends Observable[T] {
   private[this] val closed = new AtomicBoolean(false)
   private[this] val observers = new Observers[T]
