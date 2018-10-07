@@ -13,8 +13,6 @@ import java.nio.file.{
   FileVisitor,
   Files,
   LinkOption,
-  NoSuchFileException,
-  NotDirectoryException,
   Path => NioPath
 }
 
@@ -502,7 +500,7 @@ private object DescendantOrSelfPathFinder {
         )
       ()
     } catch {
-      case _: NotDirectoryException | _: NoSuchFileException =>
+      case _: IOException =>
     }
   }
   def nio(file: File, filter: FileFilter, fileSet: mutable.Set[File]): Unit = {
