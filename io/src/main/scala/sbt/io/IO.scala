@@ -15,10 +15,10 @@ import java.io.{
   OutputStream,
   PrintWriter
 }
-import java.io.{ ObjectInputStream, ObjectStreamClass, FileNotFoundException }
+import java.io.{ IOException, FileNotFoundException, ObjectInputStream, ObjectStreamClass }
 import java.net.{ URI, URISyntaxException, URL }
 import java.nio.charset.Charset
-import java.nio.file.{ FileSystems, Path => NioPath }
+import java.nio.file.{ FileAlreadyExistsException, FileSystems, Files, Path => NioPath }
 import java.nio.file.attribute.PosixFilePermissions
 import java.util.Properties
 import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
@@ -315,15 +315,20 @@ object IO {
   /** Creates directory `dir` and all parent directories.  It tries to work around a race condition in `File.mkdirs()` by retrying up to a limit.*/
   def createDirectory(dir: File): Unit = {
     def failBase = "Could not create directory " + dir
-    // Need a retry because mkdirs() has a race condition
-    var tryCount = 0
-    while (!dir.exists && !dir.mkdirs() && tryCount < 100) { tryCount += 1 }
-    if (dir.isDirectory)
-      ()
-    else if (dir.exists) {
-      sys.error(failBase + ": file exists and is not a directory.")
-    } else
-      sys.error(failBase)
+    // Need a retry because Files.createDirectories may fail before succeeding on (at least) windows.
+    val path = dir.toPath
+    @tailrec
+    def create(count: Int = 0): Unit =
+      try {
+        Files.createDirectories(path)
+        ()
+      } catch {
+        case _: FileAlreadyExistsException =>
+          sys.error(failBase + ": file exists and is not a directory.")
+        case _: IOException if count < 5 => create(count + 1)
+        case _: IOException              => sys.error(failBase)
+      }
+    if (!Files.isDirectory(path)) create()
   }
 
   /** Gzips the file 'in' and writes it to 'out'.  'in' cannot be the same file as 'out'. */
