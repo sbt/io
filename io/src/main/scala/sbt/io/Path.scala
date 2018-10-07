@@ -352,9 +352,20 @@ sealed abstract class PathFinder {
   /**
    * Constructs a new finder that selects all paths with a name that matches <code>filter</code> and are
    * descendants of paths selected by this finder.
+   * @param filter only include files that this filter accepts
    */
   def globRecursive(filter: FileFilter): PathFinder =
     new DescendantOrSelfPathFinder(this, filter, defaultDescendantHandler)
+
+  /**
+   * Constructs a new finder that selects all paths with a name that matches <code>filter</code> and are
+   * descendants of paths selected by this finder.
+   * @param filter only include files that this filter accepts
+   * @param walker use this walker to traverse the file system
+   */
+  def globRecursive(filter: FileFilter,
+                    walker: (File, FileFilter, mutable.Set[File]) => Unit): PathFinder =
+    new DescendantOrSelfPathFinder(this, filter, walker)
 
   /** Alias of globRecursive. */
   final def **(filter: FileFilter): PathFinder = globRecursive(filter)
@@ -364,6 +375,7 @@ sealed abstract class PathFinder {
   /**
    * Constructs a new finder that selects all paths with a name that matches <code>filter</code>
    * and are immediate children of paths selected by this finder.
+   * @param filter only include files that this filter accepts
    */
   def glob(filter: FileFilter): PathFinder = new ChildPathFinder(this, filter)
 
@@ -498,6 +510,11 @@ private object DescendantOrSelfPathFinder {
             }
           }
         )
+      val typedFile = new File(file.toString) {
+        override def isDirectory: Boolean = true
+        override def isFile: Boolean = false
+      }
+      if (filter.accept(typedFile)) fileSet += file
       ()
     } catch {
       case _: IOException =>
