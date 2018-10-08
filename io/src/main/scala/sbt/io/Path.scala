@@ -21,6 +21,7 @@ import com.swoval.functional.Filter
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.util.Properties
 
 final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
   def /(component: String): File = if (component == ".") asFile else new File(asFile, component)
@@ -296,13 +297,13 @@ object Path extends Mapper {
 
   def toURLs(files: Seq[File]): Array[URL] = files.map(_.toURI.toURL).toArray
 
+  private def useNio(): Boolean =
+    sys.props.getOrElseUpdate("sbt.pathfinder", if (Properties.isWin) "nio" else "") == "nio"
   private[sbt] val defaultLinkOptions: Vector[LinkOption] = Vector.empty
   private[sbt] val defaultDescendantHandler: (File, FileFilter, mutable.Set[File]) => Unit =
-    if ("nio" == sys.props.getOrElse("sbt.pathfinder", ""))
-      DescendantOrSelfPathFinder.nio
-    else DescendantOrSelfPathFinder.default
+    if (useNio()) DescendantOrSelfPathFinder.nio else DescendantOrSelfPathFinder.default
   private[sbt] val defaultChildHandler: (File, FileFilter) => Seq[File] =
-    if ("nio" == sys.props.getOrElse("sbt.pathfinder", "")) { (file, filter) =>
+    if (useNio()) { (file, filter) =>
       IO.wrapNull(file.listFiles(filter)).toSeq
     } else {
       val fileTreeView = FileTreeView.DEFAULT
