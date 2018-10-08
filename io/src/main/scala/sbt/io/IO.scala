@@ -609,7 +609,10 @@ object IO {
     if (outputFile.isDirectory)
       sys.error("Specified output file " + outputFile + " is a directory.")
     else {
-      val outputDir = outputFile.getParentFile
+      val outputDir = outputFile.getParentFile match {
+        case null       => new File(".")
+        case parentFile => parentFile
+      }
       createDirectory(outputDir)
       withZipOutput(outputFile, manifest) { output =>
         val createEntry: (String => ZipEntry) =
