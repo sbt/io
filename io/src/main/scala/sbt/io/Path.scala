@@ -18,6 +18,7 @@ import java.nio.file.{
 
 import com.swoval.files.FileTreeViews
 import com.swoval.functional.Filter
+import sbt.io.FileTreeView.AllPass
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -308,7 +309,7 @@ object Path extends Mapper {
     } else {
       val fileTreeView = FileTreeView.DEFAULT
       (file, filter) =>
-        val unfiltered = fileTreeView.list(file.toPath, 0, _ => true)
+        val unfiltered = fileTreeView.list(file.toPath, 0, AllPass)
         unfiltered.flatMap { tp =>
           val fileName = tp.getPath.toString
           val file = new File(fileName) {
