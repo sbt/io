@@ -18,9 +18,11 @@ import java.nio.file.{
 
 import com.swoval.files.FileTreeViews
 import com.swoval.functional.Filter
+import sbt.io.FileTreeView.AllPass
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.util.Properties
 
 final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
   def /(component: String): File = if (component == ".") asFile else new File(asFile, component)
@@ -296,18 +298,18 @@ object Path extends Mapper {
 
   def toURLs(files: Seq[File]): Array[URL] = files.map(_.toURI.toURL).toArray
 
+  private def useNio(): Boolean =
+    sys.props.getOrElseUpdate("sbt.pathfinder", if (Properties.isWin) "nio" else "") == "nio"
   private[sbt] val defaultLinkOptions: Vector[LinkOption] = Vector.empty
   private[sbt] val defaultDescendantHandler: (File, FileFilter, mutable.Set[File]) => Unit =
-    if ("nio" == sys.props.getOrElse("sbt.pathfinder", ""))
-      DescendantOrSelfPathFinder.nio
-    else DescendantOrSelfPathFinder.default
+    if (useNio()) DescendantOrSelfPathFinder.nio else DescendantOrSelfPathFinder.default
   private[sbt] val defaultChildHandler: (File, FileFilter) => Seq[File] =
-    if ("nio" == sys.props.getOrElse("sbt.pathfinder", "")) { (file, filter) =>
+    if (useNio()) { (file, filter) =>
       IO.wrapNull(file.listFiles(filter)).toSeq
     } else {
       val fileTreeView = FileTreeView.DEFAULT
       (file, filter) =>
-        val unfiltered = fileTreeView.list(file.toPath, 0, _ => true)
+        val unfiltered = fileTreeView.list(file.toPath, 0, AllPass)
         unfiltered.flatMap { tp =>
           val fileName = tp.getPath.toString
           val file = new File(fileName) {
@@ -352,9 +354,20 @@ sealed abstract class PathFinder {
   /**
    * Constructs a new finder that selects all paths with a name that matches <code>filter</code> and are
    * descendants of paths selected by this finder.
+   * @param filter only include files that this filter accepts
    */
   def globRecursive(filter: FileFilter): PathFinder =
     new DescendantOrSelfPathFinder(this, filter, defaultDescendantHandler)
+
+  /**
+   * Constructs a new finder that selects all paths with a name that matches <code>filter</code> and are
+   * descendants of paths selected by this finder.
+   * @param filter only include files that this filter accepts
+   * @param walker use this walker to traverse the file system
+   */
+  def globRecursive(filter: FileFilter,
+                    walker: (File, FileFilter, mutable.Set[File]) => Unit): PathFinder =
+    new DescendantOrSelfPathFinder(this, filter, walker)
 
   /** Alias of globRecursive. */
   final def **(filter: FileFilter): PathFinder = globRecursive(filter)
@@ -364,6 +377,7 @@ sealed abstract class PathFinder {
   /**
    * Constructs a new finder that selects all paths with a name that matches <code>filter</code>
    * and are immediate children of paths selected by this finder.
+   * @param filter only include files that this filter accepts
    */
   def glob(filter: FileFilter): PathFinder = new ChildPathFinder(this, filter)
 
@@ -498,6 +512,11 @@ private object DescendantOrSelfPathFinder {
             }
           }
         )
+      val typedFile = new File(file.toString) {
+        override def isDirectory: Boolean = true
+        override def isFile: Boolean = false
+      }
+      if (filter.accept(typedFile)) fileSet += file
       ()
     } catch {
       case _: IOException =>
