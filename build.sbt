@@ -17,7 +17,7 @@ lazy val ioRoot = (project in file("."))
   .settings(
     inThisBuild(
       Seq(
-        git.baseVersion := "1.2.1",
+        git.baseVersion := "1.3.0",
         bintrayPackage := "io",
         homepage := Some(url("https://github.com/sbt/io")),
         description := "IO module for sbt",
