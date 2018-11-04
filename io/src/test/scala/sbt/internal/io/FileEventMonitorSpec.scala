@@ -43,6 +43,27 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
     observers.onUpdate(entry, entry)
     monitor.poll(antiEntropyPeriod) shouldBe Seq(Update(entry, entry))
   }
+  it should "not ignore new events" in {
+    val observers = new Observers[Path]
+    val antiEntropyPeriod = 20.millis
+    val monitor = FileEventMonitor.antiEntropy(observers, antiEntropyPeriod, NullWatchLogger)
+    val entry = TestEntry("foo", FILE | EXISTS)
+    observers.onCreate(entry)
+    observers.onUpdate(entry, entry)
+    val unrelatedEntry = TestEntry("bar", FILE | EXISTS)
+    observers.onCreate(unrelatedEntry)
+    monitor.poll(antiEntropyPeriod).toSet shouldBe Set(Creation(entry), Creation(unrelatedEntry))
+    val thread = new Thread("anti-entropy-test") {
+      override def run(): Unit = {
+        Thread.sleep(2 * antiEntropyPeriod.toMillis)
+        observers.onUpdate(entry, entry)
+      }
+    }
+    thread.setDaemon(true)
+    thread.start()
+    // Ensure the timeout is long enough for the background thread to call onUpdate
+    monitor.poll(5.seconds) shouldBe Seq(Update(entry, entry))
+  }
   it should "quarantine deletions" in {
     val observers = new Observers[Path]
     val antiEntropyPeriod = 40.millis
