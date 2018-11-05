@@ -166,7 +166,7 @@ object FileEventMonitor {
                                                logger: WatchLogger,
                                                quarantinePeriod: FiniteDuration)
       extends FileEventMonitor[T] {
-    private[this] val recentEvents = mutable.Map.empty[JPath, Deadline]
+    private[this] val antiEntropyDeadlines = mutable.Map.empty[JPath, Deadline]
     /*
      * It is very common for file writes to be implemented as a move, which manifests as a delete
      * followed by a write. In sbt, this can manifest as continuous builds triggering for the delete
@@ -190,7 +190,7 @@ object FileEventMonitor {
       val results = fileEventMonitor.poll(duration)
       /*
        * Note that this transformation is not purely functional because it has the side effect of
-       * modifying the quarantinedEvents and recentEvents maps.
+       * modifying the quarantinedEvents and antiEntropyDeadlines maps.
        */
       val transformed = results.flatMap {
         case event @ Event(entry @ Entry(typedPath, _), occurredAt) =>
@@ -198,13 +198,13 @@ object FileEventMonitor {
           val quarantined = if (typedPath.exists) quarantinedEvents.remove(path) else None
           quarantined match {
             case Some(Deletion(deletedEntry, deletionTs)) =>
-              recentEvents.put(path, deletionTs + period)
+              antiEntropyDeadlines.put(path, deletionTs + period)
               logger.debug(
                 s"Triggering event for newly created path $path that was previously quarantined.")
               Some(Update(deletedEntry, entry, deletionTs))
             case _ =>
-              recentEvents.get(path) match {
-                case Some(deadline) if (deadline - occurredAt) < period =>
+              antiEntropyDeadlines.get(path) match {
+                case Some(deadline) if occurredAt <= deadline =>
                   logger.debug(s"Discarding entry for recently updated path $path")
                   None
                 case _ if !typedPath.exists =>
@@ -212,7 +212,7 @@ object FileEventMonitor {
                   logger.debug(s"Quarantining deletion event for path $path for $period")
                   None
                 case _ =>
-                  recentEvents.put(path, occurredAt + period)
+                  antiEntropyDeadlines.put(path, occurredAt + period)
                   logger.debug(s"Received event for path $path")
                   Some(event)
               }
@@ -220,11 +220,11 @@ object FileEventMonitor {
       } ++ quarantinedEvents.collect {
         case (path, event @ Deletion(_, deadline)) if (deadline + quarantinePeriod).isOverdue =>
           quarantinedEvents.remove(path)
-          recentEvents.put(path, deadline + period)
+          antiEntropyDeadlines.put(path, deadline + period)
           logger.debug(s"Triggering event for previously quarantined deleted file: $path")
           event
       }
-      recentEvents.retain((_, deadline) => !deadline.isOverdue)
+      antiEntropyDeadlines.retain((_, deadline) => !deadline.isOverdue)
       transformed match {
         case s if s.nonEmpty => s
         case _ =>
@@ -235,7 +235,7 @@ object FileEventMonitor {
 
     override def close(): Unit = {
       quarantinedEvents.clear()
-      recentEvents.clear()
+      antiEntropyDeadlines.clear()
       fileEventMonitor.close()
     }
   }
