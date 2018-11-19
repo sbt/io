@@ -31,4 +31,21 @@ class SourceSpec extends FlatSpec with Matchers {
     source.accept(Paths.get("/foo/bar/baz.scala")) shouldBe true
     source.accept(Paths.get("/foo/bar/buzz.scala")) shouldBe false
   }
+  it should "override equals/hashcode" in {
+    val source = new Source(new File("foo"), AllPassFilter, NothingFilter, true)
+    val copy = new Source(new File("foo"), AllPassFilter, NothingFilter, true)
+    assert(source == copy && copy == source)
+    assert(source.hashCode == copy.hashCode)
+    val others = Seq(
+      new Source(new File("bar"), AllPassFilter, NothingFilter, true),
+      new Source(new File("foo"), NothingFilter, NothingFilter, true),
+      new Source(new File("foo"), AllPassFilter, AllPassFilter, true),
+      new Source(new File("foo"), AllPassFilter, NothingFilter, false),
+      new Object
+    )
+    others foreach { src =>
+      assert(source != src && src != source)
+      assert(source.hashCode != src.hashCode)
+    }
+  }
 }
