@@ -13,28 +13,16 @@ import scala.language.implicitConversions
 trait FileFilter extends java.io.FileFilter {
 
   /** Constructs a filter that accepts a `File` if it matches either this filter or the given `filter`. */
-  def ||(filter: FileFilter): FileFilter =
-    new SimpleFileFilter(file => accept(file) || filter.accept(file)) {
-      override def toString = s"SimpleFileFilter(${FileFilter.this} || $filter)"
-    }
+  def ||(filter: FileFilter): FileFilter = new OrFilter(this, filter)
 
   /** Constructs a filter that accepts a `File` if it matches both this filter and the given `filter`. */
-  def &&(filter: FileFilter): FileFilter =
-    new SimpleFileFilter(file => accept(file) && filter.accept(file)) {
-      override def toString = s"SimpleFileFilter(${FileFilter.this} && $filter)"
-    }
+  def &&(filter: FileFilter): FileFilter = new AndFilter(this, filter)
 
   /** Constructs a filter that accepts a `File` if it matches this filter but does not match the given `filter`. */
-  def --(filter: FileFilter): FileFilter =
-    new SimpleFileFilter(file => accept(file) && !filter.accept(file)) {
-      override def toString = s"SimpleFileFilter(${FileFilter.this} -- $filter)"
-    }
+  def --(filter: FileFilter): FileFilter = new AndFilter(this, new NotFilter(filter))
 
   /** Constructs a filter that accepts a `File` if it does not match this filter. */
-  def unary_- : FileFilter = new SimpleFileFilter(file => !accept(file)) {
-    override def toString = s"SimpleFileFilter(-${FileFilter.this})"
-  }
-
+  def unary_- : FileFilter = new NotFilter(this)
 }
 
 /** A filter on Strings.  This also functions as a [[FileFilter]] by applying the String filter to the value of a File's `getName`. */
@@ -47,83 +35,165 @@ trait NameFilter extends FileFilter {
   final def accept(file: File): Boolean = accept(file.getName)
 
   /** Constructs a filter that accepts a `String` if it matches either this filter or the given `filter`. */
-  def |(filter: NameFilter): NameFilter =
-    new SimpleFilter(name => accept(name) || filter.accept(name)) {
-      override def toString = s"SimpleFilter(${NameFilter.this} | $filter)"
-    }
+  def |(filter: NameFilter): NameFilter = new OrNameFilter(this, filter)
 
   /** Constructs a filter that accepts a `String` if it matches both this filter and the given `filter`. */
-  def &(filter: NameFilter): NameFilter =
-    new SimpleFilter(name => accept(name) && filter.accept(name)) {
-      override def toString = s"SimpleFilter(${NameFilter.this} & $filter)"
-    }
+  def &(filter: NameFilter): NameFilter = new AndNameFilter(this, filter)
 
   /** Constructs a filter that accepts a `String` if it matches this filter but not the given `filter`. */
-  def -(filter: NameFilter): NameFilter =
-    new SimpleFilter(name => accept(name) && !filter.accept(name)) {
-      override def toString = s"SimpleFilter(${NameFilter.this} - $filter)"
-    }
+  def -(filter: NameFilter): NameFilter = new AndNameFilter(this, new NotNameFilter(filter))
 
   /** Constructs a filter that accepts a `String` if it does not match this filter. */
-  override def unary_- : NameFilter = new SimpleFilter(name => !accept(name)) {
-    override def toString = s"SimpleFilter(-${NameFilter.this})"
-  }
+  override def unary_- : NameFilter = new NotNameFilter(this)
+}
 
+private[sbt] sealed trait AbstractAndFilter extends FileFilter {
+  def left: FileFilter
+  def right: FileFilter
+  override def equals(o: Any): Boolean = o match {
+    case that: AndFilter => this.left == that.left && this.right == that.right
+    case _               => false
+  }
+  override def hashCode: Int = this.left.hashCode ^ this.right.hashCode
+  override def toString = s"$left && $right"
+}
+final class AndFilter(override val left: FileFilter, override val right: FileFilter)
+    extends AbstractAndFilter {
+  override def accept(pathname: File): Boolean = left.accept(pathname) && right.accept(pathname)
+}
+final class AndNameFilter(override val left: NameFilter, override val right: NameFilter)
+    extends AbstractAndFilter
+    with NameFilter {
+  override def accept(name: String): Boolean = left.accept(name) && right.accept(name)
+}
+
+private[sbt] sealed trait AbstractNotFilter extends FileFilter {
+  def fileFilter: FileFilter
+  override def equals(o: Any): Boolean = o match {
+    case that: NotFilter => this.fileFilter == that.fileFilter
+    case _               => false
+  }
+  override def hashCode: Int = -fileFilter.hashCode
+  override def toString = s"!$fileFilter"
+}
+final class NotFilter(override val fileFilter: FileFilter) extends AbstractNotFilter {
+  override def accept(pathname: File): Boolean = !fileFilter.accept(pathname)
+}
+final class NotNameFilter(override val fileFilter: NameFilter)
+    extends AbstractNotFilter
+    with NameFilter {
+  override def accept(name: String): Boolean = !fileFilter.accept(name)
+}
+
+private[sbt] sealed trait AbstractOrFilter extends FileFilter {
+  def left: FileFilter
+  def right: FileFilter
+  override def equals(o: Any): Boolean = o match {
+    case that: AndFilter => this.left == that.left && this.right == that.right
+    case _               => false
+  }
+  override def hashCode: Int = this.left.hashCode ^ this.right.hashCode
+  override def toString = s"$left || $right"
+}
+final class OrFilter(override val left: FileFilter, override val right: FileFilter)
+    extends AbstractOrFilter {
+  override def accept(pathname: File): Boolean = left.accept(pathname) || right.accept(pathname)
+}
+final class OrNameFilter(override val left: NameFilter, override val right: NameFilter)
+    extends AbstractOrFilter
+    with NameFilter {
+  override def accept(name: String): Boolean = left.accept(name) || right.accept(name)
 }
 
 /** A [[FileFilter]] that selects files that are hidden according to `java.nio.file.Files.isHidden` or if they start with a dot (`.`). */
-object HiddenFileFilter extends FileFilter {
+case object HiddenFileFilter extends FileFilter {
   def accept(file: File): Boolean =
     try Files.isHidden(file.toPath) && file.getName != "."
     catch { case _: IOException => false }
 }
 
 /** A [[FileFilter]] that selects files that exist according to `java.io.File.exists`. */
-object ExistsFileFilter extends FileFilter {
+case object ExistsFileFilter extends FileFilter {
   def accept(file: File): Boolean = file.exists
 }
 
 /** A [[FileFilter]] that selects files that are a directory according to `java.io.File.isDirectory`. */
-object DirectoryFilter extends FileFilter {
+case object DirectoryFilter extends FileFilter {
   def accept(file: File): Boolean = file.isDirectory
 }
 
 /** A [[FileFilter]] that selects files according the predicate `acceptFunction`. */
 sealed class SimpleFileFilter(val acceptFunction: File => Boolean) extends FileFilter {
   final def accept(file: File) = acceptFunction(file)
+  override def equals(o: Any): Boolean = o match {
+    // Note that anonymous functions often get compiled to a constant value so this equality
+    // check may be true more often than one might naively assume given that this is often
+    // a reference comparison.
+    case that: SimpleFileFilter => this.acceptFunction == that.acceptFunction
+    case _                      => false
+  }
+  override def hashCode(): Int = acceptFunction.hashCode
+  override def toString: String = s"SimpleFilter($acceptFunction)"
 }
 
 /** A [[NameFilter]] that accepts a name if it is exactly equal to `matchName`. */
 final class ExactFilter(val matchName: String) extends NameFilter {
   def accept(name: String): Boolean = matchName == name
   override def toString = s"ExactFilter($matchName)"
+  override def equals(o: Any): Boolean = o match {
+    case that: ExactFilter => this.matchName == that.matchName
+    case _                 => false
+  }
+  override def hashCode(): Int = matchName.hashCode
 }
 
 /** A [[NameFilter]] that accepts a name if the predicate `acceptFunction` accepts it. */
 sealed class SimpleFilter(val acceptFunction: String => Boolean) extends NameFilter {
-  final def accept(name: String) = acceptFunction(name)
+  final def accept(name: String): Boolean = acceptFunction(name)
+
+  override def equals(o: Any): Boolean = o match {
+    // Note that anonymous functions often get compiled to a constant value so this equality
+    // check may be true more often than one might naively assume given that this is often
+    // a reference comparison.
+    case that: SimpleFilter => this.acceptFunction == that.acceptFunction
+    case _                  => false
+  }
+  override def hashCode(): Int = acceptFunction.hashCode
+  override def toString: String = s"SimpleFilter($acceptFunction)"
 }
 
 /** A [[NameFilter]] that accepts a name if it matches the regular expression defined by `pattern`. */
 final class PatternFilter(val pattern: Pattern) extends NameFilter {
   def accept(name: String): Boolean = pattern.matcher(name).matches
   override def toString = s"PatternFilter($pattern)"
+  override def equals(o: Any): Boolean = o match {
+    case that: PatternFilter => this.pattern == that.pattern
+    case _                   => false
+  }
+  override def hashCode(): Int = pattern.hashCode
 }
 
 /** A [[NameFilter]] that accepts all names. That is, `accept` always returns `true`. */
-object AllPassFilter extends NameFilter {
+case object AllPassFilter extends NameFilter {
   def accept(name: String) = true
 }
 
 /** A [[NameFilter]] that accepts nothing.  That is, `accept` always returns `false`. */
-object NothingFilter extends NameFilter {
+case object NothingFilter extends NameFilter {
   def accept(name: String) = false
 }
 
 object NameFilter {
-  implicit def fnToNameFilter(f: String => Boolean): NameFilter = new NameFilter {
-    def accept(name: String) = f(name)
+  private class FunctionFilter(val f: String => Boolean) extends NameFilter {
+    def accept(name: String): Boolean = f(name)
+    override def toString = s"FunctionFilter($f)"
+    override def equals(o: Any): Boolean = o match {
+      case that: FunctionFilter => this.f == that.f
+      case _                    => false
+    }
+    override def hashCode(): Int = f.hashCode
   }
+  implicit def fnToNameFilter(f: String => Boolean): NameFilter = new FunctionFilter(f)
 }
 object FileFilter {
 
