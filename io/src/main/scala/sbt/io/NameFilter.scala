@@ -105,6 +105,70 @@ final class OrNameFilter(override val left: NameFilter, override val right: Name
   override def accept(name: String): Boolean = left.accept(name) || right.accept(name)
 }
 
+/**
+ * Represents a filter for files that end in a given list of extensions.
+ * @param extensions the extensions to accept
+ */
+final class ExtensionFilter(val extensions: String*) extends NameFilter {
+  private val set = extensions.toSet
+
+  /** Returns `true` to include the `name`, `false` to exclude it. */
+  override def accept(name: String): Boolean = {
+    val extension = name.lastIndexOf('.') match {
+      case l if l >= 0 && l < name.length => name.substring(l + 1)
+      case _                              => ""
+    }
+    set.contains(extension)
+  }
+
+  override def equals(o: Any): Boolean = o match {
+    case that: ExtensionFilter => this.set == that.set
+    case _                     => false
+  }
+  override lazy val hashCode: Int = extensions.hashCode
+
+  /** Constructs a filter that accepts a `File` if it matches either this filter or the given `filter`. */
+  override def |(filter: NameFilter): NameFilter = filter match {
+    case that: ExtensionFilter => new ExtensionFilter(this.extensions ++ that.extensions: _*)
+    case _                     => super.|(filter)
+  }
+
+  /** Constructs a filter that accepts a `File` if it matches both this filter and the given `filter`. */
+  override def &(filter: NameFilter): NameFilter = filter match {
+    case that: ExtensionFilter => new ExtensionFilter(this.extensions intersect that.extensions: _*)
+    case _                     => super.&(filter)
+  }
+
+  /** Constructs a filter that accepts a `File` if it matches this filter but does not match the given `filter`. */
+  override def -(filter: NameFilter): NameFilter = filter match {
+    case that: ExtensionFilter => new ExtensionFilter(this.extensions diff that.extensions: _*)
+    case _                     => super.-(filter)
+  }
+
+  /** Constructs a filter that accepts a `File` if it matches either this filter or the given `filter`. */
+  override def ||(filter: FileFilter): FileFilter = filter match {
+    case that: ExtensionFilter => new ExtensionFilter(this.extensions ++ that.extensions: _*)
+    case _                     => super.||(filter)
+  }
+
+  /** Constructs a filter that accepts a `File` if it matches both this filter and the given `filter`. */
+  override def &&(filter: FileFilter): FileFilter = filter match {
+    case that: ExtensionFilter => new ExtensionFilter(this.extensions intersect that.extensions: _*)
+    case _                     => super.&&(filter)
+  }
+
+  /** Constructs a filter that accepts a `File` if it matches this filter but does not match the given `filter`. */
+  override def --(filter: FileFilter): FileFilter = filter match {
+    case that: ExtensionFilter => new ExtensionFilter(this.extensions diff that.extensions: _*)
+    case _                     => super.--(filter)
+  }
+  override def toString: String = s"ExtensionFilter(${extensions mkString ","})"
+}
+
+object ExtensionFilter {
+  val ScalaOrJavaSource = new ExtensionFilter("scala", "java")
+}
+
 /** A [[FileFilter]] that selects files that are hidden according to `java.nio.file.Files.isHidden` or if they start with a dot (`.`). */
 case object HiddenFileFilter extends FileFilter {
   def accept(file: File): Boolean =
@@ -220,8 +284,13 @@ object GlobFilter {
       AllPassFilter
     else if (expression.indexOf('*') < 0) // includes case where expression is empty
       new ExactFilter(expression)
-    else
-      new PatternFilter(Pattern.compile(expression.split("\\*", -1).map(quote).mkString(".*")))
+    else {
+      val parts = expression.split("\\*", -1)
+      parts match {
+        case Array("", ext) if ext.startsWith(".") => new ExtensionFilter(ext.drop(1))
+        case _                                     => new PatternFilter(Pattern.compile(parts.map(quote).mkString(".*")))
+      }
+    }
   }
 
   private def quote(s: String) = if (s.isEmpty) "" else Pattern.quote(s.replaceAll("\n", """\n"""))
