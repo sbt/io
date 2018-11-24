@@ -168,6 +168,13 @@ final class Source(
        |  recursive = $recursive,
        |)""".stripMargin
 
+  override def equals(o: Any): Boolean = o match {
+    case that: Source =>
+      this.base == that.base && this.includeFilter == that.includeFilter &&
+        this.excludeFilter == that.excludeFilter && this.recursive == that.recursive
+    case _ => false
+  }
+  override lazy val hashCode: Int = Seq[Any](base, includeFilter, excludeFilter, recursive).hashCode
 }
 
 object Source {
