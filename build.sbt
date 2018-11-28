@@ -31,7 +31,7 @@ val io = (project in file("io"))
     commonSettings,
     name := "IO",
     libraryDependencies ++= {
-      Vector(scalaCompiler.value % Test, scalaCheck % Test, scalatest.value % Test)
+      Vector(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test)
     } ++ Vector(appleFileEvents),
     libraryDependencies ++= Seq(jna, jnaPlatform),
 
