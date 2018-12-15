@@ -18,12 +18,13 @@ import java.nio.file.{
 
 import com.swoval.files.FileTreeViews
 import com.swoval.functional.Filter
+import sbt.internal.io.Source
 import sbt.io.FileTreeView.AllPass
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
+final class RichFile(val asFile: File) extends AnyVal with RichNioPath with DSLExtensions {
   def /(component: String): File = if (component == ".") asFile else new File(asFile, component)
 
   /** True if and only if the wrapped file exists.*/
@@ -86,6 +87,39 @@ final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
 
   def withLinkOptions(linkOption: LinkOption*): LinkOptionPath =
     new LinkOptionPath(asPath, linkOption.toVector)
+}
+
+private[sbt] trait DSLExtensions extends Any {
+  def asFile: File
+  def /(g: PathFinder.**.type): Source =
+    new Source(asFile, AllPassFilter, NothingFilter, recursive = true)
+  def /(g: PathFinder.*.type): Source =
+    new Source(asFile, AllPassFilter, NothingFilter, recursive = false)
+  def /(filter: FileFilter): Source =
+    new Source(asFile, filter, NothingFilter, recursive = false)
+
+  def toSource: Source = {
+    val path = asFile.toPath
+    val (base, recursive, filter) = path.iterator.asScala
+      .foldLeft(
+        (path.getFileSystem.getRootDirectories.asScala.head, false, AllPassFilter: FileFilter)) {
+        case ((basePath, rec, f), part) if part.toString == "**" && !rec =>
+          (basePath, true, f)
+        case ((basePath, rec, f), part) if part.toString.startsWith("*.") && f == AllPassFilter =>
+          (basePath, rec, new ExtensionFilter(part.toString.drop(2)))
+        case ((basePath, rec, f), part) => (basePath.resolve(part), rec, f)
+      }
+    new Source(base.toFile, filter, NothingFilter, recursive)
+  }
+}
+
+final class RichSource(val s: Source) extends AnyVal {
+  def /(filter: FileFilter): Source =
+    new Source(s.base, filter, NothingFilter, recursive = s.recursive)
+  def &&(filter: FileFilter): Source =
+    new Source(s.base, s.includeFilter && filter, s.excludeFilter, s.recursive)
+  def --(filter: FileFilter): Source =
+    new Source(s.base, s.includeFilter -- filter, s.excludeFilter, s.recursive)
 }
 
 final class LinkOptionPath(p: NioPath, lo: Vector[LinkOption]) extends RichNioPath {
@@ -333,6 +367,11 @@ object PathFinder {
 
   def strict(files: Traversable[File]): PathFinder = apply(files)
 
+  case object **
+  import scala.language.dynamics
+  object * extends Dynamic {
+    def selectDynamic(name: String): ExtensionFilter = new ExtensionFilter(name)
+  }
 }
 
 /**
@@ -448,7 +487,7 @@ sealed abstract class PathFinder {
    * Create a PathFinder from this one where each path has a unique name.
    * A single path is arbitrarily selected from the set of paths with the same name.
    */
-  def distinct(): PathFinder = PathFinder { get().map(p => (p.asFile.getName, p)).toMap.values }
+  def distinct(): PathFinder = PathFinder { get().map(p => (p.getName, p)).toMap.values }
 
   /**
    * Constructs a string by evaluating this finder, converting the resulting Paths to absolute path strings,

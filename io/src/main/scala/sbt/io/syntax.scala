@@ -1,4 +1,5 @@
 package sbt.io
+import sbt.internal.io.Source
 
 private[sbt] trait Alternative[A, B] {
   def |(g: A => Option[B]): A => Option[B]
@@ -18,6 +19,8 @@ object syntax extends IOSyntax0 {
   type File = java.io.File
   type URI = java.net.URI
   type URL = java.net.URL
+  val * = PathFinder.*
+  val ** = PathFinder.**
 
   def uri(s: String): URI = new URI(s)
   def file(s: String): File = new File(s)
@@ -25,4 +28,5 @@ object syntax extends IOSyntax0 {
 
   implicit def fileToRichFile(file: File): RichFile = new RichFile(file)
   implicit def filesToFinder(cc: Traversable[File]): PathFinder = PathFinder.strict(cc)
+  implicit def sourceToRichSource(source: Source): RichSource = new RichSource(source)
 }
