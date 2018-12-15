@@ -69,9 +69,9 @@ object Using {
       def close(s: T) = closeF(s)
     }
 
-  def file[T <: AutoCloseable](openF: File => T): OpenFile[T] = file(openF, closeCloseable)
+  def file[T <: AutoCloseable](openF: File => T): Using[File, T] = file(openF, closeCloseable)
 
-  def file[T](openF: File => T, closeF: T => Unit): OpenFile[T] =
+  def file[T](openF: File => T, closeF: T => Unit): Using[File, T] =
     new OpenFile[T] {
       def openImpl(file: File) = openF(file)
       def close(t: T) = closeF(t)
