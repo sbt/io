@@ -93,6 +93,12 @@ val io = (project in file("io"))
       exclude[MissingClassProblem]("sbt.internal.io.JavaMilli$"),
       exclude[MissingClassProblem]("sbt.internal.io.JavaMilli"),
 
+      // These are private classes
+      exclude[MissingClassProblem]("sbt.internal.io.FreeBSD64"),
+      exclude[MissingClassProblem]("sbt.internal.io.FreeBSD64FileStat"),
+      exclude[MissingClassProblem]("sbt.internal.io.FreeBSD64Milli"),
+      exclude[MissingClassProblem]("sbt.internal.io.FreeBSD64Milli$"),
+
       // protected[this]
       exclude[DirectMissingMethodProblem]("sbt.io.CopyOptions.copy*"),
 
