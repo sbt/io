@@ -224,20 +224,6 @@ private object Linux32Milli extends PosixMilliIntUtim[Linux32] {
   }
 }
 
-private class FreeBSD64FileStat extends StatLong(120, 40, 48)
-private trait FreeBSD64 extends Library with Utimensat[Long] {
-  def stat(filePath: String, buf: FreeBSD64FileStat): Int
-}
-private object FreeBSD64Milli extends PosixMilliLongUtim[FreeBSD64] {
-  protected final val AT_FDCWD: Int = -100
-  protected final val UTIME_OMIT: Long = -2
-  protected def getModifiedTimeNative(filePath: String) = {
-    val stat = new FreeBSD64FileStat
-    checkedIO(filePath) { libc.stat(filePath, stat) }
-    stat.getModifiedTimeNative
-  }
-}
-
 private trait Mac extends Library with Posix[Long] {
   def getattrlist(path: String,
                   attrlist: Attrlist,
@@ -353,11 +339,10 @@ object Milli {
       JavaMilli
     else
       getOSType match {
-        case LINUX                => if (is64Bit) Linux64Milli else Linux32Milli
-        case FREEBSD if (is64Bit) => FreeBSD64Milli
-        case MAC                  => MacMilli
-        case WINDOWS              => WinMilli
-        case _                    => JavaMilli
+        case LINUX   => if (is64Bit) Linux64Milli else Linux32Milli
+        case MAC     => MacMilli
+        case WINDOWS => WinMilli
+        case _       => JavaMilli
       }
 
   def getModifiedTime(file: File): Long =
