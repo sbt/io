@@ -2,12 +2,15 @@ package sbt.io
 
 import java.nio.file.attribute.FileTime
 import java.nio.file.{ Files, Path => JPath, Paths => JPaths }
+import java.util
+import java.util.Collections
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import org.scalatest.{ FlatSpec, Matchers }
 import sbt.io.FileTreeDataView.Entry
 import sbt.io.FileTreeRepositorySpec._
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import sbt.io.FileTreeView.AllPass
 
@@ -202,6 +205,16 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
       assert(latch.await(DEFAULT_TIMEOUT))
       val Seq(newFileEntry) = c.listEntries(file.getParent, maxDepth = Integer.MAX_VALUE, AllPass)
       newFileEntry.value.right.map(_.at) shouldBe Right(updatedLastModified)
+    }
+  }
+  "results" should "be sortable" in withTempDir { dir =>
+    val file1 = Files.createFile(dir.resolve("file-1"))
+    val file2 = Files.createFile(dir.resolve("file-2"))
+    using(FileTreeRepository.default(_.getPath)) { repo =>
+      repo.register(dir, Int.MaxValue)
+      val res = new util.ArrayList(repo.list(dir, Int.MaxValue, AllPass).asJava)
+      Collections.shuffle(res)
+      assert(res.asScala.sorted.map(_.getPath) == Seq(file1, file2))
     }
   }
 

@@ -70,6 +70,10 @@ object TypedPath {
     override val isFile: Boolean = attrs.fold(false)(_.isRegularFile)
     override val isSymbolicLink: Boolean = attrs.fold(false)(_.isSymbolicLink)
   }
+  implicit case object ordering extends Ordering[TypedPath] {
+    override def compare(left: TypedPath, right: TypedPath): Int =
+      left.getPath.compareTo(right.getPath)
+  }
 }
 
 /**
