@@ -298,9 +298,9 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
         def poll(): Boolean = {
           val wait = deadline - Deadline.now
           monitor.poll(wait) match {
-            case sources if sources.map(_.entry.typedPath.getPath).contains(file.toPath) => true
-            case _ if Deadline.now < deadline                                            => poll()
-            case _                                                                       => false
+            case sources if sources.map(_.entry.typedPath.toPath).contains(file.toPath) => true
+            case _ if Deadline.now < deadline                                           => poll()
+            case _                                                                      => false
           }
         }
         monitor.drain(maxWait)
@@ -394,7 +394,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
         // DefaultWatchServiceSpec to occasionally fail.
         // http://blog.omega-prime.co.uk/2015/11/14/beware-java-nio-file-watchservice-is-subtly-broken-on-linux/
         val triggeredPaths =
-          monitor.drain(maxWait * 4).map(_.entry.typedPath.getPath).toSet.intersect(allPaths)
+          monitor.drain(maxWait * 4).map(_.entry.typedPath.toPath).toSet.intersect(allPaths)
         if (triggeredPaths != allPaths) {
           logger.printLines("Triggered paths did not contain all of the expected paths")
           val diff = allPaths diff triggeredPaths
@@ -408,7 +408,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
         assert(IO.read(lastFile.toFile) == s"foo")
         IO.write(lastFile.toFile, "baz")
         val updates = monitor.drain(maxWait * 4)
-        val result = updates.exists(_.entry.typedPath.getPath == lastFile)
+        val result = updates.exists(_.entry.typedPath.toPath == lastFile)
         assert(result)
         assert(IO.read(lastFile.toFile) == "baz")
       } finally {
@@ -493,10 +493,10 @@ class FileTreeRepositoryEventMonitorSpec extends FlatSpec with Matchers with Eve
   override def pollDelay: FiniteDuration = 100.millis
 
   override def newObservable(sources: Seq[Source]): Observable[_] = {
-    val repository = FileTreeRepository.default((_: TypedPath).getPath)
+    val repository = FileTreeRepository.default((_: TypedPath).toPath)
     sources foreach (s =>
       repository.register(s.base.toPath, if (s.recursive) Integer.MAX_VALUE else 0))
-    repository.filter(e => sources.exists(s => s.accept(e.typedPath.getPath)))
+    repository.filter(e => sources.exists(s => s.accept(e.typedPath.toPath)))
   }
 }
 abstract class SourceModificationWatchSpec(
@@ -529,11 +529,11 @@ abstract class SourceModificationWatchSpec(
     val watchState = WatchState.empty(getService, sources)
     val observable = new WatchServiceBackedObservable[Path](watchState,
                                                             5.millis,
-                                                            (_: TypedPath).getPath,
+                                                            (_: TypedPath).toPath,
                                                             closeService = true,
                                                             NullWatchLogger)
     observable.filter((entry: Entry[Path]) => {
-      val path = entry.typedPath.getPath
+      val path = entry.typedPath.toPath
       sources.exists(_.accept(path))
     })
   }

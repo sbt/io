@@ -21,7 +21,7 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
     }
   }
   import TestEntry._
-  class TestTypedPath(override val getPath: Path, kind: Int) extends TypedPath {
+  class TestTypedPath(override val toPath: Path, kind: Int) extends TypedPath {
     override def exists: Boolean = (kind & EXISTS) != 0
     override def isDirectory: Boolean = (kind & DIRECTORY) != 0
     override def isFile: Boolean = (kind & FILE) != 0

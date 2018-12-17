@@ -15,14 +15,14 @@ class HybridPollingFileTreeRepositorySpec extends FlatSpec with Matchers {
     val pollingDir = Files.createDirectory(baseDir.toPath.resolve("polling")).toRealPath()
     val latch = new CountDownLatch(1)
     val repo =
-      FileTreeRepository.hybrid((_: TypedPath).getPath, Source(pollingDir.toFile))
+      FileTreeRepository.hybrid((_: TypedPath).toPath, Source(pollingDir.toFile))
     try {
       repo.register(dir, maxDepth = Integer.MAX_VALUE)
       repo.register(pollingDir, maxDepth = Integer.MAX_VALUE)
       val regularFile = dir.resolve("regular-file")
       repo.addObserver(new Observer[Path] {
         override def onCreate(newEntry: FileTreeDataView.Entry[Path]): Unit = {
-          if (newEntry.typedPath.getPath == regularFile) {
+          if (newEntry.typedPath.toPath == regularFile) {
             latch.countDown()
           }
         }
@@ -53,8 +53,7 @@ class HybridPollingFileTreeRepositorySpec extends FlatSpec with Matchers {
     val file = Files.createFile(nested.resolve("file"))
     val filter: FileFilter = new SimpleFileFilter(_.getName != subdir.toFile.getName)
     val repo =
-      FileTreeRepository.hybrid((_: TypedPath).getPath,
-                                Source(subdir.toFile, filter, NothingFilter))
+      FileTreeRepository.hybrid((_: TypedPath).toPath, Source(subdir.toFile, filter, NothingFilter))
     try {
       repo.register(dir, Integer.MAX_VALUE)
       repo.ls(dir).sorted shouldBe Seq(subdir, nested, file)

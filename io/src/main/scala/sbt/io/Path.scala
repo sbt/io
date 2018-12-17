@@ -310,7 +310,7 @@ object Path extends Mapper {
       (file, filter) =>
         val unfiltered = fileTreeView.list(file.toPath, 0, AllPass)
         unfiltered.flatMap { tp =>
-          val fileName = tp.getPath.toString
+          val fileName = tp.toPath.toString
           val file = new File(fileName) {
             override def isDirectory: Boolean = tp.isDirectory
             override def isFile: Boolean = tp.isFile
