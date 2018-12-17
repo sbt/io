@@ -97,7 +97,7 @@ object FileEventMonitor {
         ()
       }
       logger.debug(s"Received $event")
-      val path = event.entry.typedPath.getPath
+      val path = event.entry.typedPath.toPath
       lock.synchronized(events.putIfAbsent(path, event)) match {
         case Some(d: Deletion[T]) =>
           event match {
@@ -194,7 +194,7 @@ object FileEventMonitor {
        */
       val transformed = results.flatMap {
         case event @ Event(entry @ Entry(typedPath, _), occurredAt) =>
-          val path = typedPath.getPath
+          val path = typedPath.toPath
           val quarantined = if (typedPath.exists) quarantinedEvents.remove(path) else None
           quarantined match {
             case Some(Deletion(deletedEntry, deletionTs)) =>

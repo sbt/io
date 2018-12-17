@@ -19,7 +19,7 @@ import scala.concurrent.duration.FiniteDuration
  */
 private[sbt] trait HybridPollingFileTreeRepository[+T] extends FileTreeRepository[T] { self =>
   def shouldPoll(path: Path): Boolean
-  def shouldPoll(typedPath: TypedPath): Boolean = shouldPoll(typedPath.getPath)
+  def shouldPoll(typedPath: TypedPath): Boolean = shouldPoll(typedPath.toPath)
   def shouldPoll(source: Source): Boolean = shouldPoll(source.base.toPath)
   def toPollingObservable(delay: FiniteDuration,
                           sources: Seq[Source],
@@ -56,15 +56,15 @@ private[io] case class HybridPollingFileTreeRepositoryImpl[+T](converter: TypedP
           .partition(shouldPollEntry)
       ready ++ needPoll.flatMap {
         case e @ Entry(typedPath, _) if typedPath.isDirectory =>
-          val path = typedPath.getPath
+          val path = typedPath.toPath
           val depth =
             if (maxDepth == Integer.MAX_VALUE) Integer.MAX_VALUE
             else maxDepth - path.relativize(path).getNameCount - 1
           Some(e).filter(filter) ++
             view.listEntries(path, depth, (e: Entry[T]) => shouldPollEntry(e) && filter(e))
         case Entry(typedPath, _)
-            if shouldPoll(typedPath) && !shouldPoll(typedPath.getPath.getParent) =>
-          view.listEntries(typedPath.getPath, -1, (_: Entry[T]) => true)
+            if shouldPoll(typedPath) && !shouldPoll(typedPath.toPath.getParent) =>
+          view.listEntries(typedPath.toPath, -1, (_: Entry[T]) => true)
         case _ =>
           Nil
       }

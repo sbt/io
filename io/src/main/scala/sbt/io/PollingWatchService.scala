@@ -21,7 +21,7 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
   private[this] var lastTimestamps: Map[JPath, Long] = Map.empty
   private[this] val readyKeys = new LinkedBlockingQueue[PollingWatchKey]
   private[this] val view =
-    FileTreeView.DEFAULT.asDataView(tp => IO.getModifiedTimeOrZero(tp.getPath.toFile))
+    FileTreeView.DEFAULT.asDataView(tp => IO.getModifiedTimeOrZero(tp.toPath.toFile))
   private[this] val shutdownLatch = new CountDownLatch(1)
   private[this] val comparator: Comparator[PollingWatchKey] = new Comparator[PollingWatchKey] {
     override def compare(left: PollingWatchKey, right: PollingWatchKey): Int =
@@ -79,12 +79,10 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
     if (closed.get()) throw new ClosedWatchServiceException
 
   private def getTimestamps(path: JPath): Seq[(JPath, Long)] =
-    (view.listEntries(path, -1, _.typedPath.getPath == path) ++ view.listEntries(path,
-                                                                                 0,
-                                                                                 _ => true)).map {
-      e =>
-        e.typedPath.getPath -> (e.value match { case Right(lm) => lm; case _ => 0L })
-    }
+    (view.listEntries(path, -1, _.typedPath.toPath == path) ++ view.listEntries(path, 0, _ => true))
+      .map { e =>
+        e.typedPath.toPath -> (e.value match { case Right(lm) => lm; case _ => 0L })
+      }
 
   private def getTimestamps: immutable.Seq[(JPath, Long)] = {
     registered.keys.toIndexedSeq.flatMap(getTimestamps)

@@ -60,7 +60,7 @@ private[sbt] object EventMonitor {
     }
     val observable = new WatchServiceBackedObservable[Path](watchState,
                                                             delay,
-                                                            (_: TypedPath).getPath,
+                                                            (_: TypedPath).toPath,
                                                             closeService = true,
                                                             eventLogger)
     val monitor = FileEventMonitor.antiEntropy(observable, antiEntropy, eventLogger)
@@ -72,10 +72,10 @@ private[sbt] object EventMonitor {
       override final def awaitEvent(): Boolean = {
         val triggeredPath = monitor
           .poll(10.millis)
-          .find(p => watchState.sources.exists(s => s.accept(p.entry.typedPath.getPath)))
+          .find(p => watchState.sources.exists(s => s.accept(p.entry.typedPath.toPath)))
         triggeredPath match {
           case Some(p) =>
-            logger.debug(s"Triggered by ${p.entry.typedPath.getPath}")
+            logger.debug(s"Triggered by ${p.entry.typedPath.toPath}")
             count += 1
             true
           case _ if terminationCondition => false

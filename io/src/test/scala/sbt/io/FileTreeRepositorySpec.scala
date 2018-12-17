@@ -2,12 +2,15 @@ package sbt.io
 
 import java.nio.file.attribute.FileTime
 import java.nio.file.{ Files, Path => JPath, Paths => JPaths }
+import java.util
+import java.util.Collections
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import org.scalatest.{ FlatSpec, Matchers }
 import sbt.io.FileTreeDataView.Entry
 import sbt.io.FileTreeRepositorySpec._
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import sbt.io.FileTreeView.AllPass
 
@@ -19,12 +22,12 @@ object FileTreeRepositorySpec {
     def ls(path: JPath,
            maxDepth: Int = Integer.MAX_VALUE,
            filter: TypedPath => Boolean = AllPass): Seq[JPath] =
-      fileCache.list(path, maxDepth, filter).map(_.getPath)
+      fileCache.list(path, maxDepth, filter).map(_.toPath)
   }
   implicit class CountdownLatchOps(val latch: CountDownLatch) extends AnyVal {
     def await(duration: Duration): Boolean = latch.await(duration.toNanos, TimeUnit.NANOSECONDS)
   }
-  def asPath(typedPath: TypedPath): JPath = typedPath.getPath
+  def asPath(typedPath: TypedPath): JPath = typedPath.toPath
   private val DEFAULT_TIMEOUT = 1.second
   def using[T, R](fileCache: => FileTreeRepository[T])(f: FileTreeRepository[T] => R): R = {
     val cache = fileCache
@@ -66,7 +69,7 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
   "register" should "see existing files" in withTempFile { file =>
     using(simpleCache()) { c =>
       c.register(file.getParent, Integer.MAX_VALUE)
-      c.list(file.getParent, Integer.MAX_VALUE, AllPass).map(_.getPath) shouldBe Seq(file)
+      c.list(file.getParent, Integer.MAX_VALUE, AllPass).map(_.toPath) shouldBe Seq(file)
     }
   }
   it should "detect new files" in withTempDir { dir =>
@@ -108,7 +111,7 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
       val fileLatch = new CountDownLatch(1)
       val subdirLatch = new CountDownLatch(1)
       using(simpleCache((e: Entry[JPath]) => {
-        val path = e.typedPath.getPath
+        val path = e.typedPath.toPath
         if (path.startsWith(subdir) && path != subdir) fileLatch.countDown()
         else if (path == subdir && Files.getLastModifiedTime(path).toMillis == 2000)
           subdirLatch.countDown()
@@ -184,7 +187,7 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
     val latch = new CountDownLatch(1)
     val updatedLastModified = 2000L
     using(FileTreeRepository.default[LastModified]((p: TypedPath) =>
-      LastModified(Files.getLastModifiedTime(p.getPath).toMillis))) { c =>
+      LastModified(Files.getLastModifiedTime(p.toPath).toMillis))) { c =>
       c.addObserver(
         FileTreeDataView.Observer[LastModified](
           (_: Entry[LastModified]) => {},
@@ -202,6 +205,16 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
       assert(latch.await(DEFAULT_TIMEOUT))
       val Seq(newFileEntry) = c.listEntries(file.getParent, maxDepth = Integer.MAX_VALUE, AllPass)
       newFileEntry.value.right.map(_.at) shouldBe Right(updatedLastModified)
+    }
+  }
+  "results" should "be sortable" in withTempDir { dir =>
+    val file1 = Files.createFile(dir.resolve("file-1"))
+    val file2 = Files.createFile(dir.resolve("file-2"))
+    using(FileTreeRepository.default(_.toPath)) { repo =>
+      repo.register(dir, Int.MaxValue)
+      val res = new util.ArrayList(repo.list(dir, Int.MaxValue, AllPass).asJava)
+      Collections.shuffle(res)
+      assert(res.asScala.sorted.map(_.toPath) == Seq(file1, file2))
     }
   }
 

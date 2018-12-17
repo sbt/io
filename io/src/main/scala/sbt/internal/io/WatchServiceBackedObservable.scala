@@ -72,8 +72,8 @@ private[sbt] class WatchServiceBackedObservable[+T](s: WatchState,
           val (exist, notExist) = allEvents.partition(_.exists)
           val (updatedDirectories, updatedFiles) = exist.partition(_.isDirectory)
           val newFiles = updatedDirectories.flatMap(filesForNewDirectory)
-          lock.synchronized { registered --= notExist.map(_.getPath) }
-          notExist.foreach(p => s.unregister(p.getPath))
+          lock.synchronized { registered --= notExist.map(_.toPath) }
+          notExist.foreach(p => s.unregister(p.toPath))
           (updatedDirectories ++ updatedFiles ++ newFiles ++ notExist).map(tp =>
             Entry(tp, entryConverter))
       }
@@ -95,7 +95,7 @@ private[sbt] class WatchServiceBackedObservable[+T](s: WatchState,
           val view = FileTreeView.DEFAULT
           view.list(path, maxDepth = Integer.MAX_VALUE, AllPass).foreach { typedPath =>
             allFiles += typedPath
-            val path = typedPath.getPath
+            val path = typedPath.toPath
             if (typedPath.isDirectory && !registered.contains(path)) {
               registered += path -> s.register(path)
             }
@@ -123,7 +123,7 @@ private[sbt] class WatchServiceBackedObservable[+T](s: WatchState,
        */
       private def filesForNewDirectory(typedPath: TypedPath): Seq[TypedPath] =
         if (!closed.get()) {
-          val dir = typedPath.getPath
+          val dir = typedPath.toPath
           lazy val recursive =
             s.sources.exists(src => dir.startsWith(src.base.toPath) && src.recursive)
           if (!registered.contains(dir) && recursive) {
@@ -131,12 +131,12 @@ private[sbt] class WatchServiceBackedObservable[+T](s: WatchState,
             @tailrec
             def poll(paths: Seq[Path] = Nil): Seq[TypedPath] = {
               val typedPaths = FileTreeView.DEFAULT.list(dir, maxDepth = Integer.MAX_VALUE, AllPass)
-              val newPaths = typedPaths.map(_.getPath)
+              val newPaths = typedPaths.map(_.toPath)
               if (newPaths == paths) typedPaths else poll(newPaths)
             }
             val result = poll()
             val newDirs = result.collect {
-              case tp if tp.isDirectory && !closed.get() => tp.getPath -> s.register(tp.getPath)
+              case tp if tp.isDirectory && !closed.get() => tp.toPath -> s.register(tp.toPath)
             }
             lock.synchronized { registered ++= newDirs }
             result.toVector

@@ -23,7 +23,7 @@ trait TypedPath {
    * The underlying path that this represents.
    * @return the path
    */
-  def getPath: JPath
+  def toPath: JPath
 
   /**
    * Indicates whether or not the file exists. Because it may be cached, this method may not
@@ -53,7 +53,7 @@ trait TypedPath {
    */
   def isSymbolicLink: Boolean
 
-  override def toString: String = s"TypedPath($getPath)"
+  override def toString: String = s"TypedPath($toPath)"
 }
 
 object TypedPath {
@@ -64,11 +64,15 @@ object TypedPath {
       case _: IOException =>
         None
     }
-    override def getPath: JPath = path
+    override def toPath: JPath = path
     override val exists: Boolean = attrs.isDefined
     override val isDirectory: Boolean = attrs.fold(false)(_.isDirectory)
     override val isFile: Boolean = attrs.fold(false)(_.isRegularFile)
     override val isSymbolicLink: Boolean = attrs.fold(false)(_.isSymbolicLink)
+  }
+  implicit case object ordering extends Ordering[TypedPath] {
+    override def compare(left: TypedPath, right: TypedPath): Int =
+      left.toPath.compareTo(right.toPath)
   }
 }
 
@@ -151,7 +155,7 @@ trait FileTreeDataView[+T] extends FileTreeView with AutoCloseable {
 
 object FileTreeDataView {
   final case class Entry[+T](typedPath: TypedPath, value: Either[IOException, T]) {
-    override def toString: String = s"Entry(${typedPath.getPath}, $value)"
+    override def toString: String = s"Entry(${typedPath.toPath}, $value)"
   }
 
   /**

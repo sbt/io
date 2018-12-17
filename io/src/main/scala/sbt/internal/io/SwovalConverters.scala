@@ -15,12 +15,12 @@ import sbt.io.TypedPath
 private[io] object SwovalConverters {
   implicit class SwovalTypedPathOps(val typedPath: STypedPath) extends AnyVal {
     def asSbt: TypedPath = new TypedPath {
-      override def getPath: JPath = typedPath.getPath
+      override def toPath: JPath = typedPath.getPath
       override def exists: Boolean = typedPath.exists()
       override def isDirectory: Boolean = typedPath.isDirectory
       override def isFile: Boolean = typedPath.isFile
       override def isSymbolicLink: Boolean = typedPath.isSymbolicLink
-      override def toString: String = s"TypedPath($getPath)"
+      override def toString: String = s"TypedPath($toPath)"
     }
   }
 

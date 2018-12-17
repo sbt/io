@@ -30,7 +30,7 @@ private[sbt] object SourceModificationWatch {
     } else {
       val observable = new WatchServiceBackedObservable[Path](state,
                                                               delay,
-                                                              (_: TypedPath).getPath,
+                                                              (_: TypedPath).toPath,
                                                               closeService = false,
                                                               NullWatchLogger)
       val monitor = FileEventMonitor.antiEntropy(observable, 200.milliseconds, NullWatchLogger)
