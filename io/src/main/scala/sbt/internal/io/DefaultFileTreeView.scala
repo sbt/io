@@ -2,15 +2,12 @@ package sbt.internal.io
 
 import java.nio.file.{ NoSuchFileException, NotDirectoryException, Path }
 
-import com.swoval.files.{ TypedPath => STypedPath }
-import com.swoval.files.FileTreeViews
+import com.swoval.files.{ FileTreeViews, TypedPath => STypedPath }
 import com.swoval.functional.Filters
+import sbt.internal.io.SwovalConverters._
 import sbt.io.{ FileTreeView, TypedPath }
 
 import scala.collection.JavaConverters._
-import SwovalConverters._
-
-import scala.util.Try
 
 private[sbt] object DefaultFileTreeView extends FileTreeView {
   private[this] val fileTreeView =
@@ -44,8 +41,8 @@ private[sbt] object DefaultFileTreeView extends FileTreeView {
           case _                => None
         })
     } catch {
-      case _: NotDirectoryException | _: NoSuchFileException =>
-        Try(Seq(TypedPath(path))).getOrElse(Nil)
+      case _: NoSuchFileException | _: NotDirectoryException =>
+        Nil
     }
   }
 
