@@ -81,7 +81,7 @@ final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
 
   override def asPath: NioPath = asFile.toPath
 
-  private[sbt] override def linkOptions: Vector[LinkOption] = Vector.empty
+  override private[sbt] def linkOptions: Vector[LinkOption] = Vector.empty
 
   def withLinkOptions(linkOption: LinkOption*): LinkOptionPath =
     new LinkOptionPath(asPath, linkOption.toVector)
@@ -452,13 +452,19 @@ sealed abstract class PathFinder {
    * and joining them with the platform path separator.
    */
   final def absString(): String = Path.makeString(get())
-
-  /** Constructs a debugging string for this finder by evaluating it and separating paths by newlines. */
-  override def toString() = get().mkString("\n   ", "\n   ", "")
 }
 
 private class SingleFile(asFile: File) extends PathFinder {
-  private[sbt] def addTo(fileSet: mutable.Set[File]) = if (asFile.exists) { fileSet += asFile; () }
+  override private[sbt] def addTo(fileSet: mutable.Set[File]): Unit =
+    if (asFile.exists) { fileSet += asFile; () }
+
+  override def toString: String = s"SingleFile($asFile)"
+  override def equals(o: Any): Boolean = o match {
+    case that: SingleFile => this._asFile == that._asFile
+    case _                => false
+  }
+  override def hashCode: Int = asFile.hashCode
+  private def _asFile = asFile
 }
 
 private abstract class FilterFiles extends PathFinder with FileFilter {
@@ -471,6 +477,12 @@ private abstract class FilterFiles extends PathFinder with FileFilter {
   protected def handleFile(file: File, fileSet: mutable.Set[File]): Unit =
     for (matchedFile <- getFiles(file, this))
       fileSet += new File(file, matchedFile.getName)
+  override def toString: String = s"FilterFiles($parent, $filter)"
+  override def equals(o: Any): Boolean = o match {
+    case that: FilterFiles => this.parent == that.parent && this.filter == that.filter
+    case _                 => false
+  }
+  override def hashCode: Int = (parent.hashCode * 31) ^ filter.hashCode
 }
 
 private class DescendantOrSelfPathFinder(
@@ -480,13 +492,13 @@ private class DescendantOrSelfPathFinder(
     extends FilterFiles {
   def this(parent: PathFinder, filter: FileFilter) =
     this(parent, filter, DescendantOrSelfPathFinder.nio _)
-  private[sbt] def addTo(fileSet: mutable.Set[File]) = {
+  override private[sbt] def addTo(fileSet: mutable.Set[File]) = {
     for (file <- parent.get()) {
       if (accept(file)) fileSet += file
       handleFileDescendant(file, filter, fileSet)
     }
   }
-
+  override def toString: String = s"DescendantOrSelfPathFinder($parent, $filter)"
 }
 private object DescendantOrSelfPathFinder {
   def default(file: File, filter: FileFilter, fileSet: mutable.Set[File]): Unit = {
@@ -545,28 +557,38 @@ private object DescendantOrSelfPathFinder {
 }
 
 private class ChildPathFinder(val parent: PathFinder, val filter: FileFilter) extends FilterFiles {
-  private[sbt] def addTo(fileSet: mutable.Set[File]) =
+  override private[sbt] def addTo(fileSet: mutable.Set[File]) =
     for (file <- parent.get())
       handleFile(file, fileSet)
+  override def toString: String = s"ChildPathFinder($parent, $filter)"
 }
 
 private class Paths(a: PathFinder, b: PathFinder) extends PathFinder {
-  private[sbt] def addTo(fileSet: mutable.Set[File]) = {
+  override private[sbt] def addTo(fileSet: mutable.Set[File]) = {
     a.addTo(fileSet)
     b.addTo(fileSet)
   }
+  override def toString: String = s"Paths($a, $b)"
+  override def equals(o: Any): Boolean = o match {
+    case that: Paths => this._a == that._a && this._b == that._b
+    case _           => false
+  }
+  override def hashCode: Int = (a.hashCode * 31) ^ b.hashCode
+  private def _a: PathFinder = a
+  private def _b: PathFinder = b
 }
 
 private class ExcludeFiles(include: PathFinder, exclude: PathFinder) extends PathFinder {
-  private[sbt] def addTo(pathSet: mutable.Set[File]) = {
+  override private[sbt] def addTo(pathSet: mutable.Set[File]) = {
     val includeSet = new mutable.LinkedHashSet[File]
     include.addTo(includeSet)
-
-    val excludeSet = new mutable.HashSet[File]
-    exclude.addTo(excludeSet)
-
-    includeSet --= excludeSet
-    pathSet ++= includeSet
-    ()
   }
+  override def toString: String = s"ExcludeFiles($include, $exclude)"
+  override def equals(o: Any): Boolean = o match {
+    case that: ExcludeFiles => this._include == that._include && this._exclude == that._exclude
+    case _                  => false
+  }
+  override def hashCode: Int = (include.hashCode * 31) ^ exclude.hashCode
+  private def _include: PathFinder = include
+  private def _exclude: PathFinder = exclude
 }
