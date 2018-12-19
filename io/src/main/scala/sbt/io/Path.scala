@@ -336,7 +336,7 @@ object PathFinder {
  * The set is evaluated by a call to the <code>get</code> method.
  * The set will be different for different calls to <code>get</code> if the underlying filesystem has changed.
  */
-sealed abstract class PathFinder {
+sealed abstract class PathFinder extends GlobBuilder[PathFinder] {
   import Path._
   import syntax._
 
@@ -601,4 +601,78 @@ private class ExcludeFiles(include: PathFinder, exclude: PathFinder) extends Pat
   override def hashCode: Int = (include.hashCode * 31) ^ exclude.hashCode
   private def _include: PathFinder = include
   private def _exclude: PathFinder = exclude
+}
+
+/**
+ * Represents a filtered subtree of the file system.
+ */
+sealed trait Glob {
+
+  /**
+   * The root of the file system subtree.
+   */
+  def base: File
+
+  /**
+   * The filter to apply to elements found in the file system subtree.
+   * @return the filter.
+   */
+  def filter: FileFilter
+
+  /**
+   * The maximum depth of elements to traverse. A depth of -1 implies that this glob applies only
+   * to the root specified by [[base]]. A depth of zero implies that only immediate children of
+   * the root are included in this glob. For positive depth, files may be included so long as their
+   * pathname, relativized with respect to the base, has no more than `depth + 1` components.
+   * @return the maximum depth.
+   */
+  def depth: Int
+}
+sealed trait GlobBuilder[G] extends Any {
+  def /(component: String): G
+  def \(component: String): G
+  def glob(filter: FileFilter): G
+  def *(filter: FileFilter): G
+  def globRecursive(filter: FileFilter): G
+  def allPaths: G
+  def **(filter: FileFilter): G
+}
+sealed trait ToGlob extends Any {
+  def toGlob: Glob
+}
+object Glob {
+  def apply(base: File, filter: FileFilter, depth: Int): Glob = new GlobImpl(base, filter, depth)
+  private class GlobImpl(val base: File, val filter: FileFilter, val depth: Int) extends Glob {
+    override def toString: String =
+      s"Glob(\n  base = $base,\n  filter = $filter,\n  depth = $depth\n)"
+    override def equals(o: Any): Boolean = o match {
+      case that: Glob =>
+        this.base == that.base && this.depth == that.depth && this.filter == that.filter
+      case _ => false
+    }
+    override def hashCode: Int = (((base.hashCode * 31) ^ filter.hashCode) * 31) ^ depth
+  }
+  final class Builder(val file: File) extends AnyVal with GlobBuilder[Glob] with ToGlob {
+    def /(component: String): Glob = new Builder(new File(file, component)).toGlob
+    def \(component: String): Glob = this / component
+    def glob(filter: FileFilter): Glob = Glob(file, filter, 0)
+    def *(filter: FileFilter): Glob = glob(filter)
+    def globRecursive(filter: FileFilter): Glob = Glob(file, filter, Int.MaxValue)
+    def allPaths: Glob = globRecursive(AllPassFilter)
+    def **(filter: FileFilter): Glob = globRecursive(filter)
+    def toGlob: Glob = Glob(file, new ExactFileFilter(file), -1)
+  }
+  implicit class GlobPathFinder(val glob: Glob) extends PathFinder {
+    override def get(): Seq[File] = {
+      if (glob.depth == -1) {
+        glob.base :: Nil
+      } else if (glob.depth > 0) {
+        val files = new java.util.LinkedHashSet[File].asScala
+        Path.defaultDescendantHandler(glob.base, glob.filter, files)
+        files.toIndexedSeq
+      } else {
+        Path.defaultChildHandler(glob.base, glob.filter)
+      }
+    }
+  }
 }
