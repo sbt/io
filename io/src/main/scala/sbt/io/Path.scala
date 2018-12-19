@@ -761,6 +761,13 @@ object Glob {
     def **(filter: FileFilter): Glob = globRecursive(filter)
     def toGlob: Glob = Glob(file, new ExactFileFilter(file), -1)
   }
+  implicit class GlobOps(val glob: Glob) extends AnyVal {
+    def withBase(base: File): Glob = new GlobImpl(base, glob.filter, glob.depth)
+    def withFilter(filter: FileFilter): Glob = new GlobImpl(glob.base, filter, glob.depth)
+    def withDepth(depth: Int): Glob = new GlobImpl(glob.base, glob.filter, depth)
+    def withRecursive(recursive: Boolean): Glob =
+      new GlobImpl(glob.base, glob.filter, if (recursive) Int.MaxValue else 0)
+  }
   implicit class GlobPathFinder(val glob: Glob) extends PathFinder {
     override def get(): Seq[File] = {
       if (glob.depth == -1) {
