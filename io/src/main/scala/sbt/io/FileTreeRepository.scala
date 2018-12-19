@@ -174,6 +174,12 @@ object FileTreeDataView {
   final case class Entry[+T](typedPath: TypedPath, value: Either[IOException, T]) {
     override def toString: String = s"Entry(${typedPath.toPath}, $value)"
   }
+  implicit class Ops[T](val view: FileTreeDataView[T]) extends AnyVal {
+    def list(glob: Glob): Seq[TypedPath] =
+      view.list(glob.base.toPath, glob.depth, glob.toTypedPathFilter)
+    def listEntries(glob: Glob): Seq[FileTreeDataView.Entry[T]] =
+      view.listEntries(glob.base.toPath, glob.depth, glob.toEntryFilter)
+  }
 
   /**
    * A FileTreeRepository observer that receives callbacks

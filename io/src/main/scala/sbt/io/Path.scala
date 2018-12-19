@@ -18,6 +18,7 @@ import java.nio.file.{
 
 import com.swoval.files.FileTreeViews
 import com.swoval.functional.Filter
+import sbt.io.FileTreeDataView.Entry
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -767,6 +768,20 @@ object Glob {
     def withDepth(depth: Int): Glob = new GlobImpl(glob.base, glob.filter, depth)
     def withRecursive(recursive: Boolean): Glob =
       new GlobImpl(glob.base, glob.filter, if (recursive) Int.MaxValue else 0)
+    def toFileFilter: FileFilter = toFileFilter(acceptBase = true)
+    def toFileFilter(acceptBase: Boolean): FileFilter = new GlobAsFilter(glob, acceptBase)
+    def toEntryFilter[T]: Entry[T] => Boolean = toEntryFilter(acceptBase = true)
+    def toEntryFilter[T](acceptBase: Boolean): Entry[T] => Boolean = {
+      val fileFilter = toFileFilter(acceptBase)
+      entry =>
+        fileFilter.accept(entry.typedPath.asFile)
+    }
+    def toTypedPathFilter[T]: TypedPath => Boolean = toTypedPathFilter(acceptBase = true)
+    def toTypedPathFilter[T](acceptBase: Boolean): TypedPath => Boolean = {
+      val fileFilter = toFileFilter(acceptBase)
+      typedPath =>
+        fileFilter.accept(typedPath.asFile)
+    }
   }
   implicit class GlobPathFinder(val glob: Glob) extends PathFinder {
     override def get(): Seq[File] = {
@@ -779,6 +794,116 @@ object Glob {
       } else {
         Path.defaultChildHandler(glob.base, glob.filter)
       }
+    }
+  }
+
+  /**
+   * Provides a [[FileFilter]] given a [[Glob]].
+   * @param glob the glob to validate
+   * @param acceptBase toggles whether or not we should accept the base path even when the depth is
+   *                   greater than or equal to zero.
+   */
+  final class GlobAsFilter(private val glob: Glob, private val acceptBase: Boolean)
+      extends FileFilter {
+    override def accept(pathname: File): Boolean = {
+      val path = pathname.toPath
+      val globPath = glob.base.toPath
+      if (path.startsWith(globPath)) {
+        if (path == globPath) {
+          (acceptBase || glob.depth == -1) && glob.filter.accept(pathname)
+        } else {
+          val nameCount = globPath.relativize(path).getNameCount - 1
+          nameCount <= glob.depth && glob.filter.accept(pathname)
+        }
+      } else {
+        false
+      }
+    }
+    override def toString: String = s"GlobAsFilter($glob)"
+    override def equals(o: Any): Boolean = o match {
+      case that: GlobAsFilter => this.acceptBase == that.acceptBase && this.glob == that.glob
+      case _                  => false
+    }
+  }
+
+  /**
+   * Provides extension methods for converting a Traversable[Glob] into a file filter.
+   * @param t the collection of [[Glob]]s
+   * @tparam T the generic collection type
+   */
+  implicit class TraversableGlobOps[T <: Traversable[Glob]](val t: T) extends AnyVal {
+
+    /**
+     * Returns a [[FileFilter]] that accepts a file if any glob in the collection accepts the file.
+     * The filter will accept the base file of each [[Glob]] in the collection.
+
+     * @return the [[FileFilter]].
+     */
+    def toFileFilter: FileFilter = new TraversableGlobOps.Filter(t, true)
+
+    /**
+     * Returns a [[FileFilter]] that accepts a file if any glob in the collection accepts the file.
+     *
+     * @param acceptBase toggles whether or not the base file of a [[Glob]] should be accepted by the
+     *                   filter
+     * @return the [[FileFilter]].
+     */
+    def toFileFilter(acceptBase: Boolean): FileFilter = new TraversableGlobOps.Filter(t, acceptBase)
+
+    /**
+     * Returns a function from [[FileTreeDataView.Entry]] to Boolean that accepts the
+     * [[FileTreeDataView.Entry]] if any glob in the collection accepts the [[TypedPath]] for which the
+     * [[FileTreeDataView.Entry]] corresponds. The filter will accept the base file of each glob.
+     *
+     * @return the filter.
+     */
+    def toEntryFilter: Entry[_] => Boolean =
+      entry => new TraversableGlobOps.Filter(t, true).accept(entry.typedPath.asFile)
+
+    /**
+     * Returns a function from [[FileTreeDataView.Entry]] to Boolean that accepts the
+     * [[FileTreeDataView.Entry]] if any glob in the collection accepts the [[TypedPath]] for which the
+     * [[FileTreeDataView.Entry]] corresponds.
+     *
+     * @param acceptBase toggles whether or not the base file of a [[Glob]] should be accepted by the
+     *                   filter
+     * @return the filter.
+     */
+    def toEntryFilter(acceptBase: Boolean): Entry[_] => Boolean =
+      entry => new TraversableGlobOps.Filter(t, acceptBase).accept(entry.typedPath.asFile)
+
+    /**
+     * Returns a function from [[TypedPath]] to Boolean that accepts the TypedPath if any glob in
+     * the collection accepts it. The returned filter will accept the base file of each glob.
+     *
+     * @return the filter.
+     */
+    def toTypedPathFilter: TypedPath => Boolean =
+      typedPath => new TraversableGlobOps.Filter(t, true).accept(typedPath.asFile)
+
+    /**
+     * Returns a function from [[TypedPath]] to Boolean that accepts the TypedPath if any glob in
+     * the collection accepts it.
+     *
+     * @param acceptBase toggles whether or not the base file of a [[Glob]] should be accepted by the
+     *                   filter
+     * @return the filter.
+     */
+    def toTypedPathFilter(acceptBase: Boolean): TypedPath => Boolean =
+      typedPath => new TraversableGlobOps.Filter(t, acceptBase).accept(typedPath.asFile)
+  }
+  private[sbt] object TraversableGlobOps {
+    private class Filter[T <: Traversable[Glob]](private val t: T, private val acceptBase: Boolean)
+        extends FileFilter {
+      private[this] val filters = t.map(_.toFileFilter(acceptBase))
+      override def accept(pathname: File): Boolean = filters.exists(_.accept(pathname))
+      override def equals(o: Any): Boolean = o match {
+        case that: Filter[_] => this.t == that.t && this.acceptBase == that.acceptBase
+        case _               => false
+      }
+      override def hashCode: Int = (t.hashCode * 31) ^ acceptBase.hashCode
+      override def toString: String =
+        s"TraversableGlobFilter(filters = $t, acceptBase = $acceptBase)"
     }
   }
 }
