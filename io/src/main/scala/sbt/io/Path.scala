@@ -18,7 +18,6 @@ import java.nio.file.{
 
 import com.swoval.files.FileTreeViews
 import com.swoval.functional.Filter
-import sbt.io.FileTreeView.AllPass
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -308,15 +307,13 @@ object Path extends Mapper {
     } else {
       val fileTreeView = FileTreeView.DEFAULT
       (file, filter) =>
-        val unfiltered = fileTreeView.list(file.toPath, 0, AllPass)
-        unfiltered.flatMap { tp =>
-          val fileName = tp.toPath.toString
-          val file = new File(fileName) {
+        val typedPathFilter: TypedPath => Boolean = tp => {
+          filter.accept(new File(tp.toPath.toString) {
             override def isDirectory: Boolean = tp.isDirectory
             override def isFile: Boolean = tp.isFile
-          }
-          if (filter.accept(file)) Some(new File(fileName)) else None
+          })
         }
+        fileTreeView.list(file.toPath, 0, typedPathFilter).map(_.toPath.toFile)
     }
 }
 
@@ -501,16 +498,15 @@ private object DescendantOrSelfPathFinder {
           Integer.MAX_VALUE,
           new Filter[com.swoval.files.TypedPath] {
             override def accept(t: com.swoval.files.TypedPath): Boolean = {
-              val file = new File(t.getPath.toString) {
+              filter.accept(new File(t.getPath.toString) {
                 override def isDirectory: Boolean = t.isDirectory
-
                 override def isFile: Boolean = t.isFile
-              }
-              if (filter.accept(file)) fileSet.add(t.getPath.toFile)
-              t.isDirectory // We need to accept directories for recursive traversal to work
+              })
             }
           }
         )
+        .asScala
+        .foreach(tp => fileSet += tp.getPath.toFile)
       val typedFile = new File(file.toString) {
         override def isDirectory: Boolean = true
         override def isFile: Boolean = false
