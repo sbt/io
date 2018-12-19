@@ -329,6 +329,76 @@ object PathFinder {
   }
 
   def strict(files: Traversable[File]): PathFinder = apply(files)
+
+  sealed trait Combinator extends Any {
+
+    /** The union of the paths found by this <code>PathFinder</code> with the paths found by 'paths'. */
+    def +++(paths: PathFinder): PathFinder
+
+    /** Excludes all paths from <code>excludePaths</code> from the paths selected by this <code>PathFinder</code>. */
+    def ---(excludePaths: PathFinder): PathFinder
+
+    /**
+     * Applies `mapper` to each path selected by this PathFinder
+     * and returns the path paired with the non-empty result.
+     * If the result is empty (None) and `errorIfNone` is true, an exception is thrown.
+     * If `errorIfNone` is false, the path is dropped from the returned Traversable.
+     */
+    def pair[T](mapper: File => Option[T], errorIfNone: Boolean = true): Seq[(File, T)]
+
+    /**
+     * Selects all descendant paths with a name that matches <code>include</code>
+     * and do not have an intermediate path with a name that matches <code>intermediateExclude</code>.
+     *
+     * Typical usage is <code>descendantsExcept("*.jar", ".svn")</code>
+     */
+    def descendantsExcept(include: FileFilter, intermediateExclude: FileFilter): PathFinder
+
+    /**
+     * Only keeps paths for which `f` returns true.
+     * It is non-strict, so it is not evaluated until the returned finder is evaluated.
+     */
+    def filter(f: File => Boolean): PathFinder
+
+    /** Non-strict flatMap: no evaluation occurs until the returned finder is evaluated. */
+    def flatMap(f: File => PathFinder): PathFinder
+
+    /** Evaluates this finder and converts the results to an `Array` of `URL`s. */
+    def getURLs(): Array[URL]
+
+    /** Evaluates this finder and converts the results to a distinct sequence of absolute path strings. */
+    def getPaths(): Seq[String]
+
+    /**
+     * Create a PathFinder from this one where each path has a unique name.
+     * A single path is arbitrarily selected from the set of paths with the same name.
+     */
+    def distinct(): PathFinder
+
+    /**
+     * Constructs a string by evaluating this finder, converting the resulting Paths to absolute path strings,
+     * and joining them with the platform path separator.
+     */
+    def absString(): String
+  }
+
+  object Combinator {
+    implicit class SingleFilePathFinderCombinator(val file: File) extends AnyVal with Combinator {
+      override def +++(paths: PathFinder): PathFinder = new SingleFile(file) +++ paths
+      override def ---(excludePaths: PathFinder): PathFinder = new SingleFile(file) --- excludePaths
+      override def pair[T](mapper: File => Option[T], errorIfNone: Boolean): Seq[(File, T)] =
+        new SingleFile(file).pair(mapper)
+      override def descendantsExcept(include: FileFilter,
+                                     intermediateExclude: FileFilter): PathFinder =
+        new SingleFile(file).descendantsExcept(include, intermediateExclude)
+      override def filter(f: File => Boolean): PathFinder = new SingleFile(file).filter(f)
+      override def flatMap(f: File => PathFinder): PathFinder = new SingleFile(file).flatMap(f)
+      override def getURLs(): Array[URL] = new SingleFile(file).getURLs()
+      override def getPaths(): Seq[String] = new SingleFile(file).getPaths()
+      override def distinct(): PathFinder = new SingleFile(file).distinct()
+      override def absString(): String = Path.makeString(new SingleFile(file).get())
+    }
+  }
 }
 
 /**
@@ -336,7 +406,7 @@ object PathFinder {
  * The set is evaluated by a call to the <code>get</code> method.
  * The set will be different for different calls to <code>get</code> if the underlying filesystem has changed.
  */
-sealed abstract class PathFinder extends GlobBuilder[PathFinder] {
+sealed abstract class PathFinder extends GlobBuilder[PathFinder] with PathFinder.Combinator {
   import Path._
   import syntax._
 
@@ -356,10 +426,10 @@ sealed abstract class PathFinder extends GlobBuilder[PathFinder] {
   private[sbt] def addTo(fileSet: mutable.Set[File]): Unit = ()
 
   /** The union of the paths found by this <code>PathFinder</code> with the paths found by 'paths'. */
-  def +++(paths: PathFinder): PathFinder = new Paths(this, paths)
+  override def +++(paths: PathFinder): PathFinder = new Paths(this, paths)
 
   /** Excludes all paths from <code>excludePaths</code> from the paths selected by this <code>PathFinder</code>. */
-  def ---(excludePaths: PathFinder): PathFinder = new ExcludeFiles(this, excludePaths)
+  override def ---(excludePaths: PathFinder): PathFinder = new ExcludeFiles(this, excludePaths)
 
   /**
    * Constructs a new finder that selects all paths with a name that matches <code>filter</code> and are
@@ -423,29 +493,32 @@ sealed abstract class PathFinder extends GlobBuilder[PathFinder] {
    *
    * Typical usage is <code>descendantsExcept("*.jar", ".svn")</code>
    */
-  def descendantsExcept(include: FileFilter, intermediateExclude: FileFilter): PathFinder =
+  override def descendantsExcept(include: FileFilter, intermediateExclude: FileFilter): PathFinder =
     this ** (include -- intermediateExclude)
 
   /**
    * Only keeps paths for which `f` returns true.
    * It is non-strict, so it is not evaluated until the returned finder is evaluated.
    */
-  final def filter(f: File => Boolean): PathFinder = PathFinder(get() filter f)
+  override final def filter(f: File => Boolean): PathFinder = PathFinder(get() filter f)
 
   /** Non-strict flatMap: no evaluation occurs until the returned finder is evaluated. */
-  final def flatMap(f: File => PathFinder): PathFinder = PathFinder(get().flatMap(p => f(p).get()))
+  override final def flatMap(f: File => PathFinder): PathFinder =
+    PathFinder(get().flatMap(p => f(p).get()))
 
   /** Evaluates this finder and converts the results to an `Array` of `URL`s. */
-  final def getURLs(): Array[URL] = get().toArray.map(_.toURI.toURL)
+  override final def getURLs(): Array[URL] = get().toArray.map(_.toURI.toURL)
 
   /** Evaluates this finder and converts the results to a distinct sequence of absolute path strings. */
-  final def getPaths(): Seq[String] = get().map(_.absolutePath)
+  override final def getPaths(): Seq[String] = get().map(_.absolutePath)
 
   /**
    * Create a PathFinder from this one where each path has a unique name.
    * A single path is arbitrarily selected from the set of paths with the same name.
    */
-  def distinct(): PathFinder = PathFinder { get().map(p => (p.asFile.getName, p)).toMap.values }
+  override def distinct(): PathFinder = PathFinder {
+    get().map(p => (p.asFile.getName, p)).toMap.values
+  }
 
   /**
    * Constructs a string by evaluating this finder, converting the resulting Paths to absolute path strings,
