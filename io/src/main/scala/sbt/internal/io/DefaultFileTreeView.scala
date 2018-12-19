@@ -25,7 +25,7 @@ private[sbt] object DefaultFileTreeView extends FileTreeView {
    *                  For non-negative values, [[list]] should return only entries whose relativized
    *                  path has {{{maxDepth - 1}}} elements. For example, when maxDepth is zero, all of
    *                  the children of the path should be included in the result, but none of the
-   *                  children of any of the subdirectories should be incldued.
+   *                  children of any of the subdirectories should be included.
    *
    * @param filter    only return files accepted by the filter
    * @return a sequence of [[TypedPath]].
