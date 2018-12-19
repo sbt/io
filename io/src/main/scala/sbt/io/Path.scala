@@ -115,7 +115,7 @@ sealed trait RichNioPath extends Any {
    * Updates permission of this file.
    * This operation requires underlying filesystem to support `IO.isPosix`.
    *
-   * @param permissions
+   * @param permissions the permissions to add
    */
   def setPermissions(permissions: Set[PosixFilePermission]): Unit = {
     Files.setPosixFilePermissions(asPath, permissions.asJava)
@@ -126,7 +126,7 @@ sealed trait RichNioPath extends Any {
    * Adds permission to this file.
    * This operation requires underlying filesystem to support `IO.isPosix`.
    *
-   * @param permission
+   * @param permission the permission to add
    */
   def addPermission(permission: PosixFilePermission): Unit =
     setPermissions(permissions + permission)
@@ -135,7 +135,7 @@ sealed trait RichNioPath extends Any {
    * Removes permission from this file.
    * This operation requires underlying filesystem to support `IO.isPosix`.
    *
-   * @param permission
+   * @param permission the permission to remove
    */
   def removePermission(permission: PosixFilePermission): Unit =
     setPermissions(permissions - permission)
@@ -144,7 +144,7 @@ sealed trait RichNioPath extends Any {
    * Tests if this file has the given permission.
    * This operation requires underlying filesystem to support `IO.isPosix`.
    *
-   * @param permission
+   * @param permission the permission to remove
    */
   def testPermission(permission: PosixFilePermission): Boolean =
     permissions(permission)
@@ -253,7 +253,7 @@ sealed trait RichNioPath extends Any {
    * Updates the file owner.
    * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
    *
-   * @param owner
+   * @param owner the new group owner
    */
   def setOwner(owner: String): Unit = {
     val fileSystem: FileSystem = asPath.getFileSystem
@@ -265,7 +265,7 @@ sealed trait RichNioPath extends Any {
    * Updates the group owner of the file.
    * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
    *
-   * @param group
+   * @param group the new group owner
    */
   def setGroup(group: String): Unit = {
     val fileSystem: FileSystem = asPath.getFileSystem
@@ -320,12 +320,14 @@ object Path extends Mapper {
 object PathFinder {
 
   /** A <code>PathFinder</code> that always produces the empty set of <code>Path</code>s.*/
-  val empty: PathFinder = new PathFinder { def addTo(fileSet: mutable.Set[File]) = () }
+  val empty: PathFinder = new PathFinder {
+    override private[sbt] def addTo(fileSet: mutable.Set[File]): Unit = ()
+  }
 
   def apply(file: File): PathFinder = new SingleFile(file)
 
   def apply(files: => Traversable[File]): PathFinder = new PathFinder {
-    def addTo(fileSet: mutable.Set[File]) = { fileSet ++= files; () }
+    override private[sbt] def addTo(fileSet: mutable.Set[File]): Unit = { fileSet ++= files; () }
   }
 
   def strict(files: Traversable[File]): PathFinder = apply(files)
@@ -419,7 +421,7 @@ sealed abstract class PathFinder {
    */
   final def get(): Seq[File] = {
     import scala.collection.JavaConverters._
-    val pathSet: mutable.Set[File] = (new java.util.LinkedHashSet[File]).asScala
+    val pathSet: mutable.Set[File] = new java.util.LinkedHashSet[File].asScala
     addTo(pathSet)
     pathSet.toSeq
   }
@@ -471,7 +473,7 @@ private abstract class FilterFiles extends PathFinder with FileFilter {
   def parent: PathFinder
   def filter: FileFilter
 
-  final def accept(file: File) = filter.accept(file)
+  final def accept(file: File): Boolean = filter.accept(file)
 
   private[this] val getFiles: (File, FileFilter) => Seq[File] = Path.defaultChildHandler
   protected def handleFile(file: File, fileSet: mutable.Set[File]): Unit =
@@ -491,8 +493,8 @@ private class DescendantOrSelfPathFinder(
     handleFileDescendant: (File, FileFilter, mutable.Set[File]) => Unit)
     extends FilterFiles {
   def this(parent: PathFinder, filter: FileFilter) =
-    this(parent, filter, DescendantOrSelfPathFinder.nio _)
-  override private[sbt] def addTo(fileSet: mutable.Set[File]) = {
+    this(parent, filter, DescendantOrSelfPathFinder.nio)
+  override private[sbt] def addTo(fileSet: mutable.Set[File]): Unit = {
     for (file <- parent.get()) {
       if (accept(file)) fileSet += file
       handleFileDescendant(file, filter, fileSet)
@@ -557,14 +559,14 @@ private object DescendantOrSelfPathFinder {
 }
 
 private class ChildPathFinder(val parent: PathFinder, val filter: FileFilter) extends FilterFiles {
-  override private[sbt] def addTo(fileSet: mutable.Set[File]) =
+  override private[sbt] def addTo(fileSet: mutable.Set[File]): Unit =
     for (file <- parent.get())
       handleFile(file, fileSet)
   override def toString: String = s"ChildPathFinder($parent, $filter)"
 }
 
 private class Paths(a: PathFinder, b: PathFinder) extends PathFinder {
-  override private[sbt] def addTo(fileSet: mutable.Set[File]) = {
+  override private[sbt] def addTo(fileSet: mutable.Set[File]): Unit = {
     a.addTo(fileSet)
     b.addTo(fileSet)
   }
