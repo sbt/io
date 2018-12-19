@@ -406,16 +406,42 @@ object PathFinder {
  * The set is evaluated by a call to the <code>get</code> method.
  * The set will be different for different calls to <code>get</code> if the underlying filesystem has changed.
  */
-sealed abstract class PathFinder extends GlobBuilder[PathFinder] with PathFinder.Combinator {
-  import Path._
-  import syntax._
+sealed abstract class PathFinder extends PathLister with PathFinderDefaults {
 
   /**
    * Evaluates this finder and converts the results to a `Seq` of distinct `File`s.
    * The files returned by this method will reflect the underlying filesystem at the time of calling.
    * If the filesystem changes, two calls to this method might be different.
    */
-  def get(): Seq[File] = Nil
+  override def get(): Seq[File] = Nil
+}
+
+sealed trait PathLister {
+
+  /**
+   * Evaluates this finder and converts the results to a `Seq` of distinct `File`s.
+   * The files returned by this method will reflect the underlying filesystem at the time of calling.
+   * If the filesystem changes, two calls to this method might be different.
+   */
+  def get(): Seq[File]
+}
+object PathLister {
+  private class SingleFilePathLister(private val file: File) extends PathLister {
+    override def get(): Seq[File] = new Glob.Builder(file).toGlob.get()
+    override def toString: String = s"SingleFilePathLister($file)"
+    override def equals(o: Any): Boolean = o match {
+      case that: SingleFilePathLister => this.file == that.file
+      case _                          => false
+    }
+    override def hashCode: Int = file.hashCode
+  }
+  def apply(file: File): PathLister = new SingleFilePathLister(file)
+}
+
+sealed trait PathFinderDefaults extends GlobBuilder[PathFinder] with PathFinder.Combinator {
+  self: PathFinder =>
+  import Path._
+  import syntax._
 
   /**
    * This is a vestigial implementation detail that shouldn't have made it into the base class

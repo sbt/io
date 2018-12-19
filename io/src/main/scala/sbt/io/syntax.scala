@@ -23,6 +23,7 @@ sealed abstract class IOSyntax1 extends IOSyntax2 {
   implicit def singleFileGlobBuilder(file: File): GlobBuilder[Glob] = new Glob.Builder(file)
   implicit def singleFilePathFinderCombinator(file: File): PathFinder.Combinator =
     new SingleFilePathFinderCombinator(file)
+  implicit def singleFilePathLister(file: File): PathLister = PathLister(file)
   implicit def singleFileToGlob(file: File): ToGlob = new Glob.Builder(file)
 }
 

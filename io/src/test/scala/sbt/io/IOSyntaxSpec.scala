@@ -19,4 +19,7 @@ class IOSyntaxSpec extends FlatSpec with Matchers {
       (dir glob "*.txt").get() shouldBe Seq(new JFile(dir, "foo.txt"))
     }
   }
+  "get" should "work with PathLister and PathFinder" in IO.withTemporaryDirectory { dir =>
+    assert((dir: PathLister).get() == (dir: PathFinder).get())
+  }
 }
