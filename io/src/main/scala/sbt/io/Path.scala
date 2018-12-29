@@ -796,6 +796,15 @@ object Glob {
       }
     }
   }
+  implicit object ordering extends Ordering[Glob] {
+    override def compare(left: Glob, right: Glob): Int = left.base.compareTo(right.base) match {
+      // We want greater depth to come first because when we are using a Seq[Glob] to
+      // register with the file system cache, it is more efficient to register the broadest glob
+      // first so that we don't have to list the base directory multiple times.
+      case 0 => -left.depth.compareTo(right.depth)
+      case i => i
+    }
+  }
 
   /**
    * Provides a [[FileFilter]] given a [[Glob]].
