@@ -4,6 +4,8 @@ import java.io.{ File, IOException }
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.{ Files, NoSuchFileException, Path => JPath }
+import java.util
+import java.util.concurrent.atomic.AtomicInteger
 
 import sbt.internal.io.{
   DefaultFileTreeView,
@@ -12,6 +14,9 @@ import sbt.internal.io.{
   Source
 }
 import sbt.io.FileTreeDataView.{ Entry, Observable }
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 /**
  * Represents a path in the file system. It may cache some of the file attributes so that no disk
@@ -277,6 +282,44 @@ object FileTreeDataView {
       }
     def apply[T](typedPath: TypedPath, converter: TypedPath => Either[IOException, T]): Entry[T] =
       Entry(typedPath, converter(typedPath))
+  }
+
+  /**
+   * Aggregates a collection of [[Observer]]s into a single [[Observer]]. The callbacks for the
+   * generated [[Observer]] invoke the corresponding callback for each of the [[Observer]]s that
+   * are added via [[addObserver]].
+   *
+   * @tparam T the generic type of [[Entry.value]] instances for the [[FileTreeRepository]]
+   */
+  class Observers[T] extends Observer[T] with Observable[T] {
+    private[this] val id = new AtomicInteger(0)
+    private[this] val observers: mutable.Map[Int, Observer[T]] =
+      new util.LinkedHashMap[Int, Observer[T]]().asScala
+
+    override def onCreate(newEntry: Entry[T]): Unit = observers.synchronized {
+      observers.values.foreach(_.onCreate(newEntry))
+    }
+
+    override def onDelete(oldEntry: Entry[T]): Unit = observers.synchronized {
+      observers.values.foreach(_.onDelete(oldEntry))
+    }
+
+    override def onUpdate(oldEntry: Entry[T], newEntry: Entry[T]): Unit = observers.synchronized {
+      observers.values.foreach(_.onUpdate(oldEntry, newEntry))
+    }
+
+    override def addObserver(observer: Observer[T]) = observers.synchronized {
+      val observerId = id.incrementAndGet()
+      observers += observerId -> observer
+      observerId
+    }
+
+    override def removeObserver(handle: Int): Unit = observers.synchronized {
+      observers -= handle
+      ()
+    }
+
+    override def close(): Unit = observers.synchronized(observers.clear())
   }
 
   implicit class CallbackOps[-T](val callback: Entry[T] => Unit)

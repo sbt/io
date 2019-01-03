@@ -5,7 +5,7 @@ import java.nio.file.{ Path, Paths }
 import org.scalatest.{ FlatSpec, Matchers }
 import sbt.io.{ FileEventMonitor, NullWatchLogger, TypedPath }
 import sbt.io.FileEventMonitor.{ Creation, Deletion, Update }
-import sbt.io.FileTreeDataView.Entry
+import sbt.io.FileTreeDataView.{ Entry, Observers }
 
 import scala.concurrent.duration._
 

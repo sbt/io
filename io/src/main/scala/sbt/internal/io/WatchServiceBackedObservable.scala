@@ -5,9 +5,9 @@ import java.nio.file.{ Files, Path, WatchKey }
 import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
-import sbt.io.FileTreeDataView.{ Entry, Observable }
+import sbt.io.FileTreeDataView.{ Entry, Observable, Observers }
 import sbt.io.FileTreeView.AllPass
-import sbt.io.{ FileTreeDataView, FileTreeView, WatchLogger, TypedPath }
+import sbt.io.{ FileTreeDataView, FileTreeView, TypedPath, WatchLogger }
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._

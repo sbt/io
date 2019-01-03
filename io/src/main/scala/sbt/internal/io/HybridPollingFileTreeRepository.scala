@@ -3,7 +3,7 @@ package sbt.internal.io
 import java.io.IOException
 import java.nio.file.Path
 
-import sbt.io.FileTreeDataView.{ Entry, Observable }
+import sbt.io.FileTreeDataView.{ Entry, Observable, Observers }
 import sbt.io._
 
 import scala.concurrent.duration.FiniteDuration
