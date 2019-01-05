@@ -1,6 +1,6 @@
 package sbt.io
 
-import java.io.IOException
+import java.io.{ File, IOException }
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.{ Files, NoSuchFileException, Path => JPath }
@@ -73,6 +73,23 @@ object TypedPath {
   implicit case object ordering extends Ordering[TypedPath] {
     override def compare(left: TypedPath, right: TypedPath): Int =
       left.toPath.compareTo(right.toPath)
+  }
+
+  /**
+   * Provides extension methods for [[TypedPath]].
+   * @param typedPath the [[TypedPath]] to extend
+   */
+  implicit class Ops(val typedPath: TypedPath) extends AnyVal {
+
+    /**
+     * View the [[TypedPath]] as a java.io.File. The `isFile` and `isDirectory` methods read
+     * from the backing [[TypedPath]] to avoid unnecessary io.
+     * @return the java.io.File instance.
+     */
+    def asFile: File = new File(typedPath.toPath.toString) {
+      override def isFile: Boolean = typedPath.isFile
+      override def isDirectory: Boolean = typedPath.isDirectory
+    }
   }
 }
 
