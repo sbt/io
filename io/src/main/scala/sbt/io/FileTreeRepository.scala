@@ -10,8 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import sbt.internal.io.{
   DefaultFileTreeView,
   FileTreeRepositoryImpl,
-  HybridPollingFileTreeRepository,
-  Source
+  HybridPollingFileTreeRepository
 }
 import sbt.io.FileTreeDataView.{ Entry, Observable }
 
@@ -154,10 +153,35 @@ object FileTreeView {
 
     override def close(): Unit = view.close()
   }
-  implicit class FileTreeViewOps(val fileTreeView: FileTreeView) extends AnyVal {
-    // scala 2.10 wouldn't compile when this was implemented with an anonymous class
-    def asDataView[T](f: TypedPath => T): FileTreeDataView[T] =
-      new FileTreeDataViewFromFileTreeView[T](fileTreeView, f)
+
+  /**
+   * Provides extension methods for [[FileTreeView]].
+   * @param fileTreeView the [[FileTreeView]] instance to augment
+   */
+  implicit class Ops(val fileTreeView: FileTreeView) extends AnyVal {
+
+    /**
+     * List the contents of the provided glob.
+     *
+     * @param glob the [[Glob]] to list
+     * @return a sequence of [[TypedPath]] instances.
+     */
+    def list(glob: Glob): Seq[TypedPath] =
+      fileTreeView.list(glob.base, glob.depth, glob.toTypedPathFilter)
+
+    /**
+     * Lift the [[FileTreeView]] to a [[FileTreeDataView]] given a conversion function from
+     * [[TypedPath]] to `T` for some `T`. It works by delegating to the [[FileTreeView.list]]
+     * method and transforming the results using the conversion function.
+     * @param converter converts [[TypedPath]] to some generic type `T`.
+     * @tparam T the generic type of cache values for the [[FileTreeDataView.Entry]] instances
+     *           returned by the [[FileTreeDataView.listEntries]] mtehod.
+     * @return the [[FileTreeDataView]] for
+     */
+    def asDataView[T](converter: TypedPath => T): FileTreeDataView[T] = {
+      // scala 2.10 wouldn't compile when this was implemented with an anonymous class
+      new FileTreeDataViewFromFileTreeView[T](fileTreeView, converter)
+    }
   }
 }
 
@@ -192,11 +216,23 @@ object FileTreeDataView {
   final case class Entry[+T](typedPath: TypedPath, value: Either[IOException, T]) {
     override def toString: String = s"Entry(${typedPath.toPath}, $value)"
   }
-  implicit class Ops[T](val view: FileTreeDataView[T]) extends AnyVal {
-    def list(glob: Glob): Seq[TypedPath] =
-      view.list(glob.base, glob.depth, glob.toTypedPathFilter)
+
+  /**
+   * Provides extension methods for [[FileTreeDataView]].
+   * @param fileTreeDataView the [[FileTreeDataView]] instance to augment
+   * @tparam T the generic type of [[FileTreeDataView.Entry]] instances produced by this view
+   */
+  implicit class Ops[T](val fileTreeDataView: FileTreeDataView[T]) extends AnyVal {
+
+    /**
+     * List the contents of the provided glob where each [[FileTreeDataView.Entry]]
+     * instance returned has an associated data value.
+     *
+     * @param glob the glob to list
+     * @return a sequence of [[FileTreeDataView.Entry]] instances.
+     */
     def listEntries(glob: Glob): Seq[FileTreeDataView.Entry[T]] =
-      view.listEntries(glob.base, glob.depth, glob.toEntryFilter)
+      fileTreeDataView.listEntries(glob.base, glob.depth, glob.toEntryFilter)
   }
 
   /**
@@ -357,7 +393,7 @@ trait FileTreeRepository[+T] extends Observable[T] with FileTreeDataView[T] with
   /**
    * Register a directory for monitoring
    *
-   * @param path     the path to list
+   * @param path     the path to monitor
    * @param maxDepth controls how the depth of children of the registered path to consider. When
    *                 maxDepth is -1, then the repository should only monitor the path itself. When
    *                 it is zero, the the repository should monitor the path and its direct children.
@@ -393,11 +429,21 @@ object FileTreeRepository {
    * of the paths under monitoring, but others will need to be polled.
    *
    * @param converter function to generate an [[FileTreeDataView.Entry.value]] from a [[TypedPath]]
-   * @param pollingSources do not cache any path contained in these [[sbt.internal.io.Source]]s.
+   * @param pollingGlobs do not cache any path contained in these [[Glob]]s.
    * @tparam T the generic type of the [[FileTreeDataView.Entry.value]]
    * @return a file repository.
    */
   def hybrid[T](converter: TypedPath => T,
-                pollingSources: Source*): HybridPollingFileTreeRepository[T] =
-    HybridPollingFileTreeRepository(converter, pollingSources: _*)
+                pollingGlobs: Glob*): HybridPollingFileTreeRepository[T] =
+    HybridPollingFileTreeRepository(converter, pollingGlobs: _*)
+
+  /**
+   * Provides extension methods for [[FileTreeRepository]]
+   * @param repository the repository to augment
+   * @tparam T the generic type parameter for the [[FileTreeRepository]] cache entries
+   */
+  implicit class Ops[T](val repository: FileTreeRepository[T]) extends AnyVal {
+    def register(glob: Glob): Either[IOException, Boolean] =
+      repository.register(glob.base, glob.depth)
+  }
 }

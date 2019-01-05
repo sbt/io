@@ -20,20 +20,21 @@ import scala.concurrent.duration.FiniteDuration
 private[sbt] trait HybridPollingFileTreeRepository[+T] extends FileTreeRepository[T] { self =>
   def shouldPoll(path: Path): Boolean
   def shouldPoll(typedPath: TypedPath): Boolean = shouldPoll(typedPath.toPath)
-  def shouldPoll(source: Source): Boolean = shouldPoll(source.base.toPath)
+  def shouldPoll(glob: Glob): Boolean = shouldPoll(glob.base)
   def toPollingObservable(delay: FiniteDuration,
-                          sources: Seq[Source],
+                          globs: Seq[Glob],
                           logger: WatchLogger): Observable[T]
 }
 
 private[io] case class HybridPollingFileTreeRepositoryImpl[+T](converter: TypedPath => T,
-                                                               pollingSources: Seq[Source])
+                                                               pollingGlobs: Seq[Glob])
     extends HybridPollingFileTreeRepository[T] { self =>
   private val repo = new FileTreeRepositoryImpl[T](converter)
   private val view = DefaultFileTreeView.asDataView(converter)
   private val shouldPollEntry: Entry[_] => Boolean = (e: Entry[_]) => shouldPoll(e.typedPath)
 
-  override def shouldPoll(path: Path): Boolean = pollingSources.exists(_.accept(path))
+  override def shouldPoll(path: Path): Boolean =
+    pollingGlobs.exists(_.toFileFilter(acceptBase = true).accept(path.toFile))
   override def addObserver(observer: FileTreeDataView.Observer[T]): Int =
     repo.addObserver(observer)
   override def register(path: Path, maxDepth: Int): Either[IOException, Boolean] = {
@@ -54,20 +55,22 @@ private[io] case class HybridPollingFileTreeRepositoryImpl[+T](converter: TypedP
         repo
           .listEntries(path, maxDepth, (e: Entry[T]) => filter(e) || shouldPollEntry(e))
           .partition(shouldPollEntry)
-      ready ++ needPoll.flatMap {
-        case e @ Entry(typedPath, _) if typedPath.isDirectory =>
-          val path = typedPath.toPath
-          val depth =
+      ready ++ needPoll
+        .foldLeft(Set.empty[FileTreeDataView.Entry[T]]) {
+          case (entries, e @ Entry(typedPath, _)) if typedPath.isDirectory =>
+            val path = typedPath.toPath
+            val depth = 0
             if (maxDepth == Integer.MAX_VALUE) Integer.MAX_VALUE
             else maxDepth - path.relativize(path).getNameCount - 1
-          Some(e).filter(filter) ++
-            view.listEntries(path, depth, (e: Entry[T]) => shouldPollEntry(e) && filter(e))
-        case Entry(typedPath, _)
-            if shouldPoll(typedPath) && !shouldPoll(typedPath.toPath.getParent) =>
-          view.listEntries(typedPath.toPath, -1, (_: Entry[T]) => true)
-        case _ =>
-          Nil
-      }
+            entries ++ (Some(e).filter(filter) ++
+              view.listEntries(path, depth, (e: Entry[T]) => shouldPollEntry(e) && filter(e)))
+          case (entries, Entry(typedPath, _))
+              if shouldPoll(typedPath) && !shouldPoll(typedPath.toPath.getParent) =>
+            entries ++ view.listEntries(typedPath.toPath, -1, (_: Entry[T]) => true)
+          case (entries, _) =>
+            entries
+        }
+        .toSeq
     } else {
       view.listEntries(path, maxDepth, (e: Entry[T]) => shouldPollEntry(e) && filter(e))
     }
@@ -80,15 +83,15 @@ private[io] case class HybridPollingFileTreeRepositoryImpl[+T](converter: TypedP
     repo.close()
   }
   def toPollingObservable(delay: FiniteDuration,
-                          sources: Seq[Source],
+                          globs: Seq[Glob],
                           logger: WatchLogger): Observable[T] = {
-    val pollingSources = sources.filter(shouldPoll)
-    if (pollingSources.isEmpty) self
+    val pollingGlobs = globs.filter(shouldPoll)
+    if (pollingGlobs.isEmpty) self
     else {
       new Observable[T] {
         private val observers = new Observers[T]
         private val handle = self.addObserver(observers)
-        private val watchState = WatchState.empty(new PollingWatchService(delay), pollingSources)
+        private val watchState = WatchState.empty(pollingGlobs, new PollingWatchService(delay))
         private val observable =
           new WatchServiceBackedObservable[T](watchState, delay, converter, true, logger)
         observable.addObserver(observers)
@@ -108,7 +111,6 @@ private[io] case class HybridPollingFileTreeRepositoryImpl[+T](converter: TypedP
 }
 
 private[sbt] object HybridPollingFileTreeRepository {
-  def apply[T](converter: TypedPath => T,
-               pollingSources: Source*): HybridPollingFileTreeRepository[T] =
-    HybridPollingFileTreeRepositoryImpl(converter, pollingSources)
+  def apply[T](converter: TypedPath => T, pollingGlobs: Glob*): HybridPollingFileTreeRepository[T] =
+    HybridPollingFileTreeRepositoryImpl(converter, pollingGlobs)
 }

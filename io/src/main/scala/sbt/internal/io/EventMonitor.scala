@@ -58,7 +58,7 @@ private[sbt] object EventMonitor {
     val eventLogger = new io.WatchLogger {
       override def debug(msg: => Any): Unit = logger.debug(msg)
     }
-    val observable = new WatchServiceBackedObservable[Path](watchState,
+    val observable = new WatchServiceBackedObservable[Path](watchState.toNewWatchState,
                                                             delay,
                                                             (_: TypedPath).toPath,
                                                             closeService = true,

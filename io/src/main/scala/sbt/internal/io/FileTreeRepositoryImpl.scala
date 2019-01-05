@@ -6,9 +6,9 @@ import java.nio.file.{ Path => JPath }
 import com.swoval.files.FileTreeDataViews.Converter
 import com.swoval.files.{ FileTreeRepositories, TypedPath => STypedPath }
 import com.swoval.functional.Filters
-import sbt.internal.io.SwovalConverters.{ SwovalEitherOps, SwovalEntryOps, ObserverOps }
-import sbt.io.{ FileTreeRepository, FileTreeDataView, TypedPath }
-import FileTreeDataView.Entry
+import sbt.internal.io.SwovalConverters.{ ObserverOps, SwovalEitherOps, SwovalEntryOps }
+import sbt.io.FileTreeDataView.Entry
+import sbt.io.{ FileTreeDataView, FileTreeRepository, TypedPath }
 
 import scala.collection.immutable.VectorBuilder
 
