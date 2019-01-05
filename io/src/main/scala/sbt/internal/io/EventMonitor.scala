@@ -63,7 +63,8 @@ private[sbt] object EventMonitor {
                                                             (_: TypedPath).toPath,
                                                             closeService = true,
                                                             eventLogger)
-    val monitor = FileEventMonitor.antiEntropy(observable, antiEntropy, eventLogger)
+    val monitor =
+      FileEventMonitor.antiEntropy(observable, antiEntropy, eventLogger, 50.millis, 10.minutes)
     new EventMonitor {
       private[this] var count = watchState.count
 

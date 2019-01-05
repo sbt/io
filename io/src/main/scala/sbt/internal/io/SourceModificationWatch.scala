@@ -33,7 +33,12 @@ private[sbt] object SourceModificationWatch {
                                                               (_: TypedPath).toPath,
                                                               closeService = false,
                                                               NullWatchLogger)
-      val monitor = FileEventMonitor.antiEntropy(observable, 200.milliseconds, NullWatchLogger)
+      val monitor =
+        FileEventMonitor.antiEntropy(observable,
+                                     200.milliseconds,
+                                     NullWatchLogger,
+                                     50.milliseconds,
+                                     10.minutes)
       @tailrec
       def poll(): Boolean = {
         monitor.poll(10.millis) match {

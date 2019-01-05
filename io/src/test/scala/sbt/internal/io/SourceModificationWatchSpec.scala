@@ -285,7 +285,8 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val observable = newObservable(parentDir)
       // Choose a very long anti-entropy period to ensure that the second trigger doesn't happen
       val logger = new CachingWatchLogger
-      val monitor = FileEventMonitor.antiEntropy(observable, 10.seconds, logger)
+      val monitor =
+        FileEventMonitor.antiEntropy(observable, 10.seconds, logger, 50.millis, 10.minutes)
       try {
         val triggered0 = watchTest(monitor) {
           IO.write(file, "bar")
