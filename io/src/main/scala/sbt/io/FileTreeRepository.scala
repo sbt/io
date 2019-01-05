@@ -62,7 +62,7 @@ trait TypedPath {
 }
 
 object TypedPath {
-  def apply(path: JPath): TypedPath = new TypedPath {
+  def apply(path: JPath): TypedPath = new TypedPath with MetaTypedPath {
     private val attrs = try {
       Some(Files.readAttributes(path, classOf[BasicFileAttributes], NOFOLLOW_LINKS))
     } catch {
@@ -94,6 +94,19 @@ object TypedPath {
     def asFile: File = new File(typedPath.toPath.toString) {
       override def isFile: Boolean = typedPath.isFile
       override def isDirectory: Boolean = typedPath.isDirectory
+    }
+  }
+
+  private[sbt] trait MetaTypedPath { self: TypedPath =>
+    private[this] def toHash(boolean: Boolean) = if (boolean) 1 else 0
+    override def hashCode: Int =
+      ((((self.toPath.## * 31) ^ toHash(self.exists)) * 31 ^ toHash(self.isDirectory)) * 31 ^ toHash(
+        self.isFile)) * 31 ^ toHash(self.isSymbolicLink)
+    override def equals(o: Any): Boolean = o match {
+      case tp: TypedPath =>
+        self.toPath == tp.toPath && self.exists == tp.exists && self.isFile == tp.isFile &&
+          self.isDirectory == tp.isDirectory && self.isSymbolicLink == tp.isSymbolicLink
+      case _ => false
     }
   }
 }
