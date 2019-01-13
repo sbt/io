@@ -56,8 +56,6 @@ trait TypedPath {
    * @return true if the file is a symbolic link
    */
   def isSymbolicLink: Boolean
-
-  override def toString: String = s"TypedPath($toPath)"
 }
 
 object TypedPath {
@@ -107,6 +105,7 @@ object TypedPath {
           self.isDirectory == tp.isDirectory && self.isSymbolicLink == tp.isSymbolicLink
       case _ => false
     }
+    override def toString: String = s"TypedPath(${self.toPath})"
   }
 }
 
