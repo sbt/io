@@ -12,7 +12,7 @@ private[sbt] trait Alternative[A, B] {
 sealed trait IOSyntax2 {
   implicit def lowPriorityFileFinder(file: File): PathFinder = PathFinder(file)
 }
-sealed abstract class IOSyntax1 extends IOSyntax2 {
+sealed trait BaseSyntax extends IOSyntax2 {
   @deprecated(
     "1.3.0",
     "The api of singleFileFinder is now implemented by two implicit defs: " +
@@ -32,12 +32,15 @@ sealed abstract class IOSyntax1 extends IOSyntax2 {
   implicit def singlePathPathLister(path: NioPath): PathLister = PathLister(path.toFile)
   implicit def singlePathToGlob(path: NioPath): ToGlob = new Glob.PathBuilder(path)
 }
+sealed abstract class IOSyntax1 extends BaseSyntax
 
 sealed abstract class IOSyntax0 extends IOSyntax1 {
   implicit def alternative[A, B](f: A => Option[B]): Alternative[A, B] = new Alternative[A, B] {
     def |(g: A => Option[B]) = a => f(a) orElse g(a)
   }
 }
+
+private[sbt] trait IOSyntax extends BaseSyntax
 
 object syntax extends IOSyntax0 {
   type File = java.io.File
