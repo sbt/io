@@ -506,7 +506,7 @@ sealed trait PathFinderDefaults extends GlobBuilder[PathFinder] with PathFinder.
    * If `errorIfNone` is false, the path is dropped from the returned Traversable.
    */
   def pair[T](mapper: File => Option[T], errorIfNone: Boolean = true): Seq[(File, T)] = {
-    val apply = if (errorIfNone) mapper | fail else mapper
+    val apply = if (errorIfNone) (a: File) => mapper(a) orElse fail(a) else mapper
     for (file <- get(); mapped <- apply(file)) yield file -> mapped
   }
 
