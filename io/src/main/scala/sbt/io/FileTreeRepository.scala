@@ -290,6 +290,8 @@ object FileTreeDataView {
       override def onDelete(oldEntry: Entry[T]): Unit = ondelete(oldEntry)
       override def onUpdate(oldEntry: Entry[T], newEntry: Entry[T]): Unit =
         onupdate(oldEntry, newEntry)
+      override def toString: String =
+        s"Observer(onCreate = $oncreate, onDelete = $ondelete, onUpdate = $onupdate)"
     }
   }
 
@@ -368,6 +370,8 @@ object FileTreeDataView {
     }
 
     override def close(): Unit = observers.synchronized(observers.clear())
+    override def toString: String =
+      s"Observers(\n${observers.map { case (k, v) => s"  $k -> $v" }.mkString("\n")}\n)"
   }
 
   implicit class CallbackOps[-T](val callback: Entry[T] => Unit)
@@ -378,16 +382,10 @@ object FileTreeDataView {
 }
 
 /**
- * Monitors registered directories for file changes. A typical implementation will keep an
- * in memory cache of the file system that can be queried in [[FileTreeRepository#listEntries]]. The
- * [[FileTreeRepository#register]] method adds monitoring for a particular cache. A filter may be provided
- * so that the cache doesn't waste memory on files the user doesn't care about. The
- * cache may be shared across a code base so there additional apis for adding filters or changing
- * the recursive property of a directory.
- *
- * @tparam T the type of the [[FileTreeDataView.Entry.value]]s.
+ * A dynamically configured monitor of the file system. New paths can be added and removed from
+ * monitoring with register / unregister.
  */
-trait FileTreeRepository[+T] extends Observable[T] with FileTreeDataView[T] with AutoCloseable {
+trait Registerable {
 
   /**
    * Register a directory for monitoring
@@ -409,6 +407,22 @@ trait FileTreeRepository[+T] extends Observable[T] with FileTreeDataView[T] with
    */
   def unregister(path: JPath): Unit
 }
+
+/**
+ * Monitors registered directories for file changes. A typical implementation will keep an
+ * in memory cache of the file system that can be queried in [[FileTreeRepository#listEntries]]. The
+ * [[FileTreeRepository#register]] method adds monitoring for a particular cache. A filter may be provided
+ * so that the cache doesn't waste memory on files the user doesn't care about. The
+ * cache may be shared across a code base so there additional apis for adding filters or changing
+ * the recursive property of a directory.
+ *
+ * @tparam T the type of the [[FileTreeDataView.Entry.value]]s.
+ */
+trait FileTreeRepository[+T]
+    extends Registerable
+    with Observable[T]
+    with FileTreeDataView[T]
+    with AutoCloseable
 
 object FileTreeRepository {
 

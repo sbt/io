@@ -1,5 +1,6 @@
 package sbt.internal.io
 
+import java.io.IOException
 import java.nio.file.StandardWatchEventKinds.OVERFLOW
 import java.nio.file.{ Files, Path, WatchKey }
 import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
@@ -7,7 +8,7 @@ import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import sbt.io.FileTreeDataView.{ Entry, Observable, Observers }
 import sbt.io.FileTreeView.AllPass
-import sbt.io.{ FileTreeDataView, FileTreeView, TypedPath, WatchLogger }
+import sbt.io._
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -23,9 +24,11 @@ private[sbt] class WatchServiceBackedObservable[+T](s: NewWatchState,
                                                     converter: TypedPath => T,
                                                     closeService: Boolean,
                                                     logger: WatchLogger)
-    extends Observable[T] {
+    extends Registerable
+    with Observable[T] {
   private[this] val closed = new AtomicBoolean(false)
   private[this] val observers = new Observers[T]
+  private[this] val view = FileTreeView.DEFAULT
   private[this] val thread: Thread = {
     val entryConverter = Entry.converter(converter)
     val lock = new Object
@@ -134,10 +137,10 @@ private[sbt] class WatchServiceBackedObservable[+T](s: NewWatchState,
               if (newPaths == paths) typedPaths else poll(newPaths)
             }
             val result = poll()
-            val newDirs = result.collect {
+            result.foreach {
               case tp if tp.isDirectory && !closed.get() => tp.toPath -> s.register(tp.toPath)
+              case _                                     =>
             }
-            lock.synchronized { s.registered ++= newDirs }
             result.toVector
           } else Nil
         } else Nil
@@ -158,4 +161,12 @@ private[sbt] class WatchServiceBackedObservable[+T](s: NewWatchState,
       logger.debug("Closed WatchServiceBackedObservable")
     }
   }
+
+  override def register(path: Path, maxDepth: Int): Either[IOException, Boolean] = {
+    view.list(path, maxDepth, _.isDirectory).foreach(tp => s.register(tp.toPath))
+    Right(true)
+  }
+
+  override def unregister(path: Path): Unit =
+    view.list(path, Int.MaxValue, _.isDirectory).foreach(tp => s.unregister(tp.toPath))
 }

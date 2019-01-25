@@ -1,5 +1,6 @@
 package sbt.io
 
+import java.io.IOException
 import java.nio.file.{ WatchEvent, WatchKey, Path => JPath }
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
@@ -29,13 +30,14 @@ class MacOSXWatchService extends WatchService with Unregisterable {
     underlying.poll(timeout.toNanos, TimeUnit.NANOSECONDS)
 
   override def register(path: JPath, events: WatchEvent.Kind[JPath]*): WatchKey = {
-    val key = underlying.register(path.toRealPath(), events: _*)
-    keys.put(path, key)
+    val resolved = resolve(path)
+    val key = underlying.register(resolved, events: _*)
+    keys.put(resolved, key)
     key
   }
 
   override def unregister(path: JPath): Unit = {
-    keys.remove(path) foreach (_.cancel())
+    keys.remove(resolve(path)) foreach (_.cancel())
   }
 
   override def close(): Unit = if (isClosed.compareAndSet(false, true)) {
@@ -43,4 +45,8 @@ class MacOSXWatchService extends WatchService with Unregisterable {
     keys.clear()
     underlying.close()
   }
+
+  private def resolve(path: JPath): JPath =
+    try path.toRealPath()
+    catch { case _: IOException => if (path.isAbsolute) path else path.toAbsolutePath }
 }

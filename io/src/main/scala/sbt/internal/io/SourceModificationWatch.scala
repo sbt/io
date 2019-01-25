@@ -134,16 +134,17 @@ private[sbt] final class WatchState private (
 
 private[sbt] class NewWatchState(private[sbt] val globs: Seq[Glob],
                                  private[sbt] val service: WatchService,
-                                 private[sbt] val registered: mutable.Map[Path, WatchKey]) {
+                                 private[sbt] val registered: mutable.Map[Path, WatchKey])
+    extends AutoCloseable {
   private[sbt] def register(path: Path): WatchKey =
     try {
       registered.get(path) match {
         case Some(k) => k
         case None =>
           val key = service.register(path, WatchState.events: _*)
-          registered.put(path, key) match {
-            case Some(k) => k
-            case None    =>
+          registered.put(path, key).foreach { k =>
+            k.reset()
+            k.cancel()
           }
           key
       }
@@ -151,6 +152,14 @@ private[sbt] class NewWatchState(private[sbt] val globs: Seq[Glob],
       case _: IOException => null
     }
   private[sbt] def unregister(path: Path): Unit = registered.remove(path).foreach(_.cancel())
+  override def close(): Unit = {
+    registered.values.foreach { k =>
+      k.reset()
+      k.cancel()
+    }
+    registered.clear()
+    service.close()
+  }
 }
 
 /**
