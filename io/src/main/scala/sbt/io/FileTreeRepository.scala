@@ -10,7 +10,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import sbt.internal.io.{
   DefaultFileTreeView,
   FileTreeRepositoryImpl,
-  HybridPollingFileTreeRepository
+  HybridPollingFileTreeRepository,
+  LegacyFileTreeRepository
 }
 import sbt.io.FileTreeDataView.{ Entry, Observable }
 
@@ -436,6 +437,34 @@ object FileTreeRepository {
    */
   def default[T](converter: TypedPath => T): FileTreeRepository[T] =
     new FileTreeRepositoryImpl[T](converter)
+
+  /**
+   * Create a [[FileTreeRepository]]. The generated repository will cache the file system tree for the
+   * monitored directories.
+   *
+   * @param converter function to generate an [[FileTreeDataView.Entry.value]] from a [[TypedPath]]
+   * @tparam T the generic type of the [[FileTreeDataView.Entry.value]]
+   * @return a file repository.
+   */
+  def legacy[T](converter: TypedPath => T): FileTreeRepository[T] =
+    new LegacyFileTreeRepository[T](converter, new WatchLogger {
+      override def debug(msg: => Any): Unit = {}
+    }, WatchService.default)
+
+  /**
+   * Create a [[FileTreeRepository]] with a provided logger. The generated repository will cache
+   * the file system tree for the monitored directories.
+   *
+   * @param converter function to generate an [[FileTreeDataView.Entry.value]] from a [[TypedPath]]
+   * @param logger used to log file events
+   * @param watchService the [[WatchService]] to monitor for file system events
+   * @tparam T the generic type of the [[FileTreeDataView.Entry.value]]
+   * @return a file repository.
+   */
+  def legacy[T](converter: TypedPath => T,
+                logger: WatchLogger,
+                watchService: WatchService): FileTreeRepository[T] =
+    new LegacyFileTreeRepository[T](converter, logger, watchService)
 
   /**
    * Create a [[FileTreeRepository]]. The generated repository will cache the file system tree for some

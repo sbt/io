@@ -163,8 +163,13 @@ private[sbt] class WatchServiceBackedObservable[+T](s: NewWatchState,
   }
 
   override def register(path: Path, maxDepth: Int): Either[IOException, Boolean] = {
-    view.list(path, maxDepth, _.isDirectory).foreach(tp => s.register(tp.toPath))
-    Right(true)
+    try {
+      s.register(path)
+      view.list(path, maxDepth, _.isDirectory).foreach(tp => s.register(tp.toPath))
+      Right(true)
+    } catch {
+      case e: IOException => Left(e)
+    }
   }
 
   override def unregister(path: Path): Unit =

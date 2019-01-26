@@ -498,6 +498,20 @@ class FileTreeRepositoryEventMonitorSpec extends FlatSpec with Matchers with Eve
     repository.filter(e => globs.exists(_.toEntryFilter(e)))
   }
 }
+
+class LegacyFileTreeRepositoryEventMonitorSpec
+    extends FlatSpec
+    with Matchers
+    with EventMonitorSpec {
+  override def pollDelay: FiniteDuration = 100.millis
+
+  override def newObservable(globs: Seq[Glob]): Observable[_] = {
+    val repository = FileTreeRepository.legacy((_: TypedPath).toPath)
+    globs.foreach(repository.register)
+    repository.filter(e => globs.exists(_.toEntryFilter(e)))
+  }
+}
+
 abstract class SourceModificationWatchSpec(
     getServiceWithPollDelay: FiniteDuration => WatchService,
     override val pollDelay: FiniteDuration

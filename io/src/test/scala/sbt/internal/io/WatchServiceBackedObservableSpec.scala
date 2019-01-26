@@ -17,7 +17,9 @@ class WatchServiceBackedObservableSpec extends FlatSpec {
     val path = dir.toPath
     val subdir = Files.createDirectories(path.resolve("a").resolve("b").resolve("c")).toRealPath()
     val watchState =
-      new NewWatchState(Nil, WatchService.default, new ConcurrentHashMap[Path, WatchKey].asScala)
+      new NewWatchState(ConcurrentHashMap.newKeySet[Glob].asScala,
+                        WatchService.default,
+                        new ConcurrentHashMap[Path, WatchKey].asScala)
     val observable =
       new WatchServiceBackedObservable[Path](watchState,
                                              100.millis,

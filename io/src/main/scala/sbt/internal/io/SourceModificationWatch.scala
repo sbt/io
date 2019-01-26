@@ -124,7 +124,8 @@ private[sbt] final class WatchState private (
     service.close()
   }
   private[sbt] def toNewWatchState: NewWatchState = {
-    val globs = sources.map(s =>
+    val globs = ConcurrentHashMap.newKeySet[Glob].asScala
+    globs ++= sources.map(s =>
       Glob(s.base, s.includeFilter -- s.excludeFilter, if (s.recursive) Int.MaxValue else 0))
     val map = new ConcurrentHashMap[Path, WatchKey]()
     map.putAll(registered.asJava)
@@ -132,7 +133,7 @@ private[sbt] final class WatchState private (
   }
 }
 
-private[sbt] class NewWatchState(private[sbt] val globs: Seq[Glob],
+private[sbt] class NewWatchState(private[sbt] val globs: mutable.Set[Glob],
                                  private[sbt] val service: WatchService,
                                  private[sbt] val registered: mutable.Map[Path, WatchKey])
     extends AutoCloseable {
@@ -268,6 +269,8 @@ private[sbt] object WatchState {
                if (glob.depth > 0) true else false)
 
   def empty(globs: Seq[Glob], service: WatchService): NewWatchState = {
+    val globSet = ConcurrentHashMap.newKeySet[Glob].asScala
+    globSet ++= globs
     val initFiles = globs.flatMap {
       case glob if glob.depth > 0 =>
         DefaultFileTreeView.list(glob.base, -1, AllPass).flatMap { d =>
@@ -280,7 +283,7 @@ private[sbt] object WatchState {
       case glob => Seq(glob.base)
     }.sorted
     service.init()
-    val init = new NewWatchState(globs, service, new ConcurrentHashMap[Path, WatchKey].asScala)
+    val init = new NewWatchState(globSet, service, new ConcurrentHashMap[Path, WatchKey].asScala)
     initFiles.foreach(init.register)
     init
   }
