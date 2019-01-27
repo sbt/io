@@ -176,9 +176,9 @@ object FileTreeDataView {
   }
   implicit class Ops[T](val view: FileTreeDataView[T]) extends AnyVal {
     def list(glob: Glob): Seq[TypedPath] =
-      view.list(glob.base.toPath, glob.depth, glob.toTypedPathFilter)
+      view.list(glob.base, glob.depth, glob.toTypedPathFilter)
     def listEntries(glob: Glob): Seq[FileTreeDataView.Entry[T]] =
-      view.listEntries(glob.base.toPath, glob.depth, glob.toEntryFilter)
+      view.listEntries(glob.base, glob.depth, glob.toEntryFilter)
   }
 
   /**

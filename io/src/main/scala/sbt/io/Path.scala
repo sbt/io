@@ -308,13 +308,9 @@ object Path extends Mapper {
     } else {
       val fileTreeView = FileTreeView.DEFAULT
       (file, filter) =>
-        val typedPathFilter: TypedPath => Boolean = tp => {
-          filter.accept(new File(tp.toPath.toString) {
-            override def isDirectory: Boolean = tp.isDirectory
-            override def isFile: Boolean = tp.isFile
-          })
-        }
-        fileTreeView.list(file.toPath, 0, typedPathFilter).map(_.toPath.toFile)
+        fileTreeView
+          .list(file.toPath, maxDepth = 0, new Glob.ConvertedFileFilter(filter))
+          .map(_.toPath.toFile)
     }
 }
 
@@ -428,7 +424,7 @@ sealed trait PathLister {
 }
 object PathLister {
   private class SingleFilePathLister(private val file: File) extends PathLister {
-    override def get(): Seq[File] = new Glob.Builder(file).toGlob.get()
+    override def get(): Seq[File] = new Glob.FileBuilder(file).toGlob.get()
     override def toString: String = s"SingleFilePathLister($file)"
     override def equals(o: Any): Boolean = o match {
       case that: SingleFilePathLister => this.file == that.file
@@ -711,13 +707,13 @@ sealed trait Glob {
   /**
    * The root of the file system subtree.
    */
-  def base: File
+  def base: NioPath
 
   /**
    * The filter to apply to elements found in the file system subtree.
    * @return the filter.
    */
-  def filter: FileFilter
+  def filter: TypedPath => Boolean
 
   /**
    * The maximum depth of elements to traverse. A depth of -1 implies that this glob applies only
@@ -741,8 +737,25 @@ sealed trait ToGlob extends Any {
   def toGlob: Glob
 }
 object Glob {
-  def apply(base: File, filter: FileFilter, depth: Int): Glob = new GlobImpl(base, filter, depth)
-  private class GlobImpl(val base: File, val filter: FileFilter, val depth: Int) extends Glob {
+  private[sbt] implicit class ConvertedFileFilter(val f: FileFilter)
+      extends (TypedPath => Boolean) {
+    override def apply(tp: TypedPath): Boolean = f.accept(tp.asFile)
+    override def equals(o: Any): Boolean = o match {
+      case that: ConvertedFileFilter => this.f == that.f
+      case _                         => false
+    }
+    override def hashCode: Int = f.hashCode
+    override def toString: String = s"ConvertedFileFilter($f)"
+  }
+  def apply(base: File, filter: FileFilter, depth: Int): Glob =
+    new GlobImpl(base.toPath, filter, depth)
+  def apply(base: File, filter: TypedPath => Boolean, depth: Int): Glob =
+    new GlobImpl(base.toPath, filter, depth)
+  def apply(base: NioPath, filter: FileFilter, depth: Int): Glob = new GlobImpl(base, filter, depth)
+  def apply(base: NioPath, filter: TypedPath => Boolean, depth: Int): Glob =
+    new GlobImpl(base, filter, depth)
+  private class GlobImpl(val base: NioPath, val filter: TypedPath => Boolean, val depth: Int)
+      extends Glob {
     override def toString: String =
       s"Glob(\n  base = $base,\n  filter = $filter,\n  depth = $depth\n)"
     override def equals(o: Any): Boolean = o match {
@@ -752,47 +765,62 @@ object Glob {
     }
     override def hashCode: Int = (((base.hashCode * 31) ^ filter.hashCode) * 31) ^ depth
   }
-  final class Builder(val file: File) extends AnyVal with GlobBuilder[Glob] with ToGlob {
-    def /(component: String): Glob = new Builder(new File(file, component)).toGlob
+  private[sbt] trait Builder[T] extends Any with GlobBuilder[Glob] with ToGlob {
+    def repr: T
+    def converter: T => NioPath
+    def /(component: String): Glob = {
+      val base = converter(repr).resolve(component)
+      Glob(base, new ExactFileFilter(base.toFile), -1)
+    }
     def \(component: String): Glob = this / component
-    def glob(filter: FileFilter): Glob = Glob(file, filter, 0)
+    def glob(filter: FileFilter): Glob = Glob(converter(repr), filter, 0)
     def *(filter: FileFilter): Glob = glob(filter)
-    def globRecursive(filter: FileFilter): Glob = Glob(file, filter, Int.MaxValue)
+    def globRecursive(filter: FileFilter): Glob = Glob(converter(repr), filter, Int.MaxValue)
     def allPaths: Glob = globRecursive(AllPassFilter)
     def **(filter: FileFilter): Glob = globRecursive(filter)
-    def toGlob: Glob = Glob(file, new ExactFileFilter(file), -1)
+    def toGlob: Glob = {
+      val base = converter(repr)
+      Glob(base, new ExactFileFilter(base.toFile), -1)
+    }
+  }
+  final class FileBuilder(val file: File) extends AnyVal with Builder[File] {
+    override def repr: File = file
+    override def converter: File => NioPath = (_: File).toPath
+  }
+  final class PathBuilder(val path: NioPath) extends AnyVal with Builder[NioPath] {
+    override def repr: NioPath = path
+    override def converter: NioPath => NioPath = identity
   }
   implicit class GlobOps(val glob: Glob) extends AnyVal {
-    def withBase(base: File): Glob = new GlobImpl(base, glob.filter, glob.depth)
+    def withBase(base: File): Glob = new GlobImpl(base.toPath, glob.filter, glob.depth)
+    def withBase(base: NioPath): Glob = new GlobImpl(base, glob.filter, glob.depth)
     def withFilter(filter: FileFilter): Glob = new GlobImpl(glob.base, filter, glob.depth)
     def withDepth(depth: Int): Glob = new GlobImpl(glob.base, glob.filter, depth)
     def withRecursive(recursive: Boolean): Glob =
       new GlobImpl(glob.base, glob.filter, if (recursive) Int.MaxValue else 0)
     def toFileFilter: FileFilter = toFileFilter(acceptBase = true)
     def toFileFilter(acceptBase: Boolean): FileFilter = new GlobAsFilter(glob, acceptBase)
-    def toEntryFilter[T]: Entry[T] => Boolean = toEntryFilter(acceptBase = true)
+    def toEntryFilter[T]: Entry[T] => Boolean = toEntryFilter(acceptBase = false)
     def toEntryFilter[T](acceptBase: Boolean): Entry[T] => Boolean = {
-      val fileFilter = toFileFilter(acceptBase)
-      entry =>
-        fileFilter.accept(entry.typedPath.asFile)
+      if (acceptBase) e => e.typedPath.toPath == glob.base || glob.filter(e.typedPath)
+      else e => glob.filter(e.typedPath)
     }
-    def toTypedPathFilter[T]: TypedPath => Boolean = toTypedPathFilter(acceptBase = true)
+    def toTypedPathFilter[T]: TypedPath => Boolean = toTypedPathFilter(acceptBase = false)
     def toTypedPathFilter[T](acceptBase: Boolean): TypedPath => Boolean = {
-      val fileFilter = toFileFilter(acceptBase)
-      typedPath =>
-        fileFilter.accept(typedPath.asFile)
+      if (acceptBase) tp => tp.toPath == glob.base || glob.filter(tp)
+      else glob.filter
     }
   }
   implicit class GlobPathFinder(val glob: Glob) extends PathFinder {
     override def get(): Seq[File] = {
       if (glob.depth == -1) {
-        glob.base :: Nil
+        glob.base.toFile :: Nil
       } else if (glob.depth > 0) {
         val files = new java.util.LinkedHashSet[File].asScala
-        Path.defaultDescendantHandler(glob.base, glob.filter, files)
+        Path.defaultDescendantHandler(glob.base.toFile, glob.toFileFilter, files)
         files.toIndexedSeq
       } else {
-        Path.defaultChildHandler(glob.base, glob.filter)
+        Path.defaultChildHandler(glob.base.toFile, glob.toFileFilter)
       }
     }
   }
@@ -801,7 +829,11 @@ object Glob {
       // We want greater depth to come first because when we are using a Seq[Glob] to
       // register with the file system cache, it is more efficient to register the broadest glob
       // first so that we don't have to list the base directory multiple times.
-      case 0 => -left.depth.compareTo(right.depth)
+      case 0 =>
+        // If we inline -left.depth.compareTo(right.depth), scala 2.10 incorrectly reports
+        // an implicit numeric widening error. This could be inlined if we drop 2.10 support.
+        val leftDepth: Int = left.depth
+        -leftDepth.compareTo(right.depth)
       case i => i
     }
   }
@@ -816,13 +848,20 @@ object Glob {
       extends FileFilter {
     override def accept(pathname: File): Boolean = {
       val path = pathname.toPath
-      val globPath = glob.base.toPath
+      val globPath = glob.base
+      lazy val typedPath = new TypedPath {
+        override def toPath: NioPath = path
+        override def exists: Boolean = Files.exists(path)
+        override def isDirectory: Boolean = Files.isDirectory(path)
+        override def isFile: Boolean = Files.isRegularFile(path)
+        override def isSymbolicLink: Boolean = Files.isSymbolicLink(path)
+      }
       if (path.startsWith(globPath)) {
         if (path == globPath) {
-          (acceptBase || glob.depth == -1) && glob.filter.accept(pathname)
+          (acceptBase || glob.depth == -1) && glob.filter(typedPath)
         } else {
           val nameCount = globPath.relativize(path).getNameCount - 1
-          nameCount <= glob.depth && glob.filter.accept(pathname)
+          nameCount <= glob.depth && glob.filter(typedPath)
         }
       } else {
         false

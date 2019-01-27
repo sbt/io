@@ -1,6 +1,7 @@
 package sbt.io
 
 import java.io.File
+import java.nio.file.{ Path => NioPath }
 
 import sbt.io.PathFinder.Combinator.SingleFilePathFinderCombinator
 
@@ -20,11 +21,16 @@ sealed abstract class IOSyntax1 extends IOSyntax2 {
       "from File to PathFinder may not be supported in sbt 2"
   )
   def singleFileFinder(file: File): PathFinder = PathFinder(file)
-  implicit def singleFileGlobBuilder(file: File): GlobBuilder[Glob] = new Glob.Builder(file)
+  implicit def singleFileGlobBuilder(file: File): GlobBuilder[Glob] = new Glob.FileBuilder(file)
   implicit def singleFilePathFinderCombinator(file: File): PathFinder.Combinator =
     new SingleFilePathFinderCombinator(file)
   implicit def singleFilePathLister(file: File): PathLister = PathLister(file)
-  implicit def singleFileToGlob(file: File): ToGlob = new Glob.Builder(file)
+  implicit def singleFileToGlob(file: File): ToGlob = new Glob.FileBuilder(file)
+  implicit def singlePathGlobBuilder(path: NioPath): GlobBuilder[Glob] = new Glob.PathBuilder(path)
+  implicit def singlePathPathFinderCombinator(path: NioPath): PathFinder.Combinator =
+    new SingleFilePathFinderCombinator(path.toFile)
+  implicit def singlePathPathLister(path: NioPath): PathLister = PathLister(path.toFile)
+  implicit def singlePathToGlob(path: NioPath): ToGlob = new Glob.PathBuilder(path)
 }
 
 sealed abstract class IOSyntax0 extends IOSyntax1 {
