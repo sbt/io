@@ -52,7 +52,7 @@ class GlobPathFinderSpec extends FlatSpec {
     assert((file("/tmp/this/is/not/a/file") * AllPassFilter).get == Nil)
   }
   it should "implicitly build a glob" in IO.withTemporaryDirectory { dir =>
-    // These use the Builder extension class for file.
+    // These use the FileBuilder extension class for file.
     assert((dir: ToGlob).toGlob == Glob(dir, new ExactFileFilter(dir), -1))
     assert(dir.toGlob == Glob(dir, new ExactFileFilter(dir), -1))
     assert(dir * AllPassFilter == Glob(dir, AllPassFilter, 0))

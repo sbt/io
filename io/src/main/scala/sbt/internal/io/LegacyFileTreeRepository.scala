@@ -27,28 +27,19 @@ private[sbt] class LegacyFileTreeRepository[+T](converter: TypedPath => T,
       converter,
       closeService = true,
       logger)
-  override def listEntries(
-      path: Path,
-      maxDepth: Int,
-      filter: FileTreeDataView.Entry[T] => Boolean): Seq[FileTreeDataView.Entry[T]] =
-    view.listEntries(path, maxDepth, filter)
-
-  override def list(path: Path, maxDepth: Int, filter: TypedPath => Boolean): Seq[TypedPath] =
-    view.list(path, maxDepth, filter)
 
   override def addObserver(observer: FileTreeDataView.Observer[T]): Int =
     observable.addObserver(observer)
-
-  override def removeObserver(handle: Int): Unit = observable.removeObserver(handle)
   override def close(): Unit = observable.close()
-
-  override def register(path: Path, maxDepth: Int): Either[IOException, Boolean] = {
-    globs.add(Glob(path.toFile, AllPassFilter, maxDepth))
-    observable.register(path, maxDepth)
+  override def list(glob: Glob): Seq[TypedPath] = view.list(glob)
+  override def listEntries(glob: Glob): Seq[FileTreeDataView.Entry[T]] = view.listEntries(glob)
+  override def register(glob: Glob): Either[IOException, Boolean] = {
+    globs.add(glob)
+    observable.register(glob)
   }
-  override def unregister(path: Path): Unit = {
-    val allGlobs = globs.toIndexedSeq
-    allGlobs.foreach(g => if (g.base == path) globs -= g)
-    observable.unregister(path)
+  override def removeObserver(handle: Int): Unit = observable.removeObserver(handle)
+  override def unregister(glob: Glob): Unit = {
+    globs.remove(glob)
+    observable.unregister(glob)
   }
 }

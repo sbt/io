@@ -119,17 +119,10 @@ trait FileTreeView extends AutoCloseable {
   /**
    * List the contents of the current directory.
    *
-   * @param path      the path to list
-   * @param maxDepth  controls the depth of children of the path to include in the results. When
-   *                  maxDepth is -1, [[list]] should only return the TypedPath for this directory.
-   *                  For non-negative values, [[list]] should return only entries whose relativized
-   *                  path has {{{maxDepth - 1}}} elements. For example, when maxDepth is zero, all of
-   *                  the children of the path should be included in the result, but none of the
-   *                  children of any of the subdirectories should be included.
-   * @param filter    only return files accepted by the filter
+   * @param glob The glob to list
    * @return a sequence of [[TypedPath]]s.
    */
-  def list(path: JPath, maxDepth: Int, filter: TypedPath => Boolean): Seq[TypedPath]
+  def list(glob: Glob): Seq[TypedPath]
 }
 
 object FileTreeView {
@@ -139,14 +132,11 @@ object FileTreeView {
   val DEFAULT: FileTreeView = DefaultFileTreeView
   private class FileTreeDataViewFromFileTreeView[+T](view: FileTreeView, converter: TypedPath => T)
       extends FileTreeDataView[T] {
-    override def listEntries(path: JPath,
-                             maxDepth: Int,
-                             filter: Entry[T] => Boolean): Seq[Entry[T]] =
-      list(path, maxDepth, (_: TypedPath) => true)
-        .flatMap(tp => Some(Entry(tp, Entry.converter(converter))).filter(filter))
-    override def list(path: JPath, maxDepth: Int, filter: TypedPath => Boolean): Seq[TypedPath] =
+    override def listEntries(glob: Glob): Seq[Entry[T]] =
+      list(glob).flatMap(tp => Some(Entry(tp, Entry.converter(converter))))
+    override def list(glob: Glob): Seq[TypedPath] =
       try {
-        view.list(path, maxDepth, filter)
+        view.list(glob)
       } catch {
         case _: NoSuchFileException => Nil
       }
@@ -161,21 +151,11 @@ object FileTreeView {
   implicit class Ops(val fileTreeView: FileTreeView) extends AnyVal {
 
     /**
-     * List the contents of the provided glob.
-     *
-     * @param glob the [[Glob]] to list
-     * @return a sequence of [[TypedPath]] instances.
-     */
-    def list(glob: Glob): Seq[TypedPath] =
-      fileTreeView.list(glob.base, glob.depth, glob.toTypedPathFilter)
-
-    /**
      * Lift the [[FileTreeView]] to a [[FileTreeDataView]] given a conversion function from
      * [[TypedPath]] to `T` for some `T`. It works by delegating to the [[FileTreeView.list]]
      * method and transforming the results using the conversion function.
      * @param converter converts [[TypedPath]] to some generic type `T`.
      * @tparam T the generic type of cache values for the [[FileTreeDataView.Entry]] instances
-     *           returned by the [[FileTreeDataView.listEntries]] mtehod.
      * @return the [[FileTreeDataView]] for
      */
     def asDataView[T](converter: TypedPath => T): FileTreeDataView[T] = {
@@ -198,41 +178,15 @@ trait FileTreeDataView[+T] extends FileTreeView with AutoCloseable {
    * List the contents of the current directory where each returned [[FileTreeDataView.Entry]] has a
    * data value associated with it.
    *
-   * @param path      the path to list
-   * @param maxDepth  controls the depth of children of the path to include in the results. When
-   *                  maxDepth is -1, [[listEntries]] should only return the TypedPath for this
-   *                  directory. For non-negative values, [[listEntries]] should return only
-   *                  entries whose relativized path has {{{maxDepth - 1}}} elements. For example,
-   *                  when maxDepth is zero, all of the children of the path should be included in
-   *                  the result, but none of the children of any of the subdirectories should be
-   *                  included.
-   * @param filter    only return files accepted by the filter
+   * @param glob      the glob to list
    * @return a sequence of [[FileTreeDataView.Entry]] instances.
    */
-  def listEntries(path: JPath, maxDepth: Int, filter: Entry[T] => Boolean): Seq[Entry[T]]
+  def listEntries(glob: Glob): Seq[Entry[T]]
 }
 
 object FileTreeDataView {
   final case class Entry[+T](typedPath: TypedPath, value: Either[IOException, T]) {
     override def toString: String = s"Entry(${typedPath.toPath}, $value)"
-  }
-
-  /**
-   * Provides extension methods for [[FileTreeDataView]].
-   * @param fileTreeDataView the [[FileTreeDataView]] instance to augment
-   * @tparam T the generic type of [[FileTreeDataView.Entry]] instances produced by this view
-   */
-  implicit class Ops[T](val fileTreeDataView: FileTreeDataView[T]) extends AnyVal {
-
-    /**
-     * List the contents of the provided glob where each [[FileTreeDataView.Entry]]
-     * instance returned has an associated data value.
-     *
-     * @param glob the glob to list
-     * @return a sequence of [[FileTreeDataView.Entry]] instances.
-     */
-    def listEntries(glob: Glob): Seq[FileTreeDataView.Entry[T]] =
-      fileTreeDataView.listEntries(glob.base, glob.depth, glob.toEntryFilter)
   }
 
   /**
@@ -389,31 +343,29 @@ object FileTreeDataView {
 trait Registerable {
 
   /**
-   * Register a directory for monitoring
+   * Register a glob for monitoring.
    *
-   * @param path     the path to monitor
-   * @param maxDepth controls how the depth of children of the registered path to consider. When
-   *                 maxDepth is -1, then the repository should only monitor the path itself. When
-   *                 it is zero, the the repository should monitor the path and its direct children.
-   *                 For values greater than zero,
+   * @param glob Glob
    * @return an Either that is a Right when register has no errors and a Left if an IOException is
    *         thrown while registering the path. The result should be true if the path has
    *         never been previously registered or if the recursive flag flips from false to true.
    */
-  def register(path: JPath, maxDepth: Int): Either[IOException, Boolean]
+  def register(glob: Glob): Either[IOException, Boolean]
 
   /**
    * Remove a path from monitoring.
-   * @param path the path to stop monitoring
+   * @param glob the glob to stop monitoring
    */
-  def unregister(path: JPath): Unit
+  def unregister(glob: Glob): Unit
 }
 
+// scaladoc is horrible and I couldn't figure out how to link the overloaded method listEntries
+// in this message.
 /**
  * Monitors registered directories for file changes. A typical implementation will keep an
- * in memory cache of the file system that can be queried in [[FileTreeRepository#listEntries]]. The
- * [[FileTreeRepository#register]] method adds monitoring for a particular cache. A filter may be provided
- * so that the cache doesn't waste memory on files the user doesn't care about. The
+ * in memory cache of the file system that can be queried in [[FileTreeRepository!.list]]. The
+ * [[FileTreeRepository#register]] method adds monitoring for a particular cache. A filter may be
+ * provided so that the cache doesn't waste memory on files the user doesn't care about. The
  * cache may be shared across a code base so there additional apis for adding filters or changing
  * the recursive property of a directory.
  *
@@ -478,14 +430,4 @@ object FileTreeRepository {
   def hybrid[T](converter: TypedPath => T,
                 pollingGlobs: Glob*): HybridPollingFileTreeRepository[T] =
     HybridPollingFileTreeRepository(converter, pollingGlobs: _*)
-
-  /**
-   * Provides extension methods for [[FileTreeRepository]]
-   * @param repository the repository to augment
-   * @tparam T the generic type parameter for the [[FileTreeRepository]] cache entries
-   */
-  implicit class Ops[T](val repository: FileTreeRepository[T]) extends AnyVal {
-    def register(glob: Glob): Either[IOException, Boolean] =
-      repository.register(glob.base, glob.depth)
-  }
 }

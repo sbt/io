@@ -5,6 +5,7 @@ import java.nio.file.Path
 
 import sbt.io.FileTreeDataView.{ Entry, Observable, Observers }
 import sbt.io._
+import sbt.io.syntax._
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -37,48 +38,41 @@ private[io] case class HybridPollingFileTreeRepositoryImpl[+T](converter: TypedP
     pollingGlobs.exists(_.toFileFilter(acceptBase = true).accept(path.toFile))
   override def addObserver(observer: FileTreeDataView.Observer[T]): Int =
     repo.addObserver(observer)
-  override def register(path: Path, maxDepth: Int): Either[IOException, Boolean] = {
-    if (shouldPoll(path)) Right(false) else repo.register(path, maxDepth)
+  override def register(glob: Glob): Either[IOException, Boolean] = {
+    if (shouldPoll(glob.base)) Right(false) else repo.register(glob)
   }
   override def removeObserver(handle: Int): Unit = repo.removeObserver(handle)
-  override def listEntries(path: Path,
-                           maxDepth: Int,
-                           filter: Entry[T] => Boolean): Seq[FileTreeDataView.Entry[T]] = {
-    if (!shouldPoll(path)) {
+  override def listEntries(glob: Glob): Seq[FileTreeDataView.Entry[T]] = {
+    if (!shouldPoll(glob.base)) {
       /*
        * The repository may contain some paths that require polling to access. We must remove
        * those entries from the result. For every one of these entries that is a directory, we
        * must poll that directory and add its result to the list. If the entry is a regular file,
        * then we need to poll just that file.
        */
-      val (needPoll, ready) =
-        repo
-          .listEntries(path, maxDepth, (e: Entry[T]) => filter(e) || shouldPollEntry(e))
-          .partition(shouldPollEntry)
+      val (needPoll, ready) = repo.listEntries(glob).partition(shouldPollEntry)
       ready ++ needPoll
         .foldLeft(Set.empty[FileTreeDataView.Entry[T]]) {
           case (entries, e @ Entry(typedPath, _)) if typedPath.isDirectory =>
             val path = typedPath.toPath
-            val depth = 0
-            if (maxDepth == Integer.MAX_VALUE) Integer.MAX_VALUE
-            else maxDepth - path.relativize(path).getNameCount - 1
-            entries ++ (Some(e).filter(filter) ++
-              view.listEntries(path, depth, (e: Entry[T]) => shouldPollEntry(e) && filter(e)))
+            val depth =
+              if (glob.depth == Integer.MAX_VALUE) Integer.MAX_VALUE
+              else glob.depth - path.relativize(path).getNameCount - 1
+            entries ++ (Some(e) ++ view.listEntries(glob.withDepth(depth)))
           case (entries, Entry(typedPath, _))
               if shouldPoll(typedPath) && !shouldPoll(typedPath.toPath.getParent) =>
-            entries ++ view.listEntries(typedPath.toPath, -1, (_: Entry[T]) => true)
+            entries ++ view.listEntries(typedPath.toPath.toGlob)
           case (entries, _) =>
             entries
         }
         .toSeq
     } else {
-      view.listEntries(path, maxDepth, (e: Entry[T]) => shouldPollEntry(e) && filter(e))
+      view.listEntries(glob)
     }
   }
-  override def list(path: Path, maxDepth: Int, filter: TypedPath => Boolean): Seq[TypedPath] =
-    listEntries(path, maxDepth, (e: Entry[T]) => filter(e.typedPath)).map(_.typedPath)
+  override def list(glob: Glob): Seq[TypedPath] = listEntries(glob).map(_.typedPath)
 
-  override def unregister(path: Path): Unit = repo.unregister(path)
+  override def unregister(glob: Glob): Unit = repo.unregister(glob)
   override def close(): Unit = {
     repo.close()
   }

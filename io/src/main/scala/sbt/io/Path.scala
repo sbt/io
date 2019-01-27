@@ -309,7 +309,7 @@ object Path extends Mapper {
       val fileTreeView = FileTreeView.DEFAULT
       (file, filter) =>
         fileTreeView
-          .list(file.toPath, maxDepth = 0, new Glob.ConvertedFileFilter(filter))
+          .list(Glob(file.toPath, new Glob.ConvertedFileFilter(filter), 0))
           .map(_.toPath.toFile)
     }
 }

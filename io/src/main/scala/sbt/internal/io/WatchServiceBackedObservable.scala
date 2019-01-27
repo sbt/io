@@ -7,8 +7,8 @@ import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import sbt.io.FileTreeDataView.{ Entry, Observable, Observers }
-import sbt.io.FileTreeView.AllPass
 import sbt.io._
+import sbt.io.syntax._
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -95,7 +95,7 @@ private[sbt] class WatchServiceBackedObservable[+T](s: NewWatchState,
           allFiles.clear()
           val path = key.watchable.asInstanceOf[Path]
           val view = FileTreeView.DEFAULT
-          view.list(path, maxDepth = Integer.MAX_VALUE, AllPass).foreach { typedPath =>
+          view.list(path ** AllPassFilter).foreach { typedPath =>
             allFiles += typedPath
             val path = typedPath.toPath
             if (typedPath.isDirectory && !s.registered.contains(path)) {
@@ -132,7 +132,7 @@ private[sbt] class WatchServiceBackedObservable[+T](s: NewWatchState,
             s.register(dir)
             @tailrec
             def poll(paths: Seq[Path] = Nil): Seq[TypedPath] = {
-              val typedPaths = FileTreeView.DEFAULT.list(dir, maxDepth = Integer.MAX_VALUE, AllPass)
+              val typedPaths = FileTreeView.DEFAULT.list(dir ** AllPassFilter)
               val newPaths = typedPaths.map(_.toPath)
               if (newPaths == paths) typedPaths else poll(newPaths)
             }
@@ -162,16 +162,18 @@ private[sbt] class WatchServiceBackedObservable[+T](s: NewWatchState,
     }
   }
 
-  override def register(path: Path, maxDepth: Int): Either[IOException, Boolean] = {
+  override def register(glob: Glob): Either[IOException, Boolean] = {
     try {
-      s.register(path)
-      view.list(path, maxDepth, _.isDirectory).foreach(tp => s.register(tp.toPath))
+      s.register(glob.base)
+      view
+        .list(glob.withFilter(DirectoryFilter))
+        .foreach(tp => s.register(tp.toPath))
       Right(true)
     } catch {
       case e: IOException => Left(e)
     }
   }
 
-  override def unregister(path: Path): Unit =
-    view.list(path, Int.MaxValue, _.isDirectory).foreach(tp => s.unregister(tp.toPath))
+  override def unregister(glob: Glob): Unit =
+    view.list(glob.withFilter(DirectoryFilter)).foreach(tp => s.unregister(tp.toPath))
 }

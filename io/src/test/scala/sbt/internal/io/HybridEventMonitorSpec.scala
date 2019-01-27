@@ -3,12 +3,12 @@ package sbt.internal.io
 import java.nio.file.{ Files, Path }
 
 import org.scalatest.{ FlatSpec, Matchers }
+import sbt.internal.io.HybridEventMonitorSpec._
+import sbt.io.FileTreeDataView.Observable
 import sbt.io._
-import syntax._
+import sbt.io.syntax._
 
 import scala.concurrent.duration._
-import HybridEventMonitorSpec._
-import sbt.io.FileTreeDataView.Observable
 
 class HybridEventMonitorSpec extends FlatSpec with Matchers {
   it should "poll and monitor" in IO.withTemporaryDirectory { baseDir =>
@@ -37,7 +37,7 @@ class HybridEventMonitorSpec extends FlatSpec with Matchers {
       val newPollingFile = pollingDir.resolve("new-file")
       val newMonitoredFile = monitoredDir.resolve("new-file")
       // This tests that monitoring still works when there is overlap of the registered files
-      repo.register(dir, Integer.MAX_VALUE)
+      repo.register(dir ** AllPassFilter)
       withMonitor(repo, globs) { monitor =>
         Files.createFile(newPollingFile)
         assert(monitor.poll(5.seconds).nonEmpty)
@@ -73,7 +73,6 @@ object HybridEventMonitorSpec {
     }
   }
   implicit class FileRepositoryOps[+T](val fileRepository: FileTreeRepository[T]) {
-    def ls(path: Path): Seq[Path] =
-      fileRepository.list(path, Integer.MAX_VALUE, (_: TypedPath) => true).map(_.toPath)
+    def ls(path: Path): Seq[Path] = fileRepository.list(path ** AllPassFilter).map(_.toPath)
   }
 }

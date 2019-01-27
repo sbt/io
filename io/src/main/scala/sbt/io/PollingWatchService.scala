@@ -7,6 +7,8 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.{ Collections, Comparator, List => JList }
 
+import sbt.io.syntax._
+
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.immutable
@@ -79,7 +81,7 @@ class PollingWatchService(delay: FiniteDuration) extends WatchService with Unreg
     if (closed.get()) throw new ClosedWatchServiceException
 
   private def getTimestamps(path: JPath): Seq[(JPath, Long)] =
-    (view.listEntries(path, -1, _.typedPath.toPath == path) ++ view.listEntries(path, 0, _ => true))
+    (view.listEntries(path.toGlob) ++ view.listEntries(path * AllPassFilter))
       .map { e =>
         e.typedPath.toPath -> (e.value match { case Right(lm) => lm; case _ => 0L })
       }

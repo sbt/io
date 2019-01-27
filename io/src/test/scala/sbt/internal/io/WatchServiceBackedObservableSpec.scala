@@ -8,6 +8,7 @@ import java.util.concurrent.{ ConcurrentHashMap, CountDownLatch, TimeUnit }
 import org.scalatest.FlatSpec
 import sbt.io.FileTreeDataView.Observer
 import sbt.io._
+import sbt.io.syntax._
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -38,7 +39,7 @@ class WatchServiceBackedObservableSpec extends FlatSpec {
         override def onUpdate(oldEntry: FileTreeDataView.Entry[Path],
                               newEntry: FileTreeDataView.Entry[Path]): Unit = {}
       })
-      observable.register(path, Int.MaxValue)
+      observable.register(path ** AllPassFilter)
       Files.createFile(file)
       assert(latch.await(1, TimeUnit.SECONDS))
     } finally observable.close()

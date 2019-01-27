@@ -9,7 +9,6 @@ import java.nio.file.{ WatchService => _, _ }
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
-import sbt.io.FileTreeView.AllPass
 import sbt.io._
 import sbt.io.syntax._
 
@@ -273,10 +272,10 @@ private[sbt] object WatchState {
     globSet ++= globs
     val initFiles = globs.flatMap {
       case glob if glob.depth > 0 =>
-        DefaultFileTreeView.list(glob.base, -1, AllPass).flatMap { d =>
+        DefaultFileTreeView.list(glob.base.toGlob).flatMap { d =>
           d.toPath +: (if (d.isDirectory)
                          DefaultFileTreeView
-                           .list(glob.base, glob.depth, _.isDirectory)
+                           .list(glob.withFilter(DirectoryFilter))
                            .map(_.toPath)
                        else Nil)
         }
