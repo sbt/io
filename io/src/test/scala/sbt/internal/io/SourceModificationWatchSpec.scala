@@ -8,16 +8,16 @@ import sbt.internal.io.EventMonitorSpec._
 import sbt.io.FileEventMonitor.Event
 import sbt.io.FileTreeDataView.{ Entry, Observable, Observer }
 import sbt.io.syntax._
-import sbt.io.{ FileTreeDataView, NullWatchLogger, TypedPath, WatchService, _ }
+import sbt.io.{ FileTreeDataView, TypedPath, WatchService, _ }
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
 
 private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
   def pollDelay: FiniteDuration
-  def newObservable(glob: Seq[Glob]): Observable[_]
+  def newObservable(glob: Seq[Glob], logger: Logger): Observable[_]
   def newObservable(file: File): Observable[_] =
-    newObservable(Seq(file.toPath.toRealPath().toFile ** AllPassFilter))
+    newObservable(Seq(file.toPath.toRealPath().toFile ** AllPassFilter), NullLogger)
   private val maxWait = 2 * pollDelay
 
   it should "detect modified files" in IO.withTemporaryDirectory { dir =>
@@ -234,7 +234,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val subDir = parentDir / "subdir"
       IO.createDirectory(parentDir)
 
-      val observable = newObservable(parentDir.scalaSourceGlobs)
+      val observable = newObservable(parentDir.scalaSourceGlobs, NullLogger)
       val monitor = FileEventMonitor(observable)
       try {
         val triggered0 = watchTest(monitor) {
@@ -258,7 +258,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val src = subDir / "src.scala"
 
       IO.createDirectory(parentDir)
-      val observable = newObservable(parentDir.scalaSourceGlobs)
+      val observable = newObservable(parentDir.scalaSourceGlobs, NullLogger)
       val logger = new CachingWatchLogger
       val monitor = FileEventMonitor(observable, logger)
       try {
@@ -319,7 +319,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     dir =>
       val file = dir / "src" / "Foo.scala"
       val globs = dir.toPath.toRealPath().toFile * "*.scala" :: Nil
-      val observable = newObservable(globs)
+      val observable = newObservable(globs, NullLogger)
       val monitor = FileEventMonitor(observable)
       try {
         val triggered = watchTest(monitor) {
@@ -345,7 +345,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
         lines :+= msg.toString
       }
     }
-    val observable = newObservable(globs)
+    val observable = newObservable(globs, NullLogger)
     val monitor = FileEventMonitor(observable, logger)
     try {
       val triggered = watchTest(monitor) {
@@ -421,9 +421,9 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 
   def watchTest(base: File, expectedTrigger: Boolean = true)(modifier: => Unit): Assertion = {
     val globs = base.toPath.toRealPath().toFile.scalaSourceGlobs
-    val observable = newObservable(globs)
+    val logger = new CachingWatchLogger
+    val observable = newObservable(globs, logger)
     try {
-      val logger = new CachingWatchLogger
       val triggered = watchTest(FileEventMonitor(observable, logger))(modifier)
       if (triggered != expectedTrigger) logger.printLines(s"Expected $expectedTrigger")
       triggered shouldBe expectedTrigger
@@ -445,6 +445,8 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 }
 
 object EventMonitorSpec {
+  trait Logger extends WatchLogger
+  object NullLogger extends Logger { override def debug(msg: => Any): Unit = {} }
   // This can't be defined in MonitorOps because of a bug in the scala 2.10 compiler
   @tailrec
   private def drain(monitor: FileEventMonitor[_],
@@ -482,7 +484,7 @@ object EventMonitorSpec {
   implicit class ObservableOps[T](val observable: Observable[T]) extends AnyVal {
     def filter(f: Entry[T] => Boolean): Observable[T] = new FilteredObservable[T](observable, f)
   }
-  class CachingWatchLogger extends WatchLogger {
+  class CachingWatchLogger extends Logger {
     val lines = new scala.collection.mutable.ArrayBuffer[String]
     override def debug(msg: => Any): Unit = lines.synchronized { lines += msg.toString; () }
     def printLines(msg: String): Unit = println(s"$msg. Log lines:\n${lines mkString "\n"}")
@@ -492,7 +494,7 @@ object EventMonitorSpec {
 class FileTreeRepositoryEventMonitorSpec extends FlatSpec with Matchers with EventMonitorSpec {
   override def pollDelay: FiniteDuration = 100.millis
 
-  override def newObservable(globs: Seq[Glob]): Observable[_] = {
+  override def newObservable(globs: Seq[Glob], logger: Logger): Observable[_] = {
     val repository = FileTreeRepository.default((_: TypedPath).toPath)
     globs.foreach(repository.register)
     repository.filter(e => globs.exists(_.toEntryFilter(e)))
@@ -505,14 +507,14 @@ class LegacyFileTreeRepositoryEventMonitorSpec
     with EventMonitorSpec {
   override def pollDelay: FiniteDuration = 100.millis
 
-  override def newObservable(globs: Seq[Glob]): Observable[_] = {
-    val repository = FileTreeRepository.legacy((_: TypedPath).toPath)
+  override def newObservable(globs: Seq[Glob], logger: Logger): Observable[_] = {
+    val repository = FileTreeRepository.legacy((_: TypedPath).toPath, logger, WatchService.default)
     globs.foreach(repository.register)
     repository.filter(e => globs.exists(_.toEntryFilter(e)))
   }
 }
 
-abstract class SourceModificationWatchSpec(
+private[sbt] abstract class SourceModificationWatchSpec(
     getServiceWithPollDelay: FiniteDuration => WatchService,
     override val pollDelay: FiniteDuration
 ) extends FlatSpec
@@ -538,13 +540,13 @@ abstract class SourceModificationWatchSpec(
     service.close()
   }
 
-  override def newObservable(globs: Seq[Glob]): FileTreeDataView.Observable[_] = {
+  override def newObservable(globs: Seq[Glob], logger: Logger): FileTreeDataView.Observable[_] = {
     val watchState = WatchState.empty(globs, getService)
     val observable = new WatchServiceBackedObservable[Path](watchState,
                                                             5.millis,
                                                             (_: TypedPath).toPath,
                                                             closeService = true,
-                                                            NullWatchLogger)
+                                                            logger)
     observable.filter((entry: Entry[Path]) => globs.exists(_.toEntryFilter(entry)))
   }
 }
