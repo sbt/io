@@ -64,13 +64,10 @@ object HybridEventMonitorSpec {
       f: FileEventMonitor[_] => T): T = {
     val monitor = observable match {
       case r: HybridPollingFileTreeRepository[_] =>
-        FileEventMonitor(r.toPollingObservable(pollDelay, sources, NullWatchLogger))
+        FileEventMonitor(r.toPollingRepository(pollDelay, NullWatchLogger))
     }
-    try {
-      f(monitor)
-    } finally {
-      monitor.close()
-    }
+    try f(monitor)
+    finally monitor.close()
   }
   implicit class FileRepositoryOps[+T](val fileRepository: FileTreeRepository[T]) {
     def ls(path: Path): Seq[Path] = fileRepository.list(path ** AllPassFilter).map(_.toPath)

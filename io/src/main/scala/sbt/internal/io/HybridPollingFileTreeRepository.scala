@@ -3,7 +3,7 @@ package sbt.internal.io
 import java.io.IOException
 import java.nio.file.Path
 
-import sbt.io.FileTreeDataView.{ Entry, Observable, Observers }
+import sbt.io.FileTreeDataView.{ Entry, Observers }
 import sbt.io._
 import sbt.io.syntax._
 
@@ -22,9 +22,7 @@ private[sbt] trait HybridPollingFileTreeRepository[+T] extends FileTreeRepositor
   def shouldPoll(path: Path): Boolean
   def shouldPoll(typedPath: TypedPath): Boolean = shouldPoll(typedPath.toPath)
   def shouldPoll(glob: Glob): Boolean = shouldPoll(glob.base)
-  def toPollingObservable(delay: FiniteDuration,
-                          globs: Seq[Glob],
-                          logger: WatchLogger): Observable[T]
+  def toPollingRepository(delay: FiniteDuration, logger: WatchLogger): FileTreeRepository[T]
 }
 
 private[io] case class HybridPollingFileTreeRepositoryImpl[+T](converter: TypedPath => T,
@@ -76,30 +74,36 @@ private[io] case class HybridPollingFileTreeRepositoryImpl[+T](converter: TypedP
   override def close(): Unit = {
     repo.close()
   }
-  def toPollingObservable(delay: FiniteDuration,
-                          globs: Seq[Glob],
-                          logger: WatchLogger): Observable[T] = {
-    val pollingGlobs = globs.filter(shouldPoll)
-    if (pollingGlobs.isEmpty) self
-    else {
-      new Observable[T] {
-        private val observers = new Observers[T]
-        private val handle = self.addObserver(observers)
-        private val watchState = WatchState.empty(pollingGlobs, new PollingWatchService(delay))
-        private val observable =
-          new WatchServiceBackedObservable[T](watchState, delay, converter, true, logger)
-        observable.addObserver(observers)
+  override def toPollingRepository(delay: FiniteDuration,
+                                   logger: WatchLogger): FileTreeRepository[T] = {
+    new FileTreeRepository[T] {
+      private val observers = new Observers[T]
+      private val handle = self.addObserver(observers)
+      private val watchState = WatchState.empty(pollingGlobs, new PollingWatchService(delay))
+      private val observable =
+        new WatchServiceBackedObservable[T](watchState, delay, converter, true, logger)
+      observable.addObserver(observers)
 
-        override def addObserver(observer: FileTreeDataView.Observer[T]): Int =
-          observers.addObserver(observer)
+      override def addObserver(observer: FileTreeDataView.Observer[T]): Int =
+        observers.addObserver(observer)
 
-        override def removeObserver(handle: Int): Unit = observers.removeObserver(handle)
+      override def removeObserver(handle: Int): Unit = observers.removeObserver(handle)
 
-        override def close(): Unit = {
-          observable.close()
-          self.removeObserver(handle)
-        }
+      override def close(): Unit = {
+        observable.close()
+        self.removeObserver(handle)
       }
+
+      override def register(glob: Glob): Either[IOException, Boolean] = {
+        if (self.shouldPoll(glob)) observable.register(glob)
+        self.register(glob)
+      }
+      override def unregister(glob: Glob): Unit = {
+        observable.unregister(glob)
+        self.unregister(glob)
+      }
+      override def listEntries(glob: Glob): Seq[FileTreeDataView.Entry[T]] = self.listEntries(glob)
+      override def list(glob: Glob): Seq[TypedPath] = self.list(glob)
     }
   }
 }
