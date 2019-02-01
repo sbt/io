@@ -3,7 +3,7 @@
  */
 package sbt.io
 
-import java.io.{ ByteArrayInputStream, File, InputStream }
+import java.io._
 import java.net.{ URI, URL }
 
 object Hash {
@@ -52,7 +52,9 @@ object Hash {
   def apply(as: Array[Byte]): Array[Byte] = apply(new ByteArrayInputStream(as))
 
   /** Calculates the SHA-1 hash of the given file.*/
-  def apply(file: File): Array[Byte] = Using.fileInputStream(file)(apply)
+  def apply(file: File): Array[Byte] =
+    try apply(new BufferedInputStream(new FileInputStream(file))) // apply closes the stream
+    catch { case _: FileNotFoundException => apply("") }
 
   /** Calculates the SHA-1 hash of the given resource.*/
   def apply(url: URL): Array[Byte] = Using.urlInputStream(url)(apply)
