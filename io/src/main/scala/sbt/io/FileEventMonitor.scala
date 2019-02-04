@@ -7,7 +7,6 @@ import sbt.io.FileTreeDataView.{ Entry, Observable, Observer }
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.concurrent.duration._
 
 /**
@@ -67,14 +66,71 @@ object FileEventMonitor {
   def apply[T](observable: Observable[T],
                logger: WatchLogger = NullWatchLogger): FileEventMonitor[T] =
     new FileEventMonitorImpl[T](observable, logger)
+
+  /**
+   * Create a [[FileEventMonitor]] that tracks recent events to prevent creating multiple events
+   * for the same path within the same window. This exists because there are many programs that
+   * may make a burst of modifications to a file in a short window. For example, many programs
+   * implement save by renaming a buffer file to the target file. This can create both a deletion
+   * and a creation event for the target file but we only want to create one file in this scenario.
+   * This scenario is so common that we specifically handle it with the quarantinePeriod parameter.
+   * When the monitor detects a file deletion, it does not actually produce an event for that
+   * path until the quarantinePeriod has elapsed or a creation or update event is detected.
+   *
+   * @param observable the [[FileTreeDataView.Observable]] to monitor for events
+   * @param period the anti-entropy quarantine period
+   * @param logger a debug logger
+   * @param quarantinePeriod configures how long we wait before creating an event for a delete file.
+   * @param retentionPeriod configures how long in wall clock time to cache the anti-entropy
+   *                        deadline for a path. This is needed because sometimes there are long
+   *                        delays between polls and we do not want a stale event that occurred
+   *                        within an anti-entropy window for the event path to trigger. This
+   *                        is not a perfect solution, but a smarter solution would require
+   *                        introspection of the internal state of the pending events.
+   * @tparam T the generic type for the [[FileTreeDataView.Observable]] that we're monitoring
+   * @return the [[FileEventMonitor]] instance.
+   */
   def antiEntropy[T](observable: Observable[T],
                      period: FiniteDuration,
                      logger: WatchLogger,
-                     quarantinePeriod: FiniteDuration = 50.millis): FileEventMonitor[T] = {
+                     quarantinePeriod: FiniteDuration,
+                     retentionPeriod: FiniteDuration): FileEventMonitor[T] = {
     new AntiEntropyFileEventMonitor(period,
                                     new FileEventMonitorImpl[T](observable, logger),
                                     logger,
-                                    quarantinePeriod)
+                                    quarantinePeriod,
+                                    retentionPeriod)
+  }
+
+  /**
+   * Create a [[FileEventMonitor]] that tracks recent events to prevent creating multiple events
+   * for the same path within the same window. This exists because there are many programs that
+   * may make a burst of modifications to a file in a short window. For example, many programs
+   * implement save by renaming a buffer file to the target file. This can create both a deletion
+   * and a creation event for the target file but we only want to create one file in this scenario.
+   * This scenario is so common that we specifically handle it with the quarantinePeriod parameter.
+   * When the monitor detects a file deletion, it does not actually produce an event for that
+   * path until the quarantinePeriod has elapsed or a creation or update event is detected.
+   *
+   * @param monitor the [[FileEventMonitor]] instance to which we apply anti-entropy restrictions
+   * @param period the anti-entropy quarantine period
+   * @param logger a debug logger
+   * @param quarantinePeriod configures how long we wait before creating an event for a delete file.
+   * @param retentionPeriod configures how long in wall clock time to cache the anti-entropy
+   *                        deadline for a path. This is needed because sometimes there are long
+   *                        delays between polls and we do not want a stale event that occurred
+   *                        within an anti-entropy window for the event path to trigger. This
+   *                        is not a perfect solution, but a smarter solution would require
+   *                        introspection of the internal state of the pending events.
+   * @tparam T the generic type for the delegate [[FileEventMonitor]] that we're monitoring
+   * @return the [[FileEventMonitor]] instance.
+   */
+  def antiEntropy[T](monitor: FileEventMonitor[T],
+                     period: FiniteDuration,
+                     logger: WatchLogger,
+                     quarantinePeriod: FiniteDuration,
+                     retentionPeriod: FiniteDuration): FileEventMonitor[T] = {
+    new AntiEntropyFileEventMonitor(period, monitor, logger, quarantinePeriod, retentionPeriod)
   }
 
   private class FileEventMonitorImpl[T](observable: Observable[T], logger: WatchLogger)
@@ -164,9 +220,10 @@ object FileEventMonitor {
   private class AntiEntropyFileEventMonitor[T](period: FiniteDuration,
                                                fileEventMonitor: FileEventMonitor[T],
                                                logger: WatchLogger,
-                                               quarantinePeriod: FiniteDuration)
+                                               quarantinePeriod: FiniteDuration,
+                                               retentionPeriod: FiniteDuration)
       extends FileEventMonitor[T] {
-    private[this] val antiEntropyDeadlines = mutable.Map.empty[JPath, Deadline]
+    private[this] val antiEntropyDeadlines = new ConcurrentHashMap[JPath, Deadline].asScala
     /*
      * It is very common for file writes to be implemented as a move, which manifests as a delete
      * followed by a write. In sbt, this can manifest as continuous builds triggering for the delete
@@ -177,7 +234,7 @@ object FileEventMonitor {
      * creation is detected. This provides a reasonable compromise between low latency and
      * correctness.
      */
-    private[this] val quarantinedEvents = mutable.Map.empty[JPath, Event[T]]
+    private[this] val quarantinedEvents = new ConcurrentHashMap[JPath, Event[T]].asScala
     @tailrec
     override final def poll(duration: Duration): Seq[Event[T]] = {
       val start = Deadline.now
@@ -205,7 +262,10 @@ object FileEventMonitor {
             case _ =>
               antiEntropyDeadlines.get(path) match {
                 case Some(deadline) if occurredAt <= deadline =>
-                  logger.debug(s"Discarding entry for recently updated path $path")
+                  val msg = s"Discarding entry for recently updated path $path. " +
+                    s"This event occurred ${(occurredAt - (deadline - period)).toMillis} ms since " +
+                    "the last event for this path."
+                  logger.debug(msg)
                   None
                 case _ if !typedPath.exists =>
                   quarantinedEvents.put(path, event)
@@ -224,7 +284,12 @@ object FileEventMonitor {
           logger.debug(s"Triggering event for previously quarantined deleted file: $path")
           event
       }
-      antiEntropyDeadlines.retain((_, deadline) => !deadline.isOverdue)
+      // Keep old anti entropy events around for a while in case there are still unhandled
+      // events that occurred between polls. This is necessary because there is no background
+      // thread polling the events. Because the period between polls could be quite large, it's
+      // possible that there are unhandled events that actually occurred within the anti-entropy
+      // window for the path. By setting a long retention time, we try to avoid this.
+      antiEntropyDeadlines.retain((_, deadline) => !(deadline + retentionPeriod).isOverdue)
       transformed match {
         case s if s.nonEmpty => s
         case _ =>

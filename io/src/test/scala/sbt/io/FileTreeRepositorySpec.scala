@@ -13,6 +13,7 @@ import sbt.io.FileTreeRepositorySpec._
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import sbt.io.FileTreeView.AllPass
+import sbt.io.syntax._
 
 private[io] trait RepositoryFactory {
   def newRepository[T](converter: TypedPath => T): FileTreeRepository[T]
@@ -22,7 +23,7 @@ object FileTreeRepositorySpec {
     def ls(path: JPath,
            maxDepth: Int = Integer.MAX_VALUE,
            filter: TypedPath => Boolean = AllPass): Seq[JPath] =
-      fileCache.list(path, maxDepth, filter).map(_.toPath)
+      fileCache.list(Glob(path, filter, maxDepth)).map(_.toPath)
   }
   implicit class CountdownLatchOps(val latch: CountDownLatch) extends AnyVal {
     def await(duration: Duration): Boolean = latch.await(duration.toNanos, TimeUnit.NANOSECONDS)
@@ -68,14 +69,15 @@ object FileTreeRepositorySpec {
 class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSpec with Matchers {
   "register" should "see existing files" in withTempFile { file =>
     using(simpleCache()) { c =>
-      c.register(file.getParent, Integer.MAX_VALUE)
-      c.list(file.getParent, Integer.MAX_VALUE, AllPass).map(_.toPath) shouldBe Seq(file)
+      val glob = file.getParent ** AllPassFilter
+      c.register(glob)
+      c.list(glob).map(_.toPath) shouldBe Seq(file)
     }
   }
   it should "detect new files" in withTempDir { dir =>
     val latch = new CountDownLatch(1)
     using(simpleCache((e: Entry[JPath]) => latch.countDown())) { c =>
-      c.register(dir, Integer.MAX_VALUE)
+      c.register(dir ** AllPassFilter)
       withTempFile(dir) { f =>
         assert(latch.await(DEFAULT_TIMEOUT))
         c.ls(dir, Integer.MAX_VALUE, AllPass) shouldBe Seq(f)
@@ -85,7 +87,7 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
   it should "detect new subdirectories" in withTempDir { dir =>
     val latch = new CountDownLatch(1)
     using(simpleCache((_: Entry[JPath]) => latch.countDown())) { c =>
-      c.register(dir, Integer.MAX_VALUE)
+      c.register(dir ** AllPassFilter)
       withTempDir(dir) { subdir =>
         assert(latch.await(DEFAULT_TIMEOUT))
         c.ls(dir, Integer.MAX_VALUE, AllPass) shouldBe Seq(subdir)
@@ -99,7 +101,7 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
     val onChange = (_: Entry[JPath]) => latch.countDown()
     val onUpdate = (_: Entry[JPath], _: Entry[JPath]) => {}
     using(simpleCache(FileTreeDataView.Observer[JPath](onChange, onChange, onUpdate))) { c =>
-      c.register(dir, maxDepth = 0)
+      c.register(dir ** AllPassFilter)
       c.ls(dir, maxDepth = 0) === Seq(initial)
       Files.move(initial, moved)
       assert(latch.await(DEFAULT_TIMEOUT))
@@ -116,7 +118,7 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
         else if (path == subdir && Files.getLastModifiedTime(path).toMillis == 2000)
           subdirLatch.countDown()
       })) { c =>
-        c.register(dir, maxDepth = 0)
+        c.register(dir * AllPassFilter)
         withTempFile(subdir) { f =>
           assert(Files.exists(f))
           assert(fileLatch.getCount == 1) // The child creation should not have triggered a callback
@@ -131,9 +133,9 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
     withTempDir(dir) { subdir =>
       withTempFile(subdir) { f =>
         using(simpleCache()) { c =>
-          c.register(dir, maxDepth = 0)
+          c.register(dir * AllPassFilter)
           c.ls(dir).toSet shouldBe Set(subdir)
-          c.register(dir, Integer.MAX_VALUE)
+          c.register(dir ** AllPassFilter)
           c.ls(dir).toSet shouldBe Set(subdir, f)
         }
       }
@@ -143,9 +145,9 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
     withTempDir(dir) { subdir =>
       withTempFile(subdir) { f =>
         using(simpleCache()) { c =>
-          c.register(dir, maxDepth = Integer.MAX_VALUE)
+          c.register(dir ** AllPassFilter)
           c.ls(dir).toSet shouldBe Set(subdir, f)
-          c.register(dir, maxDepth = 0)
+          c.register(dir * AllPassFilter)
           c.ls(dir).toSet shouldBe Set(subdir, f)
         }
       }
@@ -161,7 +163,7 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
                                                     onDelete = _ => deletionLatch.countDown(),
                                                     onUpdate = (_, _) => {})
     using(simpleCache(observer)) { c =>
-      c.register(dir, maxDepth = Integer.MAX_VALUE)
+      c.register(dir ** AllPassFilter)
 
       withThread("file-creation-thread") {
         files = (0 until filesToAdd).flatMap { i =>
@@ -196,14 +198,14 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
             if (newEntry.value.fold(_ => 0L, _.at) == updatedLastModified) latch.countDown()
         )
       )
-      c.register(file.getParent, maxDepth = Integer.MAX_VALUE)
-      val Seq(fileEntry) = c.listEntries(file.getParent, maxDepth = Integer.MAX_VALUE, AllPass)
+      c.register(file.getParent ** AllPassFilter)
+      val Seq(fileEntry) = c.listEntries(file.getParent ** AllPassFilter)
       val lastModified = fileEntry.value
       lastModified.right.map((_: LastModified).at) shouldBe Right(
         Files.getLastModifiedTime(file).toMillis)
       Files.setLastModifiedTime(file, FileTime.fromMillis(updatedLastModified))
       assert(latch.await(DEFAULT_TIMEOUT))
-      val Seq(newFileEntry) = c.listEntries(file.getParent, maxDepth = Integer.MAX_VALUE, AllPass)
+      val Seq(newFileEntry) = c.listEntries(file.getParent ** AllPassFilter)
       newFileEntry.value.right.map(_.at) shouldBe Right(updatedLastModified)
     }
   }
@@ -211,8 +213,8 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
     val file1 = Files.createFile(dir.resolve("file-1"))
     val file2 = Files.createFile(dir.resolve("file-2"))
     using(FileTreeRepository.default(_.toPath)) { repo =>
-      repo.register(dir, Int.MaxValue)
-      val res = new util.ArrayList(repo.list(dir, Int.MaxValue, AllPass).asJava)
+      repo.register(dir ** AllPassFilter)
+      val res = new util.ArrayList(repo.list(dir ** AllPassFilter).asJava)
       Collections.shuffle(res)
       assert(res.asScala.sorted.map(_.toPath) == Seq(file1, file2))
     }

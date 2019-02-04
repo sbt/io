@@ -8,16 +8,16 @@ import sbt.internal.io.EventMonitorSpec._
 import sbt.io.FileEventMonitor.Event
 import sbt.io.FileTreeDataView.{ Entry, Observable, Observer }
 import sbt.io.syntax._
-import sbt.io.{ FileTreeDataView, NullWatchLogger, TypedPath, WatchService, _ }
+import sbt.io.{ FileTreeDataView, TypedPath, WatchService, _ }
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
 
 private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
   def pollDelay: FiniteDuration
-  def newObservable(source: Seq[Source]): Observable[_]
+  def newObservable(glob: Seq[Glob], logger: Logger): Observable[_]
   def newObservable(file: File): Observable[_] =
-    newObservable(Seq(Source(file.toPath.toRealPath().toFile)))
+    newObservable(Seq(file.toPath.toRealPath().toFile ** AllPassFilter), NullLogger)
   private val maxWait = 2 * pollDelay
 
   it should "detect modified files" in IO.withTemporaryDirectory { dir =>
@@ -42,7 +42,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     }
   }
 
-  it should "ignore creation of directories with no tracked sources" in IO.withTemporaryDirectory {
+  it should "ignore creation of directories with no tracked globs" in IO.withTemporaryDirectory {
     dir =>
       val parentDir = dir / "src" / "watchme"
       val created = parentDir / "ignoreme"
@@ -234,7 +234,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val subDir = parentDir / "subdir"
       IO.createDirectory(parentDir)
 
-      val observable = newObservable(parentDir.scalaSource)
+      val observable = newObservable(parentDir.scalaSourceGlobs, NullLogger)
       val monitor = FileEventMonitor(observable)
       try {
         val triggered0 = watchTest(monitor) {
@@ -258,7 +258,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val src = subDir / "src.scala"
 
       IO.createDirectory(parentDir)
-      val observable = newObservable(parentDir.scalaSource)
+      val observable = newObservable(parentDir.scalaSourceGlobs, NullLogger)
       val logger = new CachingWatchLogger
       val monitor = FileEventMonitor(observable, logger)
       try {
@@ -285,7 +285,8 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val observable = newObservable(parentDir)
       // Choose a very long anti-entropy period to ensure that the second trigger doesn't happen
       val logger = new CachingWatchLogger
-      val monitor = FileEventMonitor.antiEntropy(observable, 10.seconds, logger)
+      val monitor =
+        FileEventMonitor.antiEntropy(observable, 10.seconds, logger, 50.millis, 10.minutes)
       try {
         val triggered0 = watchTest(monitor) {
           IO.write(file, "bar")
@@ -317,10 +318,8 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
   it should "ignore valid files in non-recursive subdirectories" in IO.withTemporaryDirectory {
     dir =>
       val file = dir / "src" / "Foo.scala"
-      val source =
-        Source(dir.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith(".")))
-          .withRecursive(false)
-      val observable = newObservable(Seq(source))
+      val globs = dir.toPath.toRealPath().toFile * "*.scala" :: Nil
+      val observable = newObservable(globs, NullLogger)
       val monitor = FileEventMonitor(observable)
       try {
         val triggered = watchTest(monitor) {
@@ -339,15 +338,14 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 
     writeNewFile(file, "foo")
 
-    val sources = Seq(
-      Source(parentDir.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
+    val globs = parentDir.toPath.toRealPath().toFile.scalaSourceGlobs
     var lines: Seq[String] = Nil
     val logger = new WatchLogger {
       override def debug(msg: => Any): Unit = lines.synchronized {
         lines :+= msg.toString
       }
     }
-    val observable = newObservable(sources)
+    val observable = newObservable(globs, NullLogger)
     val monitor = FileEventMonitor(observable, logger)
     try {
       val triggered = watchTest(monitor) {
@@ -422,11 +420,10 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
   }
 
   def watchTest(base: File, expectedTrigger: Boolean = true)(modifier: => Unit): Assertion = {
-    val sources = Seq(
-      Source(base.toPath.toRealPath().toFile, "*.scala", new SimpleFilter(_.startsWith("."))))
-    val observable = newObservable(sources)
+    val globs = base.toPath.toRealPath().toFile.scalaSourceGlobs
+    val logger = new CachingWatchLogger
+    val observable = newObservable(globs, logger)
     try {
-      val logger = new CachingWatchLogger
       val triggered = watchTest(FileEventMonitor(observable, logger))(modifier)
       if (triggered != expectedTrigger) logger.printLines(s"Expected $expectedTrigger")
       triggered shouldBe expectedTrigger
@@ -448,6 +445,8 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 }
 
 object EventMonitorSpec {
+  trait Logger extends WatchLogger
+  object NullLogger extends Logger { override def debug(msg: => Any): Unit = {} }
   // This can't be defined in MonitorOps because of a bug in the scala 2.10 compiler
   @tailrec
   private def drain(monitor: FileEventMonitor[_],
@@ -461,8 +460,11 @@ object EventMonitorSpec {
       EventMonitorSpec.drain(monitor, duration, events)
   }
   implicit class FileOps(val file: File) extends AnyVal {
-    def scalaSource: Seq[Source] =
-      Seq(Source(file.toPath.toRealPath().toFile, "*.scala", HiddenFileFilter))
+    def scalaSourceGlobs: Seq[Glob] =
+      Seq(
+        (file.toPath.toRealPath().toFile ** AllPassFilter)
+          .withFilter(new ExtensionFilter("scala") -- HiddenFileFilter -- new SimpleFilter(
+            _.startsWith("."))))
   }
   private class FilteredObservable[T](observable: Observable[T], filter: Entry[T] => Boolean)
       extends Observable[T] {
@@ -482,24 +484,37 @@ object EventMonitorSpec {
   implicit class ObservableOps[T](val observable: Observable[T]) extends AnyVal {
     def filter(f: Entry[T] => Boolean): Observable[T] = new FilteredObservable[T](observable, f)
   }
-  class CachingWatchLogger extends WatchLogger {
+  class CachingWatchLogger extends Logger {
     val lines = new scala.collection.mutable.ArrayBuffer[String]
     override def debug(msg: => Any): Unit = lines.synchronized { lines += msg.toString; () }
-    def printLines(msg: String) = println(s"$msg. Log lines:\n${lines mkString "\n"}")
+    def printLines(msg: String): Unit = println(s"$msg. Log lines:\n${lines mkString "\n"}")
   }
 }
 
 class FileTreeRepositoryEventMonitorSpec extends FlatSpec with Matchers with EventMonitorSpec {
   override def pollDelay: FiniteDuration = 100.millis
 
-  override def newObservable(sources: Seq[Source]): Observable[_] = {
+  override def newObservable(globs: Seq[Glob], logger: Logger): Observable[_] = {
     val repository = FileTreeRepository.default((_: TypedPath).toPath)
-    sources foreach (s =>
-      repository.register(s.base.toPath, if (s.recursive) Integer.MAX_VALUE else 0))
-    repository.filter(e => sources.exists(s => s.accept(e.typedPath.toPath)))
+    globs.foreach(repository.register)
+    repository.filter(e => globs.exists(_.toEntryFilter(e)))
   }
 }
-abstract class SourceModificationWatchSpec(
+
+class LegacyFileTreeRepositoryEventMonitorSpec
+    extends FlatSpec
+    with Matchers
+    with EventMonitorSpec {
+  override def pollDelay: FiniteDuration = 100.millis
+
+  override def newObservable(globs: Seq[Glob], logger: Logger): Observable[_] = {
+    val repository = FileTreeRepository.legacy((_: TypedPath).toPath, logger, WatchService.default)
+    globs.foreach(repository.register)
+    repository.filter(e => globs.exists(_.toEntryFilter(e)))
+  }
+}
+
+private[sbt] abstract class SourceModificationWatchSpec(
     getServiceWithPollDelay: FiniteDuration => WatchService,
     override val pollDelay: FiniteDuration
 ) extends FlatSpec
@@ -525,16 +540,13 @@ abstract class SourceModificationWatchSpec(
     service.close()
   }
 
-  override def newObservable(sources: Seq[Source]): FileTreeDataView.Observable[_] = {
-    val watchState = WatchState.empty(getService, sources)
+  override def newObservable(globs: Seq[Glob], logger: Logger): FileTreeDataView.Observable[_] = {
+    val watchState = WatchState.empty(globs, getService)
     val observable = new WatchServiceBackedObservable[Path](watchState,
                                                             5.millis,
                                                             (_: TypedPath).toPath,
                                                             closeService = true,
-                                                            NullWatchLogger)
-    observable.filter((entry: Entry[Path]) => {
-      val path = entry.typedPath.toPath
-      sources.exists(_.accept(path))
-    })
+                                                            logger)
+    observable.filter((entry: Entry[Path]) => globs.exists(_.toEntryFilter(entry)))
   }
 }

@@ -3,32 +3,32 @@ package sbt.internal.io
 import java.nio.file.{ Files, Path }
 
 import org.scalatest.{ FlatSpec, Matchers }
+import sbt.internal.io.HybridEventMonitorSpec._
+import sbt.io.FileTreeDataView.Observable
 import sbt.io._
+import sbt.io.syntax._
 
 import scala.concurrent.duration._
-import HybridEventMonitorSpec._
-import sbt.io.FileTreeDataView.Observable
 
 class HybridEventMonitorSpec extends FlatSpec with Matchers {
   it should "poll and monitor" in IO.withTemporaryDirectory { baseDir =>
     val dir = baseDir.toPath.toRealPath()
     val pollingDir = Files.createDirectory(dir.resolve("polling"))
     val monitoredDir = Files.createDirectory(dir.resolve("monitored"))
-    val repo = FileTreeRepository.hybrid((_: TypedPath).toPath, Source(pollingDir.toFile))
-    val sources = Seq(Source(pollingDir.toFile), Source(monitoredDir.toFile))
-    repo.register(pollingDir, Integer.MAX_VALUE)
-    repo.register(monitoredDir, Integer.MAX_VALUE)
+    val repo = FileTreeRepository.hybrid((_: TypedPath).toPath, pollingDir.toFile ** AllPassFilter)
+    val globs = Seq(pollingDir.toFile ** AllPassFilter, monitoredDir.toFile ** AllPassFilter)
+    globs.foreach(repo.register(_: Glob))
     val pollingFile = pollingDir.resolve("file")
     val monitoredFile = monitoredDir.resolve("file")
 
     try {
-      withMonitor(repo, sources) { monitor =>
+      withMonitor(repo, globs) { monitor =>
         Files.createFile(pollingFile)
         assert(monitor.poll(5.seconds).nonEmpty)
         repo.ls(pollingDir) shouldBe Seq(pollingFile)
       }
 
-      withMonitor(repo, sources) { monitor =>
+      withMonitor(repo, globs) { monitor =>
         Files.createFile(monitoredFile)
         assert(monitor.poll(5.seconds).nonEmpty)
         repo.ls(monitoredDir) shouldBe Seq(monitoredFile)
@@ -37,13 +37,13 @@ class HybridEventMonitorSpec extends FlatSpec with Matchers {
       val newPollingFile = pollingDir.resolve("new-file")
       val newMonitoredFile = monitoredDir.resolve("new-file")
       // This tests that monitoring still works when there is overlap of the registered files
-      repo.register(dir, Integer.MAX_VALUE)
-      withMonitor(repo, sources) { monitor =>
+      repo.register(dir ** AllPassFilter)
+      withMonitor(repo, globs) { monitor =>
         Files.createFile(newPollingFile)
         assert(monitor.poll(5.seconds).nonEmpty)
         repo.ls(pollingDir).toSet shouldBe Set(pollingFile, newPollingFile)
       }
-      withMonitor(repo, sources) { monitor =>
+      withMonitor(repo, globs) { monitor =>
         Files.createFile(newMonitoredFile)
         assert(monitor.poll(5.seconds).nonEmpty)
         repo.ls(monitoredDir).toSet shouldBe Set(monitoredFile, newMonitoredFile)
@@ -60,20 +60,16 @@ class HybridEventMonitorSpec extends FlatSpec with Matchers {
 object HybridEventMonitorSpec {
   val antiEntropy: FiniteDuration = 0.seconds
   val pollDelay: FiniteDuration = 100.millis
-  def withMonitor[T](observable: Observable[_], sources: Seq[Source])(
+  def withMonitor[T](observable: Observable[_], sources: Seq[Glob])(
       f: FileEventMonitor[_] => T): T = {
     val monitor = observable match {
       case r: HybridPollingFileTreeRepository[_] =>
-        FileEventMonitor(r.toPollingObservable(pollDelay, sources, NullWatchLogger))
+        FileEventMonitor(r.toPollingRepository(pollDelay, NullWatchLogger))
     }
-    try {
-      f(monitor)
-    } finally {
-      monitor.close()
-    }
+    try f(monitor)
+    finally monitor.close()
   }
   implicit class FileRepositoryOps[+T](val fileRepository: FileTreeRepository[T]) {
-    def ls(path: Path): Seq[Path] =
-      fileRepository.list(path, Integer.MAX_VALUE, (_: TypedPath) => true).map(_.toPath)
+    def ls(path: Path): Seq[Path] = fileRepository.list(path ** AllPassFilter).map(_.toPath)
   }
 }

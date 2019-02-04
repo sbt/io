@@ -58,12 +58,13 @@ private[sbt] object EventMonitor {
     val eventLogger = new io.WatchLogger {
       override def debug(msg: => Any): Unit = logger.debug(msg)
     }
-    val observable = new WatchServiceBackedObservable[Path](watchState,
+    val observable = new WatchServiceBackedObservable[Path](watchState.toNewWatchState,
                                                             delay,
                                                             (_: TypedPath).toPath,
                                                             closeService = true,
                                                             eventLogger)
-    val monitor = FileEventMonitor.antiEntropy(observable, antiEntropy, eventLogger)
+    val monitor =
+      FileEventMonitor.antiEntropy(observable, antiEntropy, eventLogger, 50.millis, 10.minutes)
     new EventMonitor {
       private[this] var count = watchState.count
 

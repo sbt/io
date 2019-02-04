@@ -6,6 +6,7 @@ import java.nio.file.Paths
 import org.scalatest.{ FlatSpec, Matchers }
 import sbt.io.{ AllPassFilter, NothingFilter, SimpleFileFilter }
 
+@deprecated("Source has been replaced by Glob.", "1.3.0")
 class SourceSpec extends FlatSpec with Matchers {
   it should "accept recursive paths" in {
     val source = new Source(new File("/foo"), AllPassFilter, NothingFilter, true)

@@ -81,7 +81,7 @@ final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
 
   override def asPath: NioPath = asFile.toPath
 
-  private[sbt] override def linkOptions: Vector[LinkOption] = Vector.empty
+  override private[sbt] def linkOptions: Vector[LinkOption] = Vector.empty
 
   def withLinkOptions(linkOption: LinkOption*): LinkOptionPath =
     new LinkOptionPath(asPath, linkOption.toVector)
@@ -115,7 +115,7 @@ sealed trait RichNioPath extends Any {
    * Updates permission of this file.
    * This operation requires underlying filesystem to support `IO.isPosix`.
    *
-   * @param permissions
+   * @param permissions the permissions to add
    */
   def setPermissions(permissions: Set[PosixFilePermission]): Unit = {
     Files.setPosixFilePermissions(asPath, permissions.asJava)
@@ -126,7 +126,7 @@ sealed trait RichNioPath extends Any {
    * Adds permission to this file.
    * This operation requires underlying filesystem to support `IO.isPosix`.
    *
-   * @param permission
+   * @param permission the permission to add
    */
   def addPermission(permission: PosixFilePermission): Unit =
     setPermissions(permissions + permission)
@@ -135,7 +135,7 @@ sealed trait RichNioPath extends Any {
    * Removes permission from this file.
    * This operation requires underlying filesystem to support `IO.isPosix`.
    *
-   * @param permission
+   * @param permission the permission to remove
    */
   def removePermission(permission: PosixFilePermission): Unit =
     setPermissions(permissions - permission)
@@ -144,7 +144,7 @@ sealed trait RichNioPath extends Any {
    * Tests if this file has the given permission.
    * This operation requires underlying filesystem to support `IO.isPosix`.
    *
-   * @param permission
+   * @param permission the permission to remove
    */
   def testPermission(permission: PosixFilePermission): Boolean =
     permissions(permission)
@@ -253,7 +253,7 @@ sealed trait RichNioPath extends Any {
    * Updates the file owner.
    * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
    *
-   * @param owner
+   * @param owner the new group owner
    */
   def setOwner(owner: String): Unit = {
     val fileSystem: FileSystem = asPath.getFileSystem
@@ -265,7 +265,7 @@ sealed trait RichNioPath extends Any {
    * Updates the group owner of the file.
    * This operation requires underlying filesystem to support `IO.hasFileOwnerAttributeView`.
    *
-   * @param group
+   * @param group the new group owner
    */
   def setGroup(group: String): Unit = {
     val fileSystem: FileSystem = asPath.getFileSystem
@@ -307,29 +307,107 @@ object Path extends Mapper {
     } else {
       val fileTreeView = FileTreeView.DEFAULT
       (file, filter) =>
-        val typedPathFilter: TypedPath => Boolean = tp => {
-          filter.accept(new File(tp.toPath.toString) {
-            override def isDirectory: Boolean = tp.isDirectory
-            override def isFile: Boolean = tp.isFile
-          })
-        }
-        fileTreeView.list(file.toPath, 0, typedPathFilter).map(_.toPath.toFile)
+        fileTreeView
+          .list(Glob(file.toPath, new Glob.ConvertedFileFilter(filter), 0))
+          .map(_.toPath.toFile)
     }
 }
 
 object PathFinder {
 
   /** A <code>PathFinder</code> that always produces the empty set of <code>Path</code>s.*/
-  val empty: PathFinder = new PathFinder { def addTo(fileSet: mutable.Set[File]) = () }
+  val empty: PathFinder = new PathFinder {}
 
   def apply(file: File): PathFinder = new SingleFile(file)
 
   def apply(files: => Traversable[File]): PathFinder = new PathFinder {
-    def addTo(fileSet: mutable.Set[File]) = { fileSet ++= files; () }
+    override def get(): Seq[File] = files.toIndexedSeq.distinct
   }
 
   def strict(files: Traversable[File]): PathFinder = apply(files)
 
+  sealed trait Combinator extends Any {
+
+    /** The union of the paths found by this <code>PathFinder</code> with the paths found by 'paths'. */
+    def +++(paths: PathFinder): PathFinder
+
+    /** Excludes all paths from <code>excludePaths</code> from the paths selected by this <code>PathFinder</code>. */
+    def ---(excludePaths: PathFinder): PathFinder
+
+    /**
+     * Applies `mapper` to each path selected by this PathFinder
+     * and returns the path paired with the non-empty result.
+     * If the result is empty (None) and `errorIfNone` is true, an exception is thrown.
+     * If `errorIfNone` is false, the path is dropped from the returned Traversable.
+     */
+    def pair[T](mapper: File => Option[T], errorIfNone: Boolean = true): Seq[(File, T)]
+
+    /**
+     * Selects all descendant paths with a name that matches <code>include</code>
+     * and do not have an intermediate path with a name that matches <code>intermediateExclude</code>.
+     *
+     * Typical usage is <code>descendantsExcept("*.jar", ".svn")</code>
+     */
+    def descendantsExcept(include: FileFilter, intermediateExclude: FileFilter): PathFinder
+
+    /**
+     * Only keeps paths for which `f` returns true.
+     * It is non-strict, so it is not evaluated until the returned finder is evaluated.
+     */
+    def filter(f: File => Boolean): PathFinder
+
+    /** Non-strict flatMap: no evaluation occurs until the returned finder is evaluated. */
+    def flatMap(f: File => PathFinder): PathFinder
+
+    /** Evaluates this finder and converts the results to an `Array` of `URL`s. */
+    def getURLs(): Array[URL]
+
+    /** Evaluates this finder and converts the results to a distinct sequence of absolute path strings. */
+    def getPaths(): Seq[String]
+
+    /**
+     * Create a PathFinder from this one where each path has a unique name.
+     * A single path is arbitrarily selected from the set of paths with the same name.
+     */
+    def distinct(): PathFinder
+
+    /**
+     * Constructs a string by evaluating this finder, converting the resulting Paths to absolute path strings,
+     * and joining them with the platform path separator.
+     */
+    def absString(): String
+  }
+
+  object Combinator {
+    implicit class SingleFilePathFinderCombinator(val file: File) extends AnyVal with Combinator {
+      override def +++(paths: PathFinder): PathFinder = new SingleFile(file) +++ paths
+      override def ---(excludePaths: PathFinder): PathFinder = new SingleFile(file) --- excludePaths
+      override def pair[T](mapper: File => Option[T], errorIfNone: Boolean): Seq[(File, T)] =
+        new SingleFile(file).pair(mapper)
+      override def descendantsExcept(include: FileFilter,
+                                     intermediateExclude: FileFilter): PathFinder =
+        new SingleFile(file).descendantsExcept(include, intermediateExclude)
+      override def filter(f: File => Boolean): PathFinder = new SingleFile(file).filter(f)
+      override def flatMap(f: File => PathFinder): PathFinder = new SingleFile(file).flatMap(f)
+      override def getURLs(): Array[URL] = new SingleFile(file).getURLs()
+      override def getPaths(): Seq[String] = new SingleFile(file).getPaths()
+      override def distinct(): PathFinder = new SingleFile(file).distinct()
+      override def absString(): String = Path.makeString(new SingleFile(file).get())
+    }
+  }
+  private[io] final class GlobPathFinder(val glob: Glob) extends PathFinder {
+    override def get(): Seq[File] = {
+      if (glob.depth == -1) {
+        glob.base.toFile :: Nil
+      } else if (glob.depth > 0) {
+        val files = new java.util.LinkedHashSet[File].asScala
+        Path.defaultDescendantHandler(glob.base.toFile, glob.toFileFilter, files)
+        files.toIndexedSeq
+      } else {
+        Path.defaultChildHandler(glob.base.toFile, glob.toFileFilter)
+      }
+    }
+  }
 }
 
 /**
@@ -337,15 +415,56 @@ object PathFinder {
  * The set is evaluated by a call to the <code>get</code> method.
  * The set will be different for different calls to <code>get</code> if the underlying filesystem has changed.
  */
-sealed abstract class PathFinder {
+sealed abstract class PathFinder extends PathLister with PathFinderDefaults {
+
+  /**
+   * Evaluates this finder and converts the results to a `Seq` of distinct `File`s.
+   * The files returned by this method will reflect the underlying filesystem at the time of calling.
+   * If the filesystem changes, two calls to this method might be different.
+   */
+  override def get(): Seq[File] = Nil
+}
+
+sealed trait PathLister {
+
+  /**
+   * Evaluates this finder and converts the results to a `Seq` of distinct `File`s.
+   * The files returned by this method will reflect the underlying filesystem at the time of calling.
+   * If the filesystem changes, two calls to this method might be different.
+   */
+  def get(): Seq[File]
+}
+object PathLister {
+  private class SingleFilePathLister(private val file: File) extends PathLister {
+    override def get(): Seq[File] = new Glob.FileBuilder(file).toGlob.get()
+    override def toString: String = s"SingleFilePathLister($file)"
+    override def equals(o: Any): Boolean = o match {
+      case that: SingleFilePathLister => this.file == that.file
+      case _                          => false
+    }
+    override def hashCode: Int = file.hashCode
+  }
+  def apply(file: File): PathLister = new SingleFilePathLister(file)
+}
+
+sealed trait PathFinderDefaults extends PathFinder.Combinator {
+  self: PathFinder =>
   import Path._
   import syntax._
 
+  /**
+   * This is a vestigial implementation detail that shouldn't have made it into the base class
+   * definition. It can't be moved into [[PathFinderImpl]] without breaking binary compatibility
+   * unfortunately.
+   * @param fileSet the result set to append files to
+   */
+  private[sbt] def addTo(fileSet: mutable.Set[File]): Unit = ()
+
   /** The union of the paths found by this <code>PathFinder</code> with the paths found by 'paths'. */
-  def +++(paths: PathFinder): PathFinder = new Paths(this, paths)
+  override def +++(paths: PathFinder): PathFinder = new Paths(this, paths)
 
   /** Excludes all paths from <code>excludePaths</code> from the paths selected by this <code>PathFinder</code>. */
-  def ---(excludePaths: PathFinder): PathFinder = new ExcludeFiles(this, excludePaths)
+  override def ---(excludePaths: PathFinder): PathFinder = new ExcludeFiles(this, excludePaths)
 
   /**
    * Constructs a new finder that selects all paths with a name that matches <code>filter</code> and are
@@ -399,7 +518,7 @@ sealed abstract class PathFinder {
    * If `errorIfNone` is false, the path is dropped from the returned Traversable.
    */
   def pair[T](mapper: File => Option[T], errorIfNone: Boolean = true): Seq[(File, T)] = {
-    val apply = if (errorIfNone) mapper | fail else mapper
+    val apply = if (errorIfNone) (a: File) => mapper(a) orElse fail(a) else mapper
     for (file <- get(); mapped <- apply(file)) yield file -> mapped
   }
 
@@ -409,68 +528,85 @@ sealed abstract class PathFinder {
    *
    * Typical usage is <code>descendantsExcept("*.jar", ".svn")</code>
    */
-  def descendantsExcept(include: FileFilter, intermediateExclude: FileFilter): PathFinder =
+  override def descendantsExcept(include: FileFilter, intermediateExclude: FileFilter): PathFinder =
     this ** (include -- intermediateExclude)
-
-  /**
-   * Evaluates this finder and converts the results to a `Seq` of distinct `File`s.
-   * The files returned by this method will reflect the underlying filesystem at the time of calling.
-   * If the filesystem changes, two calls to this method might be different.
-   */
-  final def get(): Seq[File] = {
-    import scala.collection.JavaConverters._
-    val pathSet: mutable.Set[File] = (new java.util.LinkedHashSet[File]).asScala
-    addTo(pathSet)
-    pathSet.toSeq
-  }
 
   /**
    * Only keeps paths for which `f` returns true.
    * It is non-strict, so it is not evaluated until the returned finder is evaluated.
    */
-  final def filter(f: File => Boolean): PathFinder = PathFinder(get() filter f)
+  override final def filter(f: File => Boolean): PathFinder = PathFinder(get() filter f)
 
   /** Non-strict flatMap: no evaluation occurs until the returned finder is evaluated. */
-  final def flatMap(f: File => PathFinder): PathFinder = PathFinder(get().flatMap(p => f(p).get()))
+  override final def flatMap(f: File => PathFinder): PathFinder =
+    PathFinder(get().flatMap(p => f(p).get()))
 
   /** Evaluates this finder and converts the results to an `Array` of `URL`s. */
-  final def getURLs(): Array[URL] = get().toArray.map(_.toURI.toURL)
+  override final def getURLs(): Array[URL] = get().toArray.map(_.toURI.toURL)
 
   /** Evaluates this finder and converts the results to a distinct sequence of absolute path strings. */
-  final def getPaths(): Seq[String] = get().map(_.absolutePath)
-
-  private[sbt] def addTo(fileSet: mutable.Set[File]): Unit
+  override final def getPaths(): Seq[String] = get().map(_.absolutePath)
 
   /**
    * Create a PathFinder from this one where each path has a unique name.
    * A single path is arbitrarily selected from the set of paths with the same name.
    */
-  def distinct(): PathFinder = PathFinder { get().map(p => (p.asFile.getName, p)).toMap.values }
+  override def distinct(): PathFinder = PathFinder {
+    get().map(p => (p.asFile.getName, p)).toMap.values
+  }
 
   /**
    * Constructs a string by evaluating this finder, converting the resulting Paths to absolute path strings,
    * and joining them with the platform path separator.
    */
   final def absString(): String = Path.makeString(get())
-
-  /** Constructs a debugging string for this finder by evaluating it and separating paths by newlines. */
-  override def toString() = get().mkString("\n   ", "\n   ", "")
 }
 
-private class SingleFile(asFile: File) extends PathFinder {
-  private[sbt] def addTo(fileSet: mutable.Set[File]) = if (asFile.exists) { fileSet += asFile; () }
+private abstract class PathFinderImpl extends PathFinder {
+
+  /**
+   * Evaluates this finder and converts the results to a `Seq` of distinct `File`s.
+   * The files returned by this method will reflect the underlying filesystem at the time of calling.
+   * If the filesystem changes, two calls to this method might be different.
+   */
+  override final def get(): Seq[File] = {
+    import scala.collection.JavaConverters._
+    val pathSet: mutable.Set[File] = new java.util.LinkedHashSet[File].asScala
+    addTo(pathSet)
+    pathSet.toSeq
+  }
+  private[sbt] def addTo(files: mutable.Set[File]): Unit
 }
 
-private abstract class FilterFiles extends PathFinder with FileFilter {
+private class SingleFile(asFile: File) extends PathFinderImpl {
+  override private[sbt] def addTo(fileSet: mutable.Set[File]): Unit =
+    if (asFile.exists) { fileSet += asFile; () }
+
+  override def toString: String = s"SingleFile($asFile)"
+  override def equals(o: Any): Boolean = o match {
+    case that: SingleFile => this._asFile == that._asFile
+    case _                => false
+  }
+  override def hashCode: Int = asFile.hashCode
+  private def _asFile = asFile
+}
+
+private abstract class FilterFiles extends PathFinderImpl with FileFilter {
   def parent: PathFinder
   def filter: FileFilter
 
-  final def accept(file: File) = filter.accept(file)
+  final def accept(file: File): Boolean = filter.accept(file)
 
   private[this] val getFiles: (File, FileFilter) => Seq[File] = Path.defaultChildHandler
   protected def handleFile(file: File, fileSet: mutable.Set[File]): Unit =
     for (matchedFile <- getFiles(file, this))
       fileSet += new File(file, matchedFile.getName)
+  override def toString: String = s"FilterFiles($parent, $filter)"
+  override def equals(o: Any): Boolean = o match {
+    case that: FilterFiles => this.parent == that.parent && this.filter == that.filter
+    case _                 => false
+  }
+  override def hashCode: Int = (parent.hashCode * 31) ^ filter.hashCode
 }
 
 private class DescendantOrSelfPathFinder(
@@ -479,14 +615,14 @@ private class DescendantOrSelfPathFinder(
     handleFileDescendant: (File, FileFilter, mutable.Set[File]) => Unit)
     extends FilterFiles {
   def this(parent: PathFinder, filter: FileFilter) =
-    this(parent, filter, DescendantOrSelfPathFinder.nio _)
-  private[sbt] def addTo(fileSet: mutable.Set[File]) = {
+    this(parent, filter, DescendantOrSelfPathFinder.nio)
+  override private[sbt] def addTo(fileSet: mutable.Set[File]): Unit = {
     for (file <- parent.get()) {
       if (accept(file)) fileSet += file
       handleFileDescendant(file, filter, fileSet)
     }
   }
-
+  override def toString: String = s"DescendantOrSelfPathFinder($parent, $filter)"
 }
 private object DescendantOrSelfPathFinder {
   def default(file: File, filter: FileFilter, fileSet: mutable.Set[File]): Unit = {
@@ -545,28 +681,32 @@ private object DescendantOrSelfPathFinder {
 }
 
 private class ChildPathFinder(val parent: PathFinder, val filter: FileFilter) extends FilterFiles {
-  private[sbt] def addTo(fileSet: mutable.Set[File]) =
+  override private[sbt] def addTo(fileSet: mutable.Set[File]): Unit =
     for (file <- parent.get())
       handleFile(file, fileSet)
+  override def toString: String = s"ChildPathFinder($parent, $filter)"
 }
 
 private class Paths(a: PathFinder, b: PathFinder) extends PathFinder {
-  private[sbt] def addTo(fileSet: mutable.Set[File]) = {
-    a.addTo(fileSet)
-    b.addTo(fileSet)
+  override def get(): Seq[File] = (a.get() ++ b.get()).distinct
+  override def toString: String = s"Paths($a, $b)"
+  override def equals(o: Any): Boolean = o match {
+    case that: Paths => this._a == that._a && this._b == that._b
+    case _           => false
   }
+  override def hashCode: Int = (a.hashCode * 31) ^ b.hashCode
+  private def _a: PathFinder = a
+  private def _b: PathFinder = b
 }
 
 private class ExcludeFiles(include: PathFinder, exclude: PathFinder) extends PathFinder {
-  private[sbt] def addTo(pathSet: mutable.Set[File]) = {
-    val includeSet = new mutable.LinkedHashSet[File]
-    include.addTo(includeSet)
-
-    val excludeSet = new mutable.HashSet[File]
-    exclude.addTo(excludeSet)
-
-    includeSet --= excludeSet
-    pathSet ++= includeSet
-    ()
+  override def get(): Seq[File] = (include.get().toSet -- exclude.get()).toSeq
+  override def toString: String = s"ExcludeFiles($include, $exclude)"
+  override def equals(o: Any): Boolean = o match {
+    case that: ExcludeFiles => this._include == that._include && this._exclude == that._exclude
+    case _                  => false
   }
+  override def hashCode: Int = (include.hashCode * 31) ^ exclude.hashCode
+  private def _include: PathFinder = include
+  private def _exclude: PathFinder = exclude
 }

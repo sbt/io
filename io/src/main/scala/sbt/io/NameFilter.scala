@@ -200,6 +200,17 @@ sealed class SimpleFileFilter(val acceptFunction: File => Boolean) extends FileF
   override def toString: String = s"SimpleFilter($acceptFunction)"
 }
 
+/** A [[FileFilter]] that only accepts a single input file. */
+final class ExactFileFilter(val file: File) extends FileFilter {
+  override def accept(f: File): Boolean = f == file
+  override def toString: String = s"ExactFileFilter($file)"
+  override def equals(o: Any): Boolean = o match {
+    case that: ExactFileFilter => this.file == that.file
+    case _                     => false
+  }
+  override def hashCode: Int = file.hashCode
+}
+
 /** A [[NameFilter]] that accepts a name if it is exactly equal to `matchName`. */
 final class ExactFilter(val matchName: String) extends NameFilter {
   def accept(name: String): Boolean = matchName == name

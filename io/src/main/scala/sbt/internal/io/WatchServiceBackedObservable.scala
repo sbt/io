@@ -1,13 +1,14 @@
 package sbt.internal.io
 
+import java.io.IOException
 import java.nio.file.StandardWatchEventKinds.OVERFLOW
 import java.nio.file.{ Files, Path, WatchKey }
 import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
-import sbt.io.FileTreeDataView.{ Entry, Observable }
-import sbt.io.FileTreeView.AllPass
-import sbt.io.{ FileTreeDataView, FileTreeView, WatchLogger, TypedPath }
+import sbt.io.FileTreeDataView.{ Entry, Observable, Observers }
+import sbt.io._
+import sbt.io.syntax._
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -18,17 +19,18 @@ object WatchServiceBackedObservable {
   private val eventThreadId = new AtomicInteger(0)
 }
 import sbt.internal.io.WatchServiceBackedObservable._
-private[sbt] class WatchServiceBackedObservable[+T](s: WatchState,
+private[sbt] class WatchServiceBackedObservable[+T](s: NewWatchState,
                                                     delay: FiniteDuration,
                                                     converter: TypedPath => T,
                                                     closeService: Boolean,
                                                     logger: WatchLogger)
-    extends Observable[T] {
+    extends Registerable
+    with Observable[T] {
   private[this] val closed = new AtomicBoolean(false)
   private[this] val observers = new Observers[T]
+  private[this] val view = FileTreeView.DEFAULT
   private[this] val thread: Thread = {
     val entryConverter = Entry.converter(converter)
-    var registered = s.registered
     val lock = new Object
     val latch = new CountDownLatch(1)
     new Thread(s"watch-state-event-thread-${eventThreadId.incrementAndGet()}") {
@@ -72,7 +74,7 @@ private[sbt] class WatchServiceBackedObservable[+T](s: WatchState,
           val (exist, notExist) = allEvents.partition(_.exists)
           val (updatedDirectories, updatedFiles) = exist.partition(_.isDirectory)
           val newFiles = updatedDirectories.flatMap(filesForNewDirectory)
-          lock.synchronized { registered --= notExist.map(_.toPath) }
+          lock.synchronized { s.registered --= notExist.map(_.toPath) }
           notExist.foreach(p => s.unregister(p.toPath))
           (updatedDirectories ++ updatedFiles ++ newFiles ++ notExist).map(tp =>
             Entry(tp, entryConverter))
@@ -93,11 +95,11 @@ private[sbt] class WatchServiceBackedObservable[+T](s: WatchState,
           allFiles.clear()
           val path = key.watchable.asInstanceOf[Path]
           val view = FileTreeView.DEFAULT
-          view.list(path, maxDepth = Integer.MAX_VALUE, AllPass).foreach { typedPath =>
+          view.list(path ** AllPassFilter).foreach { typedPath =>
             allFiles += typedPath
             val path = typedPath.toPath
-            if (typedPath.isDirectory && !registered.contains(path)) {
-              registered += path -> s.register(path)
+            if (typedPath.isDirectory && !s.registered.contains(path)) {
+              s.register(path)
             }
           }
           ()
@@ -108,7 +110,7 @@ private[sbt] class WatchServiceBackedObservable[+T](s: WatchState,
           oldFiles = allFiles
           addNewFiles()
         } while (oldFiles != allFiles)
-        registered --= registered.collect {
+        s.registered --= s.registered.collect {
           case (d, k) if !Files.exists(d) =>
             k.reset()
             k.cancel()
@@ -125,20 +127,20 @@ private[sbt] class WatchServiceBackedObservable[+T](s: WatchState,
         if (!closed.get()) {
           val dir = typedPath.toPath
           lazy val recursive =
-            s.sources.exists(src => dir.startsWith(src.base.toPath) && src.recursive)
-          if (!registered.contains(dir) && recursive) {
-            registered += dir -> s.register(dir)
+            s.globs.exists(glob => dir.startsWith(glob.base) && glob.depth > 0)
+          if (!s.registered.contains(dir) && recursive) {
+            s.register(dir)
             @tailrec
             def poll(paths: Seq[Path] = Nil): Seq[TypedPath] = {
-              val typedPaths = FileTreeView.DEFAULT.list(dir, maxDepth = Integer.MAX_VALUE, AllPass)
+              val typedPaths = FileTreeView.DEFAULT.list(dir ** AllPassFilter)
               val newPaths = typedPaths.map(_.toPath)
               if (newPaths == paths) typedPaths else poll(newPaths)
             }
             val result = poll()
-            val newDirs = result.collect {
+            result.foreach {
               case tp if tp.isDirectory && !closed.get() => tp.toPath -> s.register(tp.toPath)
+              case _                                     =>
             }
-            lock.synchronized { registered ++= newDirs }
             result.toVector
           } else Nil
         } else Nil
@@ -155,8 +157,23 @@ private[sbt] class WatchServiceBackedObservable[+T](s: WatchState,
     if (closed.compareAndSet(false, true)) {
       thread.interrupt()
       thread.join(5.seconds.toMillis)
-      if (closeService) s.close()
+      if (closeService) s.service.close()
       logger.debug("Closed WatchServiceBackedObservable")
     }
   }
+
+  override def register(glob: Glob): Either[IOException, Boolean] = {
+    try {
+      s.register(glob.base)
+      view
+        .list(glob.withFilter(DirectoryFilter))
+        .foreach(tp => s.register(tp.toPath))
+      Right(true)
+    } catch {
+      case e: IOException => Left(e)
+    }
+  }
+
+  override def unregister(glob: Glob): Unit =
+    view.list(glob.withFilter(DirectoryFilter)).foreach(tp => s.unregister(tp.toPath))
 }

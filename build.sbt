@@ -110,7 +110,11 @@ val io = (project in file("io"))
       // private internal classes whose functionality has been replaced
       exclude[MissingClassProblem]("sbt.internal.io.EventMonitor$*"),
       exclude[DirectMissingMethodProblem]("sbt.internal.io.EventMonitor.legacy"),
-      exclude[DirectMissingMethodProblem]("sbt.internal.io.EventMonitor.applyImpl")
+      exclude[DirectMissingMethodProblem]("sbt.internal.io.EventMonitor.applyImpl"),
+
+      // private classes that have been removed
+      exclude[MissingClassProblem]("sbt.internal.io.Alternatives$"),
+      exclude[MissingClassProblem]("sbt.internal.io.Alternatives")
     ),
     BuildInfoPlugin.buildInfoDefaultSettings, // avoids BuildInfo generated in Compile scope
     addBuildInfoToConfig(Test),

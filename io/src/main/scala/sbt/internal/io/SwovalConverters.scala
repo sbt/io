@@ -8,13 +8,14 @@ import com.swoval.files.{ TypedPath => STypedPath }
 import com.swoval.functional.{ Either => SEither }
 import sbt.io.FileTreeDataView.{ Entry, Observer }
 import sbt.io.TypedPath
+import sbt.io.TypedPath.MetaTypedPath
 
 /**
  * Utilities for converting between swoval and sbt data types.
  */
 private[io] object SwovalConverters {
   implicit class SwovalTypedPathOps(val typedPath: STypedPath) extends AnyVal {
-    def asSbt: TypedPath = new TypedPath {
+    def asSbt: TypedPath = new TypedPath with MetaTypedPath {
       override def toPath: JPath = typedPath.getPath
       override def exists: Boolean = typedPath.exists()
       override def isDirectory: Boolean = typedPath.isDirectory

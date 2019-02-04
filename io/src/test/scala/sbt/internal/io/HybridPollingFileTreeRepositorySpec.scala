@@ -4,9 +4,10 @@ import java.nio.file.{ Files, Path }
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import org.scalatest.{ FlatSpec, Matchers }
-import sbt.io.FileTreeRepositorySpec.FileRepositoryOps
 import sbt.io.FileTreeDataView.Observer
+import sbt.io.FileTreeRepositorySpec.FileRepositoryOps
 import sbt.io._
+import sbt.io.syntax._
 
 class HybridPollingFileTreeRepositorySpec extends FlatSpec with Matchers {
   val allPass: TypedPath => Boolean = (_: TypedPath) => true
@@ -15,10 +16,10 @@ class HybridPollingFileTreeRepositorySpec extends FlatSpec with Matchers {
     val pollingDir = Files.createDirectory(baseDir.toPath.resolve("polling")).toRealPath()
     val latch = new CountDownLatch(1)
     val repo =
-      FileTreeRepository.hybrid((_: TypedPath).toPath, Source(pollingDir.toFile))
+      FileTreeRepository.hybrid((_: TypedPath).toPath, pollingDir.toFile ** AllPassFilter)
     try {
-      repo.register(dir, maxDepth = Integer.MAX_VALUE)
-      repo.register(pollingDir, maxDepth = Integer.MAX_VALUE)
+      repo.register(dir ** AllPassFilter)
+      repo.register(pollingDir ** AllPassFilter)
       val regularFile = dir.resolve("regular-file")
       repo.addObserver(new Observer[Path] {
         override def onCreate(newEntry: FileTreeDataView.Entry[Path]): Unit = {
@@ -51,11 +52,9 @@ class HybridPollingFileTreeRepositorySpec extends FlatSpec with Matchers {
     val subdir = Files.createDirectory(dir.resolve("subdir"))
     val nested = Files.createDirectory(subdir.resolve("nested"))
     val file = Files.createFile(nested.resolve("file"))
-    val filter: FileFilter = new SimpleFileFilter(_.getName != subdir.toFile.getName)
-    val repo =
-      FileTreeRepository.hybrid((_: TypedPath).toPath, Source(subdir.toFile, filter, NothingFilter))
+    val repo = FileTreeRepository.hybrid((_: TypedPath).toPath, subdir ** AllPassFilter)
     try {
-      repo.register(dir, Integer.MAX_VALUE)
+      repo.register(dir ** AllPassFilter)
       repo.ls(dir).sorted shouldBe Seq(subdir, nested, file)
     } finally {
       repo.close()

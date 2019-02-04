@@ -2,6 +2,7 @@ package sbt.io
 
 import java.nio.file.{
   ClosedWatchServiceException,
+  FileSystems,
   WatchEvent,
   WatchKey,
   Path => JPath,
@@ -13,6 +14,7 @@ import scala.annotation.tailrec
 import scala.collection.{ immutable, mutable }
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.Duration
+import scala.util.Properties
 
 object WatchService {
 
@@ -86,6 +88,8 @@ object WatchService {
     override def toString(): String =
       service.toString()
   }
+  private[sbt] def default: WatchService =
+    if (Properties.isMac) new MacOSXWatchService else FileSystems.getDefault.newWatchService
 
 }
 

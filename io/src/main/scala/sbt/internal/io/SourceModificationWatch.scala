@@ -3,8 +3,10 @@
  */
 package sbt.internal.io
 
+import java.io.IOException
 import java.nio.file.StandardWatchEventKinds._
 import java.nio.file.{ WatchService => _, _ }
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 import sbt.io._
@@ -12,7 +14,7 @@ import sbt.io.syntax._
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.collection.immutable
+import scala.collection.{ immutable, mutable }
 import scala.concurrent.duration._
 
 private[sbt] object SourceModificationWatch {
@@ -28,12 +30,17 @@ private[sbt] object SourceModificationWatch {
     if (state.count == 0) {
       (true, state.withCount(1))
     } else {
-      val observable = new WatchServiceBackedObservable[Path](state,
+      val observable = new WatchServiceBackedObservable[Path](state.toNewWatchState,
                                                               delay,
                                                               (_: TypedPath).toPath,
                                                               closeService = false,
                                                               NullWatchLogger)
-      val monitor = FileEventMonitor.antiEntropy(observable, 200.milliseconds, NullWatchLogger)
+      val monitor =
+        FileEventMonitor.antiEntropy(observable,
+                                     200.milliseconds,
+                                     NullWatchLogger,
+                                     50.milliseconds,
+                                     10.minutes)
       @tailrec
       def poll(): Boolean = {
         monitor.poll(10.millis) match {
@@ -53,6 +60,7 @@ private[sbt] object SourceModificationWatch {
 }
 
 /** The state of the file watch. */
+@deprecated("WatchState is no longer used in continuous builds", "1.3.0")
 private[sbt] final class WatchState private (
     val count: Int,
     private[sbt] val sources: Seq[Source],
@@ -114,6 +122,44 @@ private[sbt] final class WatchState private (
   override def close(): Unit = if (closed.compareAndSet(false, true)) {
     service.close()
   }
+  private[sbt] def toNewWatchState: NewWatchState = {
+    val globs = ConcurrentHashMap.newKeySet[Glob].asScala
+    globs ++= sources.map(s =>
+      Glob(s.base, s.includeFilter -- s.excludeFilter, if (s.recursive) Int.MaxValue else 0))
+    val map = new ConcurrentHashMap[Path, WatchKey]()
+    map.putAll(registered.asJava)
+    new NewWatchState(globs, service, map.asScala)
+  }
+}
+
+private[sbt] class NewWatchState(private[sbt] val globs: mutable.Set[Glob],
+                                 private[sbt] val service: WatchService,
+                                 private[sbt] val registered: mutable.Map[Path, WatchKey])
+    extends AutoCloseable {
+  private[sbt] def register(path: Path): WatchKey =
+    try {
+      registered.get(path) match {
+        case Some(k) => k
+        case None =>
+          val key = service.register(path, WatchState.events: _*)
+          registered.put(path, key).foreach { k =>
+            k.reset()
+            k.cancel()
+          }
+          key
+      }
+    } catch {
+      case _: IOException => null
+    }
+  private[sbt] def unregister(path: Path): Unit = registered.remove(path).foreach(_.cancel())
+  override def close(): Unit = {
+    registered.values.foreach { k =>
+      k.reset()
+      k.cancel()
+    }
+    registered.clear()
+    service.close()
+  }
 }
 
 /**
@@ -123,6 +169,7 @@ private[sbt] final class WatchState private (
  * @param excludeFilter Filter to apply to determine whether to ignore a file.
  * @param recursive     Whether the lists is recursive or immediate children.
  */
+@deprecated("Source has been replaced by glob", "1.3.0")
 final class Source(
     val base: File,
     val includeFilter: FileFilter,
@@ -196,6 +243,7 @@ private[sbt] object WatchState {
    * @param sources The sources from where to collect the paths.
    * @return An initial `WatchState`.
    */
+  @deprecated("All apis involving Source are now superceded by glob apis", "1.3.0")
   def empty(service: WatchService, sources: Seq[Source]): WatchState = {
     val initFiles = sources.flatMap {
       case s if s.recursive =>
@@ -213,7 +261,33 @@ private[sbt] object WatchState {
     initState
   }
 
-  def empty(sources: Seq[Source]): WatchState = {
+  private def toSource(glob: Glob): Source =
+    new Source(glob.base.toFile,
+               glob.toFileFilter,
+               NothingFilter,
+               if (glob.depth > 0) true else false)
+
+  def empty(globs: Seq[Glob], service: WatchService): NewWatchState = {
+    val globSet = ConcurrentHashMap.newKeySet[Glob].asScala
+    globSet ++= globs
+    val initFiles = globs.flatMap {
+      case glob if glob.depth > 0 =>
+        DefaultFileTreeView.list(glob.base.toGlob).flatMap { d =>
+          d.toPath +: (if (d.isDirectory)
+                         DefaultFileTreeView
+                           .list(glob.withFilter(DirectoryFilter))
+                           .map(_.toPath)
+                       else Nil)
+        }
+      case glob => Seq(glob.base)
+    }.sorted
+    service.init()
+    val init = new NewWatchState(globSet, service, new ConcurrentHashMap[Path, WatchKey].asScala)
+    initFiles.foreach(init.register)
+    init
+  }
+
+  def empty(globs: Seq[Glob]): WatchState = {
     val service = new WatchService {
       override def init(): Unit = {}
       override def pollEvents(): Map[WatchKey, immutable.Seq[WatchEvent[Path]]] = Map.empty
@@ -221,6 +295,6 @@ private[sbt] object WatchState {
       override def register(path: Path, events: WatchEvent.Kind[Path]*): WatchKey = null
       override def close(): Unit = {}
     }
-    new WatchState(count = 1, sources, service, Map.empty)
+    new WatchState(count = 1, globs.map(toSource), service, Map.empty)
   }
 }
