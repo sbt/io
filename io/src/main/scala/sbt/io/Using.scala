@@ -4,14 +4,12 @@
 package sbt
 package io
 
-import java.io.{ File, FileInputStream, FileOutputStream, InputStream, OutputStream }
-import java.io.{ BufferedInputStream, BufferedOutputStream, InputStreamReader, OutputStreamWriter }
-import java.io.{ BufferedReader, BufferedWriter }
+import java.io._
 import java.util.zip.GZIPInputStream
 import java.net.URL
 import java.nio.charset.Charset
 import java.util.jar.{ JarFile, JarInputStream, JarOutputStream }
-import java.util.zip.{ GZIPOutputStream, ZipEntry, ZipFile, ZipInputStream, ZipOutputStream }
+import java.util.zip._
 
 import sbt.internal.io.ErrorHandling.translate
 
@@ -38,8 +36,10 @@ private[sbt] trait OpenFile[T] extends Using[File, T] {
   protected def openImpl(file: File): T
   protected final def open(file: File): T = {
     val parent = file.getParentFile
-    if (parent != null)
-      IO.createDirectory(parent)
+    if (parent != null) {
+      try IO.createDirectory(parent)
+      catch { case _: IOException => }
+    }
     openImpl(file)
   }
 }

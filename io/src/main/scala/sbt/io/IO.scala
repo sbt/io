@@ -324,9 +324,9 @@ object IO {
         ()
       } catch {
         case _: FileAlreadyExistsException =>
-          sys.error(failBase + ": file exists and is not a directory.")
+          throw new FileAlreadyExistsException(failBase + ": file exists and is not a directory.")
         case _: IOException if count < 5 => create(count + 1)
-        case _: IOException              => sys.error(failBase)
+        case e: IOException              => throw new IOException(failBase + ": " + e, e)
       }
     if (!Files.isDirectory(path)) create()
   }
