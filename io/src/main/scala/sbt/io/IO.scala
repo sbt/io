@@ -3,35 +3,27 @@
  */
 package sbt.io
 
-import Using._
-import sbt.internal.io.ErrorHandling.translate
-
-import java.io.{
-  BufferedReader,
-  ByteArrayOutputStream,
-  BufferedWriter,
-  File,
-  InputStream,
-  OutputStream,
-  PrintWriter
-}
-import java.io.{ IOException, FileNotFoundException, ObjectInputStream, ObjectStreamClass }
+import java.io._
 import java.net.{ URI, URISyntaxException, URL }
 import java.nio.charset.Charset
-import java.nio.file.{ FileAlreadyExistsException, FileSystems, Files, Path => NioPath }
 import java.nio.file.attribute.PosixFilePermissions
+import java.nio.file.{ Path => NioPath, _ }
 import java.util.Properties
 import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
+
+import sbt.internal.io.ErrorHandling.translate
+import sbt.internal.io.Milli
+import sbt.io.Using._
+
+import scala.Function.tupled
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.collection.immutable.TreeSet
 import scala.collection.mutable.{ HashMap, HashSet }
 import scala.reflect.{ Manifest => SManifest }
-import scala.util.control.NonFatal
 import scala.util.control.Exception._
-import scala.collection.JavaConverters._
-import Function.tupled
-import sbt.internal.io.Milli
+import scala.util.control.NonFatal
 
 /** A collection of File, URL, and I/O utility methods.*/
 object IO {
@@ -317,18 +309,13 @@ object IO {
     def failBase = "Could not create directory " + dir
     // Need a retry because Files.createDirectories may fail before succeeding on (at least) windows.
     val path = dir.toPath
-    @tailrec
-    def create(count: Int = 0): Unit =
-      try {
-        Files.createDirectories(path)
-        ()
-      } catch {
-        case _: FileAlreadyExistsException =>
-          throw new FileAlreadyExistsException(failBase + ": file exists and is not a directory.")
-        case _: IOException if count < 5 => create(count + 1)
-        case e: IOException              => throw new IOException(failBase + ": " + e, e)
-      }
-    if (!Files.isDirectory(path)) create()
+    try retry(
+      try Files.createDirectories(path)
+      catch { case _: IOException if Files.isDirectory(path) => },
+      excludedExceptions = classOf[FileAlreadyExistsException]
+    )
+    catch { case e: IOException => throw new IOException(failBase + ": " + e, e) }
+    ()
   }
 
   /** Gzips the file 'in' and writes it to 'out'.  'in' cannot be the same file as 'out'. */
@@ -1332,7 +1319,7 @@ object IO {
    */
   def getModifiedTimeOrZero(file: File): Long =
     try {
-      Milli.getModifiedTime(file)
+      retry(Milli.getModifiedTime(file), classOf[FileNotFoundException])
     } catch {
       case _: FileNotFoundException => 0L
     }
@@ -1354,7 +1341,7 @@ object IO {
    */
   def setModifiedTimeOrFalse(file: File, mtime: Long): Boolean =
     try {
-      Milli.setModifiedTime(file, mtime)
+      retry(Milli.setModifiedTime(file, mtime), classOf[FileNotFoundException])
       true
     } catch {
       case _: FileNotFoundException => false
@@ -1382,5 +1369,37 @@ object IO {
     // (which may be used by setModifiedTimeOrFalse) doesn't accept it,
     // see Java bug #6791812
     setModifiedTimeOrFalse(targetFile, math.max(last, 0L))
+  }
+  private lazy val limit = {
+    val defaultLimit = 10
+    try System.getProperty("sbt.io.retry.limit", defaultLimit.toString).toInt
+    catch { case NonFatal(_) => defaultLimit }
+  }
+  private def retry[T](f: => T, excludedExceptions: Class[_ <: IOException]*): T =
+    retry(f, limit, excludedExceptions: _*)
+  private def retry[T](f: => T, limit: Int, excludedExceptions: Class[_ <: IOException]*): T = {
+    lazy val filter: Exception => Boolean = excludedExceptions match {
+      case s if s.nonEmpty =>
+        (e: Exception) =>
+          !excludedExceptions.exists(_.isAssignableFrom(e.getClass))
+      case _ =>
+        (_: Exception) =>
+          true
+    }
+    @tailrec
+    def impl(attempt: Int): T = {
+      val (retry, res) = try false -> Right(f)
+      catch {
+        case e: IOException if filter(e) && (attempt < limit) => (true, Left(e))
+        case e: IOException                                   => (false, Left(e))
+      }
+      if (retry) { Thread.sleep(0); impl(attempt + 1) } else {
+        res match {
+          case Right(r) => r
+          case Left(e)  => throw e
+        }
+      }
+    }
+    impl(1)
   }
 }
