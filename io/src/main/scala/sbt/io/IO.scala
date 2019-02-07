@@ -544,15 +544,17 @@ object IO {
   }
 
   /** Deletes `file`, recursively if it is a directory. */
-  def delete(file: File): Unit = {
-    translate("Error deleting file " + file + ": ") {
-      val deleted = file.delete()
-      if (!deleted && file.isDirectory) {
-        delete(listFiles(file))
-        file.delete
-        ()
+  def delete(file: File): Unit = retry {
+    try {
+      FileTreeView.DEFAULT.list(Glob(file, AllPassFilter, 0)).foreach {
+        case dir if dir.isDirectory => delete(dir.toPath.toFile)
+        case f                      => f.toPath.toFile.delete()
       }
+    } catch {
+      case _: NotDirectoryException =>
     }
+    file.delete()
+    ()
   }
 
   /** Returns the children of directory `dir` that match `filter` in a non-null array.*/
