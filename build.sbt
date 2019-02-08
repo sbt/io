@@ -7,6 +7,7 @@ ThisBuild / Sbt / scalafmtOnCompile := false
 ThisBuild / scalafmtVersion := "1.4.0"
 
 def commonSettings: Seq[Setting[_]] = Seq(
+  version := "1.3.0-swoval",
   scalaVersion := scala212,
   javacOptions in compile ++= Seq("-Xlint", "-Xlint:-serial"),
   crossScalaVersions := Seq(scala210, scala211, scala212, scala213),
