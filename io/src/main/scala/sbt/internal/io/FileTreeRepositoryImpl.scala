@@ -1,6 +1,7 @@
 package sbt.internal.io
 
 import java.io.IOException
+import java.lang.{ Boolean => JBoolean }
 import java.util.concurrent.atomic.AtomicBoolean
 
 import com.swoval.files.FileTreeDataViews.Converter
@@ -23,10 +24,14 @@ import scala.collection.JavaConverters._
 private[sbt] class FileTreeRepositoryImpl[+T](converter: TypedPath => T)
     extends FileTreeRepository[T] {
   private[this] val closed = new AtomicBoolean(false)
-  private[this] val underlying = FileTreeRepositories.get[T](new Converter[T] {
-    import SwovalConverters.SwovalTypedPathOps
-    override def apply(path: STypedPath): T = converter(path.asSbt)
-  }, true)
+  private[this] val underlying = FileTreeRepositories.get[T](
+    new Converter[T] {
+      import SwovalConverters.SwovalTypedPathOps
+      override def apply(path: STypedPath): T = converter(path.asSbt)
+    },
+    JBoolean.valueOf(System.getProperty("sbt.io.repository.follow.links", "true")),
+    JBoolean.valueOf(System.getProperty("sbt.io.rescan-directory-on-touch", "false"))
+  )
 
   override def addObserver(observer: FileTreeDataView.Observer[T]): Int = {
     throwIfClosed("addObserver")
