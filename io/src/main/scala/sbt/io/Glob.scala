@@ -54,13 +54,17 @@ object Glob {
     override def hashCode: Int = f.hashCode
     override def toString: String = s"ConvertedFileFilter($f)"
   }
+  private implicit class PathOps(val p: NioPath) extends AnyVal {
+    def abs: NioPath = if (p.isAbsolute) p else p.toAbsolutePath
+  }
   def apply(base: File, filter: FileFilter, depth: Int): Glob =
-    new GlobImpl(base.toPath, filter, depth)
+    new GlobImpl(base.toPath.abs, filter, depth)
   def apply(base: File, filter: TypedPath => Boolean, depth: Int): Glob =
-    new GlobImpl(base.toPath, filter, depth)
-  def apply(base: NioPath, filter: FileFilter, depth: Int): Glob = new GlobImpl(base, filter, depth)
+    new GlobImpl(base.toPath.abs, filter, depth)
+  def apply(base: NioPath, filter: FileFilter, depth: Int): Glob =
+    new GlobImpl(base.abs, filter, depth)
   def apply(base: NioPath, filter: TypedPath => Boolean, depth: Int): Glob =
-    new GlobImpl(base, filter, depth)
+    new GlobImpl(base.abs, filter, depth)
   private class GlobImpl(val base: NioPath, val filter: TypedPath => Boolean, val depth: Int)
       extends Glob {
     override def toString: String =
