@@ -22,7 +22,7 @@ import scala.collection.mutable
  * Represents a path in the file system. It may cache some of the file attributes so that no disk
  * io is necessary to check, for example, whether the file is a directory or regular file.
  */
-trait TypedPath {
+private[sbt] trait TypedPath {
 
   /**
    * The underlying path that this represents.
@@ -59,7 +59,7 @@ trait TypedPath {
   def isSymbolicLink: Boolean
 }
 
-object TypedPath {
+private[sbt] object TypedPath {
   def apply(path: JPath): TypedPath = new TypedPath with MetaTypedPath {
     private val attrs = try {
       Some(Files.readAttributes(path, classOf[BasicFileAttributes], NOFOLLOW_LINKS))
@@ -114,7 +114,7 @@ object TypedPath {
  * Provides a view into the file system that allows retrieval of the children of a particular path.
  * Specific implementations may or may not use a cache for retrieval.
  */
-trait FileTreeView extends AutoCloseable {
+private[sbt] trait FileTreeView extends AutoCloseable {
 
   /**
    * List the contents of the current directory.
@@ -125,7 +125,7 @@ trait FileTreeView extends AutoCloseable {
   def list(glob: Glob): Seq[TypedPath]
 }
 
-object FileTreeView {
+private[sbt] object FileTreeView {
   object AllPass extends (Any => Boolean) {
     override def apply(e: Any): Boolean = true
   }
@@ -172,7 +172,7 @@ object FileTreeView {
  * Specific implementations may or may not use a cache for retrieval. It extends FileTreeView since
  * [[FileTreeView.list]] can be trivially implemented using `listEntries`.
  */
-trait FileTreeDataView[+T] extends FileTreeView with AutoCloseable {
+private[sbt] trait FileTreeDataView[+T] extends FileTreeView with AutoCloseable {
 
   /**
    * List the contents of the current directory where each returned [[FileTreeDataView.Entry]] has a
@@ -184,8 +184,8 @@ trait FileTreeDataView[+T] extends FileTreeView with AutoCloseable {
   def listEntries(glob: Glob): Seq[Entry[T]]
 }
 
-object FileTreeDataView {
-  final case class Entry[+T](typedPath: TypedPath, value: Either[IOException, T]) {
+private[sbt] object FileTreeDataView {
+  private[sbt] final case class Entry[+T](typedPath: TypedPath, value: Either[IOException, T]) {
     override def toString: String = s"Entry(${typedPath.toPath}, $value)"
   }
 
@@ -194,7 +194,7 @@ object FileTreeDataView {
    *
    * @tparam T the generic type of [[Entry.value]] instances for the [[FileTreeRepository]]
    */
-  trait Observer[-T] {
+  private[sbt] trait Observer[-T] {
 
     /**
      * Process a newly created entry
@@ -220,7 +220,7 @@ object FileTreeDataView {
      */
     def onUpdate(oldEntry: Entry[T], newEntry: Entry[T]): Unit
   }
-  object Observer {
+  private[sbt] object Observer {
 
     /**
      * Create a new Observer from callback functions.
@@ -258,7 +258,7 @@ object FileTreeDataView {
    *
    * @tparam T the generic type of [[Entry.value]] instances
    */
-  trait Observable[+T] extends AutoCloseable {
+  private[sbt] trait Observable[+T] extends AutoCloseable {
 
     /**
      * Add callbacks to be invoked on file events.
@@ -276,7 +276,7 @@ object FileTreeDataView {
     def removeObserver(handle: Int): Unit
   }
 
-  object Entry {
+  private[sbt] object Entry {
 
     def converter[T](f: TypedPath => T): TypedPath => Either[IOException, T] =
       (typedPath: TypedPath) =>
@@ -296,7 +296,7 @@ object FileTreeDataView {
    *
    * @tparam T the generic type of [[Entry.value]] instances for the [[FileTreeRepository]]
    */
-  class Observers[T] extends Observer[T] with Observable[T] {
+  private[sbt] class Observers[T] extends Observer[T] with Observable[T] {
     private[this] val id = new AtomicInteger(0)
     private[this] val observers: mutable.Map[Int, Observer[T]] =
       new util.LinkedHashMap[Int, Observer[T]]().asScala
@@ -340,7 +340,7 @@ object FileTreeDataView {
  * A dynamically configured monitor of the file system. New paths can be added and removed from
  * monitoring with register / unregister.
  */
-trait Registerable {
+private[sbt] trait Registerable {
 
   /**
    * Register a glob for monitoring.
@@ -371,13 +371,13 @@ trait Registerable {
  *
  * @tparam T the type of the [[FileTreeDataView.Entry.value]]s.
  */
-trait FileTreeRepository[+T]
+private[sbt] trait FileTreeRepository[+T]
     extends Registerable
     with Observable[T]
     with FileTreeDataView[T]
     with AutoCloseable
 
-object FileTreeRepository {
+private[sbt] object FileTreeRepository {
 
   /**
    * Create a [[FileTreeRepository]]. The generated repository will cache the file system tree for the
@@ -387,7 +387,7 @@ object FileTreeRepository {
    * @tparam T the generic type of the [[FileTreeDataView.Entry.value]]
    * @return a file repository.
    */
-  def default[T](converter: TypedPath => T): FileTreeRepository[T] =
+  private[sbt] def default[T](converter: TypedPath => T): FileTreeRepository[T] =
     new FileTreeRepositoryImpl[T](converter)
 
   /**
@@ -398,7 +398,7 @@ object FileTreeRepository {
    * @tparam T the generic type of the [[FileTreeDataView.Entry.value]]
    * @return a file repository.
    */
-  def legacy[T](converter: TypedPath => T): FileTreeRepository[T] =
+  private[sbt] def legacy[T](converter: TypedPath => T): FileTreeRepository[T] =
     new LegacyFileTreeRepository[T](converter, new WatchLogger {
       override def debug(msg: => Any): Unit = {}
     }, WatchService.default)
@@ -413,9 +413,9 @@ object FileTreeRepository {
    * @tparam T the generic type of the [[FileTreeDataView.Entry.value]]
    * @return a file repository.
    */
-  def legacy[T](converter: TypedPath => T,
-                logger: WatchLogger,
-                watchService: WatchService): FileTreeRepository[T] =
+  private[sbt] def legacy[T](converter: TypedPath => T,
+                             logger: WatchLogger,
+                             watchService: WatchService): FileTreeRepository[T] =
     new LegacyFileTreeRepository[T](converter, logger, watchService)
 
   /**
@@ -427,7 +427,7 @@ object FileTreeRepository {
    * @tparam T the generic type of the [[FileTreeDataView.Entry.value]]
    * @return a file repository.
    */
-  def hybrid[T](converter: TypedPath => T,
-                pollingGlobs: Glob*): HybridPollingFileTreeRepository[T] =
+  private[sbt] def hybrid[T](converter: TypedPath => T,
+                             pollingGlobs: Glob*): HybridPollingFileTreeRepository[T] =
     HybridPollingFileTreeRepository(converter, pollingGlobs: _*)
 }
