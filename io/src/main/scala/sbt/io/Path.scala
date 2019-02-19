@@ -25,6 +25,8 @@ import java.nio.file.{
 
 import com.swoval.files.FileTreeViews
 import com.swoval.functional.Filter
+import sbt.internal.io.SimpleFileAttributes
+import sbt.io.FileTreeView.AllPass
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -315,9 +317,20 @@ object Path extends Mapper {
       val fileTreeView = FileTreeView.DEFAULT
       (file, filter) =>
         fileTreeView
-          .list(Glob(file.toPath, new Glob.ConvertedFileFilter(filter), 0))
-          .map(_.toPath.toFile)
+          .list(Glob(file, 0, AllPassFilter), AllPass)
+          .flatMap {
+            case (path: NioPath, attrs: SimpleFileAttributes) =>
+              if (filter.accept(new AttributedFile(path, attrs))) Some(path.toFile) else None
+          }
     }
+  private class AttributedFile(path: NioPath, attributes: SimpleFileAttributes)
+      extends File(path.toString) {
+    override def isDirectory: Boolean = attributes.isDirectory
+    def isRegularFile: Boolean = attributes.isRegularFile
+    def isSymbolicLink: Boolean = attributes.isSymbolicLink
+    override def exists: Boolean = attributes.exists
+
+  }
 }
 
 object PathFinder {

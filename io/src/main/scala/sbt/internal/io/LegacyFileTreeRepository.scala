@@ -14,6 +14,7 @@ import java.io.IOException
 import java.nio.file.{ Path, WatchKey }
 import java.util.concurrent.ConcurrentHashMap
 
+import sbt.internal.io.FileEvent.{ Deletion, Update }
 import sbt.io._
 
 import scala.collection.JavaConverters._
@@ -24,32 +25,60 @@ import scala.concurrent.duration._
  * will always poll the file system and the monitoring will be handled by a
  * [[WatchServiceBackedObservable]].
  */
-private[sbt] class LegacyFileTreeRepository[+T](converter: TypedPath => T,
-                                                logger: WatchLogger,
-                                                watchService: WatchService)
-    extends FileTreeRepository[T] {
-  private[this] val view = FileTreeView.DEFAULT.asDataView(converter)
+private[sbt] class LegacyFileTreeRepository[+T](
+    converter: (Path, SimpleFileAttributes) => CustomFileAttributes[T],
+    logger: WatchLogger,
+    watchService: WatchService)
+    extends FileTreeRepository[CustomFileAttributes[T]] {
+  private[this] val view: NioFileTreeView[CustomFileAttributes[T]] =
+    FileTreeView.DEFAULT.map((p: Path, a: SimpleFileAttributes) => converter(p, a))
   private[this] val globs = ConcurrentHashMap.newKeySet[Glob].asScala
-  private[this] val observable =
-    new WatchServiceBackedObservable[T](
+  private[this] val observable: Observable[(Path, CustomFileAttributes[T])]
+    with Registerable[(Path, CustomFileAttributes[T])] =
+    new WatchServiceBackedObservable[CustomFileAttributes[T]](
       new NewWatchState(globs, watchService, new ConcurrentHashMap[Path, WatchKey].asScala),
       100.millis,
-      converter,
+      (path: Path, attributes: SimpleFileAttributes) => converter(path, attributes),
       closeService = true,
-      logger)
+      logger
+    )
+  private[this] val observers = new Observers[(Path, FileEvent[CustomFileAttributes[T]])]
+  private[this] val handle =
+    observable.addObserver(new Observer[(Path, CustomFileAttributes[T])] {
+      override def onNext(tuple: (Path, CustomFileAttributes[T])): Unit = {
+        val (path, attrs) = tuple
+        attrs.value match {
+          case Right(_) =>
+            val event = if (attrs.exists) Update(path, attrs, attrs) else Deletion(path, attrs)
+            observers.onNext(path -> event)
+          case _ =>
+            observers.onNext(path -> Deletion(path, attrs))
+        }
+      }
+    })
 
-  override def addObserver(observer: FileTreeDataView.Observer[T]): Int =
-    observable.addObserver(observer)
-  override def close(): Unit = observable.close()
-  override def list(glob: Glob): Seq[TypedPath] = view.list(glob)
-  override def listEntries(glob: Glob): Seq[FileTreeDataView.Entry[T]] = view.listEntries(glob)
-  override def register(glob: Glob): Either[IOException, Boolean] = {
+  override def close(): Unit = {
+    handle.close()
+    observable.close()
+  }
+  override def register(
+      glob: Glob): Either[IOException, Observable[(Path, FileEvent[CustomFileAttributes[T]])]] = {
     globs.add(glob)
-    observable.register(glob)
+    observable.register(glob).right.foreach(_.close())
+    new RegisterableObservable(observers).register(glob)
   }
-  override def removeObserver(handle: Int): Unit = observable.removeObserver(handle)
-  override def unregister(glob: Glob): Unit = {
-    globs.remove(glob)
-    observable.unregister(glob)
-  }
+  override def list(
+      glob: Glob,
+      filter: ((Path, CustomFileAttributes[T])) => Boolean): Seq[(Path, CustomFileAttributes[T])] =
+    view.list(glob, filter)
+
+  /**
+   * Add callbacks to be invoked on file events.
+   *
+   * @param observer the callbacks to invoke
+   * @return a handle to the callback.
+   */
+  override def addObserver(
+      observer: Observer[(Path, FileEvent[CustomFileAttributes[T]])]): AutoCloseable =
+    observers.addObserver(observer)
 }

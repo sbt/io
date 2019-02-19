@@ -11,10 +11,9 @@
 package sbt.io
 
 import java.io.File
-import java.nio.file.{ Files, Path => NioPath }
+import java.nio.file.{ Path => NioPath }
 
 import sbt.io
-import sbt.io.FileTreeDataView.Entry
 
 /**
  * Represents a filtered subtree of the file system.
@@ -27,12 +26,6 @@ trait Glob {
   def base: NioPath
 
   /**
-   * The filter to apply to elements found in the file system subtree.
-   * @return the filter.
-   */
-  def filter: TypedPath => Boolean
-
-  /**
    * The maximum depth of elements to traverse. A depth of -1 implies that this glob applies only
    * to the root specified by [[base]]. A depth of zero implies that only immediate children of
    * the root are included in this glob. For positive depth, files may be included so long as their
@@ -40,6 +33,13 @@ trait Glob {
    * @return the maximum depth.
    */
   def depth: Int
+
+  /**
+   * The filter to apply to elements found in the file system subtree.
+   * @return the filter.
+   */
+  def filter: NioPath => Boolean
+
 }
 sealed trait GlobBuilder[G] extends Any {
   def /(component: String): G
@@ -54,9 +54,8 @@ sealed trait ToGlob extends Any {
   def toGlob: Glob
 }
 object Glob {
-  private[sbt] implicit class ConvertedFileFilter(val f: FileFilter)
-      extends (TypedPath => Boolean) {
-    override def apply(tp: TypedPath): Boolean = f.accept(tp.asFile)
+  private[sbt] implicit class ConvertedFileFilter(val f: FileFilter) extends (NioPath => Boolean) {
+    override def apply(path: NioPath): Boolean = f.accept(path.toFile)
     override def equals(o: Any): Boolean = o match {
       case that: ConvertedFileFilter => this.f == that.f
       case _                         => false
@@ -67,15 +66,11 @@ object Glob {
   private implicit class PathOps(val p: NioPath) extends AnyVal {
     def abs: NioPath = if (p.isAbsolute) p else p.toAbsolutePath
   }
-  def apply(base: File, filter: FileFilter, depth: Int): Glob =
-    new GlobImpl(base.toPath.abs, filter, depth)
-  def apply(base: File, filter: TypedPath => Boolean, depth: Int): Glob =
-    new GlobImpl(base.toPath.abs, filter, depth)
-  def apply(base: NioPath, filter: FileFilter, depth: Int): Glob =
-    new GlobImpl(base.abs, filter, depth)
-  def apply(base: NioPath, filter: TypedPath => Boolean, depth: Int): Glob =
-    new GlobImpl(base.abs, filter, depth)
-  private class GlobImpl(val base: NioPath, val filter: TypedPath => Boolean, val depth: Int)
+  def apply(base: File, depth: Int, filter: FileFilter): Glob =
+    new GlobImpl(base.toPath.abs, depth, filter)
+  def apply(base: NioPath, depth: Int, filter: NioPath => Boolean): Glob =
+    new GlobImpl(base.abs, depth, filter)
+  private class GlobImpl(val base: NioPath, val depth: Int, val filter: NioPath => Boolean)
       extends Glob {
     override def toString: String =
       s"Glob(\n  base = $base,\n  filter = $filter,\n  depth = $depth\n)"
@@ -91,17 +86,17 @@ object Glob {
     def converter: T => NioPath
     def /(component: String): Glob = {
       val base = converter(repr).resolve(component)
-      Glob(base, new ExactFileFilter(base.toFile), -1)
+      Glob(base, -1, new ExactFileFilter(base.toFile))
     }
     def \(component: String): Glob = this / component
-    def glob(filter: FileFilter): Glob = Glob(converter(repr), filter, 0)
+    def glob(filter: FileFilter): Glob = Glob(converter(repr), 0, filter)
     def *(filter: FileFilter): Glob = glob(filter)
-    def globRecursive(filter: FileFilter): Glob = Glob(converter(repr), filter, Int.MaxValue)
+    def globRecursive(filter: FileFilter): Glob = Glob(converter(repr), Int.MaxValue, filter)
     def allPaths: Glob = globRecursive(AllPassFilter)
     def **(filter: FileFilter): Glob = globRecursive(filter)
     def toGlob: Glob = {
       val base = converter(repr)
-      Glob(base, new ExactFileFilter(base.toFile), -1)
+      Glob(base, -1, new ExactFileFilter(base.toFile))
     }
   }
   final class FileBuilder(val file: File) extends AnyVal with Builder[File] {
@@ -113,24 +108,14 @@ object Glob {
     override def converter: NioPath => NioPath = identity
   }
   implicit class GlobOps(val glob: Glob) extends AnyVal {
-    def withBase(base: File): Glob = new GlobImpl(base.toPath, glob.filter, glob.depth)
-    def withBase(base: NioPath): Glob = new GlobImpl(base, glob.filter, glob.depth)
-    def withFilter(filter: FileFilter): Glob = new GlobImpl(glob.base, filter, glob.depth)
-    def withDepth(depth: Int): Glob = new GlobImpl(glob.base, glob.filter, depth)
+    def withBase(base: File): Glob = new GlobImpl(base.toPath, glob.depth, glob.filter)
+    def withBase(base: NioPath): Glob = new GlobImpl(base, glob.depth, glob.filter)
+    def withFilter(filter: FileFilter): Glob = new GlobImpl(glob.base, glob.depth, filter)
+    def withDepth(depth: Int): Glob = new GlobImpl(glob.base, depth, glob.filter)
     def withRecursive(recursive: Boolean): Glob =
-      new GlobImpl(glob.base, glob.filter, if (recursive) Int.MaxValue else 0)
+      new GlobImpl(glob.base, if (recursive) Int.MaxValue else 0, glob.filter)
     def toFileFilter: FileFilter = toFileFilter(acceptBase = true)
     def toFileFilter(acceptBase: Boolean): FileFilter = new GlobAsFilter(glob, acceptBase)
-    def toEntryFilter[T]: Entry[T] => Boolean = toEntryFilter(acceptBase = false)
-    def toEntryFilter[T](acceptBase: Boolean): Entry[T] => Boolean = {
-      if (acceptBase) e => e.typedPath.toPath == glob.base || glob.filter(e.typedPath)
-      else e => glob.filter(e.typedPath)
-    }
-    def toTypedPathFilter[T]: TypedPath => Boolean = toTypedPathFilter(acceptBase = false)
-    def toTypedPathFilter[T](acceptBase: Boolean): TypedPath => Boolean = {
-      if (acceptBase) tp => tp.toPath == glob.base || glob.filter(tp)
-      else glob.filter
-    }
   }
   implicit def toPathFinder(glob: Glob): PathFinder = new io.PathFinder.GlobPathFinder(glob)
   implicit object ordering extends Ordering[Glob] {
@@ -158,19 +143,12 @@ object Glob {
     override def accept(pathname: File): Boolean = {
       val path = pathname.toPath
       val globPath = glob.base
-      lazy val typedPath = new TypedPath {
-        override def toPath: NioPath = path
-        override def exists: Boolean = Files.exists(path)
-        override def isDirectory: Boolean = Files.isDirectory(path)
-        override def isFile: Boolean = Files.isRegularFile(path)
-        override def isSymbolicLink: Boolean = Files.isSymbolicLink(path)
-      }
       if (path.startsWith(globPath)) {
         if (path == globPath) {
-          (acceptBase || glob.depth == -1) && glob.filter(typedPath)
+          (acceptBase || glob.depth == -1) && glob.filter(path)
         } else {
           val nameCount = globPath.relativize(path).getNameCount - 1
-          nameCount <= glob.depth && glob.filter(typedPath)
+          nameCount <= glob.depth && glob.filter(path)
         }
       } else {
         false
@@ -207,47 +185,6 @@ object Glob {
      */
     def toFileFilter(acceptBase: Boolean): FileFilter = new TraversableGlobOps.Filter(t, acceptBase)
 
-    /**
-     * Returns a function from [[FileTreeDataView.Entry]] to Boolean that accepts the
-     * [[FileTreeDataView.Entry]] if any glob in the collection accepts the [[TypedPath]] for which the
-     * [[FileTreeDataView.Entry]] corresponds. The filter will accept the base file of each glob.
-     *
-     * @return the filter.
-     */
-    def toEntryFilter: Entry[_] => Boolean =
-      entry => new TraversableGlobOps.Filter(t, true).accept(entry.typedPath.asFile)
-
-    /**
-     * Returns a function from [[FileTreeDataView.Entry]] to Boolean that accepts the
-     * [[FileTreeDataView.Entry]] if any glob in the collection accepts the [[TypedPath]] for which the
-     * [[FileTreeDataView.Entry]] corresponds.
-     *
-     * @param acceptBase toggles whether or not the base file of a [[Glob]] should be accepted by the
-     *                   filter
-     * @return the filter.
-     */
-    def toEntryFilter(acceptBase: Boolean): Entry[_] => Boolean =
-      entry => new TraversableGlobOps.Filter(t, acceptBase).accept(entry.typedPath.asFile)
-
-    /**
-     * Returns a function from [[TypedPath]] to Boolean that accepts the TypedPath if any glob in
-     * the collection accepts it. The returned filter will accept the base file of each glob.
-     *
-     * @return the filter.
-     */
-    def toTypedPathFilter: TypedPath => Boolean =
-      typedPath => new TraversableGlobOps.Filter(t, true).accept(typedPath.asFile)
-
-    /**
-     * Returns a function from [[TypedPath]] to Boolean that accepts the TypedPath if any glob in
-     * the collection accepts it.
-     *
-     * @param acceptBase toggles whether or not the base file of a [[Glob]] should be accepted by the
-     *                   filter
-     * @return the filter.
-     */
-    def toTypedPathFilter(acceptBase: Boolean): TypedPath => Boolean =
-      typedPath => new TraversableGlobOps.Filter(t, acceptBase).accept(typedPath.asFile)
   }
   private[sbt] object TraversableGlobOps {
     private class Filter[T <: Traversable[Glob]](private val t: T, private val acceptBase: Boolean)

@@ -5,18 +5,17 @@ import java.nio.file.{ ClosedWatchServiceException, Files, Path, Paths }
 
 import org.scalatest.{ Assertion, FlatSpec, Matchers }
 import sbt.internal.io.EventMonitorSpec._
-import sbt.io.FileEventMonitor.Event
-import sbt.io.FileTreeDataView.{ Entry, Observable, Observer }
+import sbt.internal.io.FileEvent.{ Deletion, Update }
 import sbt.io.syntax._
-import sbt.io.{ FileTreeDataView, TypedPath, WatchService, _ }
+import sbt.io.{ WatchService, _ }
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
 
 private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
   def pollDelay: FiniteDuration
-  def newObservable(glob: Seq[Glob], logger: Logger): Observable[_]
-  def newObservable(file: File): Observable[_] =
+  def newObservable(glob: Seq[Glob], logger: Logger): Observable[Event]
+  def newObservable(file: File): Observable[Event] =
     newObservable(Seq(file.toPath.toRealPath().toFile ** AllPassFilter), NullLogger)
   private val maxWait = 2 * pollDelay
 
@@ -42,8 +41,8 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     }
   }
 
-  it should "ignore creation of directories with no tracked globs" in IO.withTemporaryDirectory {
-    dir =>
+  it should "ignore creation of directories with no tracked globs" in IO
+    .withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val created = parentDir / "ignoreme"
 
@@ -52,7 +51,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       watchTest(parentDir, expectedTrigger = false) {
         IO.createDirectory(created)
       }
-  }
+    }
 
   it should "ignore creation of files that do not match inclusion filter" in
     IO.withTemporaryDirectory { dir =>
@@ -66,8 +65,8 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       }
     }
 
-  it should "ignore creation of files that are explicitly ignored" in IO.withTemporaryDirectory {
-    dir =>
+  it should "ignore creation of files that are explicitly ind" in IO
+    .withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val created = parentDir / ".hidden.scala"
 
@@ -76,7 +75,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       watchTest(parentDir, expectedTrigger = false) {
         IO.touch(created)
       }
-  }
+    }
 
   it should "ignore creation of an empty directory" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
@@ -114,7 +113,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       }
     }
 
-  it should "ignore creation of files explicitly ignored in subdirectories" in
+  it should "ignore creation of files explicitly ind in subdirectories" in
     IO.withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "sub"
@@ -127,8 +126,8 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       }
     }
 
-  it should "ignore creation of empty directories in a subdirectory" in IO.withTemporaryDirectory {
-    dir =>
+  it should "ignore creation of empty directories in a subdirectory" in IO
+    .withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "sub"
       val created = subDir / "ignoreme"
@@ -138,7 +137,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       watchTest(parentDir, expectedTrigger = false) {
         IO.createDirectory(created)
       }
-  }
+    }
 
   it should "detect deleted files" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
@@ -161,7 +160,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       }
     }
 
-  it should "ignore deletion of files explicitly ignored" in IO.withTemporaryDirectory { dir =>
+  it should "ignore deletion of files explicitly ind" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val file = parentDir / ".hidden.scala"
     IO.write(file, "foo")
@@ -204,7 +203,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       }
     }
 
-  it should "ignore deletion of files explicitly ignored in subdirectories" in
+  it should "ignore deletion of files explicitly ind in subdirectories" in
     IO.withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "subdir"
@@ -216,8 +215,8 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       }
     }
 
-  it should "ignore deletion of empty directories in subdirectories" in IO.withTemporaryDirectory {
-    dir =>
+  it should "ignore deletion of empty directories in subdirectories" in IO
+    .withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "subdir"
       val willBeDeleted = subDir / "ignoreme"
@@ -226,10 +225,10 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       watchTest(parentDir, expectedTrigger = false) {
         IO.delete(willBeDeleted)
       }
-  }
+    }
 
-  it should "ignore creation and then deletion of empty directories" in IO.withTemporaryDirectory {
-    dir =>
+  it should "ignore creation and then deletion of empty directories" in IO
+    .withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "subdir"
       IO.createDirectory(parentDir)
@@ -249,10 +248,10 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       } finally {
         monitor.close()
       }
-  }
+    }
 
-  it should "detect deletion of a directory containing watched files" in IO.withTemporaryDirectory {
-    dir =>
+  it should "detect deletion of a directory containing watched files" in IO
+    .withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "subdir"
       val src = subDir / "src.scala"
@@ -274,7 +273,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
         if (!triggered1) logger.printLines("Did not trigger when expected")
         triggered1 shouldBe true
       } finally monitor.close()
-  }
+    }
 
   it should "not generate multiple events for the same file within anti-entropy period" in IO
     .withTemporaryDirectory { dir =>
@@ -299,9 +298,9 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
         def poll(): Boolean = {
           val wait = deadline - Deadline.now
           monitor.poll(wait) match {
-            case sources if sources.map(_.entry.typedPath.toPath).contains(file.toPath) => true
-            case _ if Deadline.now < deadline                                           => poll()
-            case _                                                                      => false
+            case sources if sources.map(_.path).contains(file.toPath) => true
+            case _ if Deadline.now < deadline                         => poll()
+            case _                                                    => false
           }
         }
         monitor.drain(maxWait)
@@ -358,8 +357,8 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     }
   }
 
-  it should "handle rapid creation of many subdirectories and files" in IO.withTemporaryDirectory {
-    dir =>
+  it should "handle rapid creation of many subdirectories and files" in IO
+    .withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       Files.createDirectories(parentDir.toPath)
       val realParent = parentDir.toPath.toRealPath()
@@ -392,7 +391,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
         // DefaultWatchServiceSpec to occasionally fail.
         // http://blog.omega-prime.co.uk/2015/11/14/beware-java-nio-file-watchservice-is-subtly-broken-on-linux/
         val triggeredPaths =
-          monitor.drain(maxWait * 4).map(_.entry.typedPath.toPath).toSet.intersect(allPaths)
+          monitor.drain(maxWait * 4).map(_.path).toSet.intersect(allPaths)
         if (triggeredPaths != allPaths) {
           logger.printLines("Triggered paths did not contain all of the expected paths")
           val diff = allPaths diff triggeredPaths
@@ -406,13 +405,13 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
         assert(IO.read(lastFile.toFile) == s"foo")
         IO.write(lastFile.toFile, "baz")
         val updates = monitor.drain(maxWait * 4)
-        val result = updates.exists(_.entry.typedPath.toPath == lastFile)
+        val result = updates.exists(_.path == lastFile)
         assert(result)
         assert(IO.read(lastFile.toFile) == "baz")
       } finally {
         monitor.close()
       }
-  }
+    }
 
   def watchTest(monitor: FileEventMonitor[_])(modifier: => Unit): Boolean = {
     modifier
@@ -422,7 +421,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
   def watchTest(base: File, expectedTrigger: Boolean = true)(modifier: => Unit): Assertion = {
     val globs = base.toPath.toRealPath().toFile.scalaSourceGlobs
     val logger = new CachingWatchLogger
-    val observable = newObservable(globs, logger)
+    val observable: Observable[Event] = newObservable(globs, logger)
     try {
       val triggered = watchTest(FileEventMonitor(observable, logger))(modifier)
       if (triggered != expectedTrigger) logger.printLines(s"Expected $expectedTrigger")
@@ -445,18 +444,19 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 }
 
 object EventMonitorSpec {
+  type Event = FileEvent[SimpleFileAttributes]
   trait Logger extends WatchLogger
   object NullLogger extends Logger { override def debug(msg: => Any): Unit = {} }
   // This can't be defined in MonitorOps because of a bug in the scala 2.10 compiler
   @tailrec
-  private def drain(monitor: FileEventMonitor[_],
+  private def drain(monitor: FileEventMonitor[Event],
                     duration: FiniteDuration,
-                    events: Seq[Event[_]]): Seq[Event[_]] = {
+                    events: Seq[Event]): Seq[Event] = {
     val newEvents = monitor.poll(duration)
     if (newEvents.isEmpty) events else drain(monitor, duration, events ++ newEvents)
   }
-  implicit class MonitorOps(val monitor: FileEventMonitor[_]) extends AnyVal {
-    def drain(duration: FiniteDuration, events: Seq[Event[_]] = Nil): Seq[Event[_]] =
+  implicit class MonitorOps(val monitor: FileEventMonitor[Event]) extends AnyVal {
+    def drain(duration: FiniteDuration, events: Seq[Event] = Nil): Seq[Event] =
       EventMonitorSpec.drain(monitor, duration, events)
   }
   implicit class FileOps(val file: File) extends AnyVal {
@@ -466,52 +466,78 @@ object EventMonitorSpec {
           .withFilter(new ExtensionFilter("scala") -- HiddenFileFilter -- new SimpleFilter(
             _.startsWith("."))))
   }
-  private class FilteredObservable[T](observable: Observable[T], filter: Entry[T] => Boolean)
-      extends Observable[T] {
-    override def addObserver(observer: FileTreeDataView.Observer[T]): Int =
-      observable.addObserver(new Observer[T] {
-        override def onCreate(newEntry: Entry[T]): Unit =
-          if (filter(newEntry)) observer.onCreate(newEntry)
-        override def onDelete(oldEntry: Entry[T]): Unit =
-          if (filter(oldEntry)) observer.onDelete(oldEntry)
-        override def onUpdate(oldEntry: Entry[T], newEntry: Entry[T]): Unit = {
-          if (filter(newEntry)) observer.onUpdate(oldEntry, newEntry)
-        }
-      })
-    override def removeObserver(handle: Int): Unit = observable.removeObserver(handle)
-    override def close(): Unit = observable.close()
-  }
-  implicit class ObservableOps[T](val observable: Observable[T]) extends AnyVal {
-    def filter(f: Entry[T] => Boolean): Observable[T] = new FilteredObservable[T](observable, f)
-  }
   class CachingWatchLogger extends Logger {
     val lines = new scala.collection.mutable.ArrayBuffer[String]
     override def debug(msg: => Any): Unit = lines.synchronized { lines += msg.toString; () }
     def printLines(msg: String): Unit = println(s"$msg. Log lines:\n${lines mkString "\n"}")
   }
-}
-
-class FileTreeRepositoryEventMonitorSpec extends FlatSpec with Matchers with EventMonitorSpec {
-  override def pollDelay: FiniteDuration = 100.millis
-
-  override def newObservable(globs: Seq[Glob], logger: Logger): Observable[_] = {
-    val repository = FileTreeRepository.default((_: TypedPath).toPath)
-    globs.foreach(repository.register)
-    repository.filter(e => globs.exists(_.toEntryFilter(e)))
+  implicit class ObservableOps[T <: SimpleFileAttributes](
+      val observable: Observable[(Path, T)] with Registerable[(Path, T)])
+      extends AnyVal {
+    def register(globs: Seq[Glob]): Observable[Event] = {
+      val transformer: (Path, SimpleFileAttributes) => Event =
+        (path: Path, attrs: SimpleFileAttributes) =>
+          if (attrs.exists) Update(path, attrs, attrs)
+          else Deletion(path, attrs)
+      val delegate = aggregate(globs.flatMap { g =>
+        observable
+          .register(g)
+          .right
+          .map(o => Observable.map(o, transformer.tupled))
+          .fold(_ => None, Some(_))
+      }: _*)
+      new Observable[Event] {
+        override def addObserver(o: Observer[Event]): AutoCloseable = delegate.addObserver(o)
+        override def close(): Unit = {
+          delegate.close()
+          observable.close()
+        }
+      }
+    }
+  }
+  def aggregate[T](observables: Observable[T]*): Observable[T] = {
+    val observers = new Observers[T]
+    val handles = observables.map(observers.addObservable)
+    new Observable[T] {
+      override def addObserver(observer: Observer[T]): AutoCloseable =
+        observers.addObserver(observer)
+      override def close(): Unit = {
+        handles.foreach(_.close())
+      }
+    }
   }
 }
 
-class LegacyFileTreeRepositoryEventMonitorSpec
-    extends FlatSpec
-    with Matchers
-    with EventMonitorSpec {
-  override def pollDelay: FiniteDuration = 100.millis
-
-  override def newObservable(globs: Seq[Glob], logger: Logger): Observable[_] = {
-    val repository = FileTreeRepository.legacy((_: TypedPath).toPath, logger, WatchService.default)
-    globs.foreach(repository.register)
-    repository.filter(e => globs.exists(_.toEntryFilter(e)))
+private[sbt] trait RepoEventMonitorSpec extends FlatSpec with Matchers with EventMonitorSpec {
+  val converter: (Path, SimpleFileAttributes) => CustomFileAttributes[Unit] =
+    (path: Path, attrs: SimpleFileAttributes) => CustomFileAttributes.get(path, attrs, ())
+  private[sbt] def factory(f: (Path, SimpleFileAttributes) => CustomFileAttributes[Unit])
+    : FileTreeRepository[CustomFileAttributes[Unit]]
+  override def newObservable(globs: Seq[Glob], logger: Logger): Observable[Event] = {
+    val repository = factory(converter)
+    new Observable[Event] {
+      val aggregated = EventMonitorSpec.aggregate(globs.map(repository.register).collect {
+        case Right(o) => Observable.map(o, (_: (Path, Event))._2)
+      }: _*)
+      override def addObserver(observer: Observer[Event]): AutoCloseable =
+        aggregated.addObserver(observer)
+      override def close(): Unit = {
+        aggregated.close()
+        repository.close()
+      }
+    }
   }
+}
+class FileTreeRepositoryEventMonitorSpec extends RepoEventMonitorSpec {
+  override def pollDelay: FiniteDuration = 100.millis
+  override private[sbt] def factory(f: (Path, SimpleFileAttributes) => CustomFileAttributes[Unit])
+    : FileTreeRepository[CustomFileAttributes[Unit]] = FileTreeRepository.default[Unit](f)
+}
+
+class LegacyFileTreeRepositoryEventMonitorSpec extends RepoEventMonitorSpec {
+  override def pollDelay: FiniteDuration = 100.millis
+  override private[sbt] def factory(f: (Path, SimpleFileAttributes) => CustomFileAttributes[Unit])
+    : FileTreeRepository[CustomFileAttributes[Unit]] = FileTreeRepository.legacy[Unit](f)
 }
 
 private[sbt] abstract class SourceModificationWatchSpec(
@@ -540,13 +566,14 @@ private[sbt] abstract class SourceModificationWatchSpec(
     service.close()
   }
 
-  override def newObservable(globs: Seq[Glob], logger: Logger): FileTreeDataView.Observable[_] = {
+  override def newObservable(globs: Seq[Glob], logger: Logger): Observable[Event] = {
     val watchState = WatchState.empty(globs, getService)
-    val observable = new WatchServiceBackedObservable[Path](watchState,
-                                                            5.millis,
-                                                            (_: TypedPath).toPath,
-                                                            closeService = true,
-                                                            logger)
-    observable.filter((entry: Entry[Path]) => globs.exists(_.toEntryFilter(entry)))
+    val observable = new WatchServiceBackedObservable[SimpleFileAttributes](
+      watchState,
+      5.millis,
+      (p: Path, attrs: SimpleFileAttributes) => attrs,
+      closeService = true,
+      logger)
+    observable.register(globs)
   }
 }

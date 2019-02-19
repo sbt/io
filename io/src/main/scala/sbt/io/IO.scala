@@ -21,6 +21,7 @@ import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
 
 import sbt.internal.io.ErrorHandling.translate
 import sbt.internal.io.Milli
+import sbt.io.FileTreeView.AllPass
 import sbt.io.Using._
 
 import scala.Function.tupled
@@ -553,9 +554,9 @@ object IO {
   /** Deletes `file`, recursively if it is a directory. */
   def delete(file: File): Unit = retry {
     try {
-      FileTreeView.DEFAULT.list(Glob(file, AllPassFilter, 0)).foreach {
-        case dir if dir.isDirectory => delete(dir.toPath.toFile)
-        case f                      => f.toPath.toFile.delete()
+      FileTreeView.DEFAULT.list(Glob(file, 0, AllPassFilter), AllPass).foreach {
+        case (dir, attrs) if attrs.isDirectory => delete(dir.toFile)
+        case (f, _)                            => Files.deleteIfExists(f)
       }
     } catch {
       case _: NotDirectoryException =>

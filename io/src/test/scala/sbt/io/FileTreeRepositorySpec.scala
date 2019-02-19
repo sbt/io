@@ -1,48 +1,41 @@
 package sbt.io
 
 import java.nio.file.attribute.FileTime
-import java.nio.file.{ Files, Path => JPath, Paths => JPaths }
-import java.util
-import java.util.Collections
+import java.nio.file.{ Files, Path => NioPath, Paths => NioPaths }
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import org.scalatest.{ FlatSpec, Matchers }
-import sbt.io.FileTreeDataView.Entry
+import sbt.internal.io._
 import sbt.io.FileTreeRepositorySpec._
-
-import scala.collection.JavaConverters._
-import scala.concurrent.duration._
 import sbt.io.FileTreeView.AllPass
 import sbt.io.syntax._
 
-private[io] trait RepositoryFactory {
-  def newRepository[T](converter: TypedPath => T): FileTreeRepository[T]
-}
+import scala.concurrent.duration._
+
 object FileTreeRepositorySpec {
-  implicit class FileRepositoryOps[T](val fileCache: FileTreeRepository[T]) extends AnyVal {
-    def ls(path: JPath,
-           maxDepth: Int = Integer.MAX_VALUE,
-           filter: TypedPath => Boolean = AllPass): Seq[JPath] =
-      fileCache.list(Glob(path, filter, maxDepth)).map(_.toPath)
+  implicit class FileRepositoryOps[T](val fileCache: FileTreeRepository[CustomFileAttributes[T]])
+      extends AnyVal {
+    def ls(glob: Glob,
+           filter: (NioPath, CustomFileAttributes[T]) => Boolean = (_, _) => true): Seq[NioPath] =
+      fileCache.list(glob, filter).map(_._1)
   }
   implicit class CountdownLatchOps(val latch: CountDownLatch) extends AnyVal {
     def await(duration: Duration): Boolean = latch.await(duration.toNanos, TimeUnit.NANOSECONDS)
   }
-  def asPath(typedPath: TypedPath): JPath = typedPath.toPath
   private val DEFAULT_TIMEOUT = 1.second
   def using[T, R](fileCache: => FileTreeRepository[T])(f: FileTreeRepository[T] => R): R = {
     val cache = fileCache
     try f(cache)
     finally cache.close()
   }
-  def withTempDir[R](f: JPath => R): R =
+  def withTempDir[R](f: NioPath => R): R =
     IO.withTemporaryDirectory(dir => f(dir.toPath.toRealPath()))
-  def withTempDir[R](dir: JPath)(f: JPath => R): R = {
+  def withTempDir[R](dir: NioPath)(f: NioPath => R): R = {
     val subdir = Files.createTempDirectory(dir, "tmp")
     try f(subdir)
     finally IO.delete(subdir.toFile)
   }
-  def withTempFile[R](dir: JPath)(f: JPath => R): R = {
+  def withTempFile[R](dir: NioPath)(f: NioPath => R): R = {
     val file = Files.createTempFile(dir, "", "").toRealPath()
     try {
       f(file)
@@ -51,69 +44,68 @@ object FileTreeRepositorySpec {
       ()
     }
   }
-  def withTempFile[R](f: JPath => R): R = withTempDir(withTempFile(_)(f))
-  def simpleCache(f: Entry[JPath] => Unit = _ => {})(
-      implicit factory: RepositoryFactory): FileTreeRepository[JPath] = {
-    val res = factory.newRepository(asPath)
-    res.addObserver(f)
-    res
-  }
-  def simpleCache(observer: FileTreeDataView.Observer[JPath])(
-      implicit factory: RepositoryFactory): FileTreeRepository[JPath] = {
-    val res = factory.newRepository(asPath)
-    res.addObserver(observer)
-    res
+  def withTempFile[R](f: NioPath => R): R = withTempDir(withTempFile(_)(f))
+  def simpleCache(f: NioPath => Unit): FileTreeRepository[CustomFileAttributes[Unit]] =
+    simpleCache(new Observer[(NioPath, FileEvent[CustomFileAttributes[Unit]])] {
+      override def onNext(t: (NioPath, FileEvent[CustomFileAttributes[Unit]])): Unit = f(t._1)
+    })
+  def simpleCache(observer: Observer[(NioPath, FileEvent[CustomFileAttributes[Unit]])])
+    : FileTreeRepository[CustomFileAttributes[Unit]] = {
+    val underlying = new FileTreeRepositoryImpl((path: NioPath, attributes: SimpleFileAttributes) =>
+      CustomFileAttributes.get(path, attributes, ()))
+    underlying.addObserver(observer)
+    underlying
   }
   case class LastModified(at: Long)
 }
-class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSpec with Matchers {
+class FileTreeRepositorySpec extends FlatSpec with Matchers {
   "register" should "see existing files" in withTempFile { file =>
-    using(simpleCache()) { c =>
+    using(simpleCache((_: NioPath) => {})) { c =>
       val glob = file.getParent ** AllPassFilter
       c.register(glob)
-      c.list(glob).map(_.toPath) shouldBe Seq(file)
+      c.ls(glob) shouldBe Seq(file)
     }
   }
   it should "detect new files" in withTempDir { dir =>
     val latch = new CountDownLatch(1)
-    using(simpleCache((e: Entry[JPath]) => latch.countDown())) { c =>
+    using(simpleCache((_: NioPath) => latch.countDown())) { c =>
       c.register(dir ** AllPassFilter)
       withTempFile(dir) { f =>
         assert(latch.await(DEFAULT_TIMEOUT))
-        c.ls(dir, Integer.MAX_VALUE, AllPass) shouldBe Seq(f)
+        c.ls(dir ** AllPassFilter) shouldBe Seq(f)
       }
     }
   }
   it should "detect new subdirectories" in withTempDir { dir =>
     val latch = new CountDownLatch(1)
-    using(simpleCache((_: Entry[JPath]) => latch.countDown())) { c =>
+    using(simpleCache((_: NioPath) => latch.countDown())) { c =>
       c.register(dir ** AllPassFilter)
       withTempDir(dir) { subdir =>
         assert(latch.await(DEFAULT_TIMEOUT))
-        c.ls(dir, Integer.MAX_VALUE, AllPass) shouldBe Seq(subdir)
+        c.ls(dir ** AllPassFilter) shouldBe Seq(subdir)
       }
     }
   }
   it should "detect move events" in withTempDir { dir =>
     val latch = new CountDownLatch(2)
     val initial = Files.createTempFile(dir, "move", "")
-    val moved = JPaths.get(s"${initial.toString}.moved")
-    val onChange = (_: Entry[JPath]) => latch.countDown()
-    val onUpdate = (_: Entry[JPath], _: Entry[JPath]) => {}
-    using(simpleCache(FileTreeDataView.Observer[JPath](onChange, onChange, onUpdate))) { c =>
+    val moved = NioPaths.get(s"${initial.toString}.moved")
+    val onChange = (_: NioPath, _: CustomFileAttributes[Unit]) => latch.countDown()
+    val onUpdate =
+      (_: (NioPath, CustomFileAttributes[Unit]), _: (NioPath, CustomFileAttributes[Unit])) => {}
+    using(simpleCache(FileEvent.observer(onChange, onChange, onUpdate))) { c =>
       c.register(dir ** AllPassFilter)
-      c.ls(dir, maxDepth = 0) === Seq(initial)
+      c.ls(dir * AllPassFilter) === Seq(initial)
       Files.move(initial, moved)
       assert(latch.await(DEFAULT_TIMEOUT))
-      c.ls(dir, maxDepth = 0) === Seq(moved)
+      c.ls(dir * AllPassFilter) === Seq(moved)
     }
   }
   it should "ignore children of subdirectories when recursive flag is false" in withTempDir { dir =>
     withTempDir(dir) { subdir =>
       val fileLatch = new CountDownLatch(1)
       val subdirLatch = new CountDownLatch(1)
-      using(simpleCache((e: Entry[JPath]) => {
-        val path = e.typedPath.toPath
+      using(simpleCache((path: NioPath) => {
         if (path.startsWith(subdir) && path != subdir) fileLatch.countDown()
         else if (path == subdir && Files.getLastModifiedTime(path).toMillis == 2000)
           subdirLatch.countDown()
@@ -124,7 +116,7 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
           assert(fileLatch.getCount == 1) // The child creation should not have triggered a callback
           Files.setLastModifiedTime(subdir, FileTime.fromMillis(2000))
           assert(subdirLatch.await(DEFAULT_TIMEOUT))
-          c.ls(dir) === Seq(subdir)
+          c.ls(dir ** AllPassFilter) === Seq(subdir)
         }
       }
     }
@@ -132,11 +124,11 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
   it should "add recursive flag when previously set to false" in withTempDir { dir =>
     withTempDir(dir) { subdir =>
       withTempFile(subdir) { f =>
-        using(simpleCache()) { c =>
+        using(simpleCache((_: NioPath) => {})) { c =>
           c.register(dir * AllPassFilter)
-          c.ls(dir).toSet shouldBe Set(subdir)
+          c.ls(dir ** AllPassFilter).toSet shouldBe Set(subdir)
           c.register(dir ** AllPassFilter)
-          c.ls(dir).toSet shouldBe Set(subdir, f)
+          c.ls(dir ** AllPassFilter).toSet shouldBe Set(subdir, f)
         }
       }
     }
@@ -144,11 +136,11 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
   it should "not remove recursive flag when already set" in withTempDir { dir =>
     withTempDir(dir) { subdir =>
       withTempFile(subdir) { f =>
-        using(simpleCache()) { c =>
+        using(simpleCache((_: NioPath) => {})) { c =>
           c.register(dir ** AllPassFilter)
-          c.ls(dir).toSet shouldBe Set(subdir, f)
+          c.ls(dir ** AllPassFilter).toSet shouldBe Set(subdir, f)
           c.register(dir * AllPassFilter)
-          c.ls(dir).toSet shouldBe Set(subdir, f)
+          c.ls(dir ** AllPassFilter).toSet shouldBe Set(subdir, f)
         }
       }
     }
@@ -156,12 +148,13 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
 
   it should "detect many creations and deletions" in withTempDir { dir =>
     val filesToAdd = 1000
-    var files = Set.empty[JPath]
+    var files = Set.empty[NioPath]
     val creationLatch = new CountDownLatch(filesToAdd * 2)
     val deletionLatch = new CountDownLatch(filesToAdd * 2)
-    val observer = FileTreeDataView.Observer[JPath](onCreate = _ => creationLatch.countDown(),
-                                                    onDelete = _ => deletionLatch.countDown(),
-                                                    onUpdate = (_, _) => {})
+    val observer =
+      FileEvent.observer[CustomFileAttributes[Unit]](onCreate = (_, _) => creationLatch.countDown(),
+                                                     onDelete = (_, _) => deletionLatch.countDown(),
+                                                     onUpdate = (_, _) => {})
     using(simpleCache(observer)) { c =>
       c.register(dir ** AllPassFilter)
 
@@ -173,14 +166,14 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
         }.toSet
       } {
         assert(creationLatch.await(DEFAULT_TIMEOUT * 10))
-        c.ls(dir).toSet shouldBe files
+        c.ls(dir ** AllPassFilter).toSet shouldBe files
       }
 
       withThread("file-deletion-thread") {
         files.foreach(p => if (Files.isDirectory(p)) IO.delete(p.toFile))
       } {
         assert(deletionLatch.await(DEFAULT_TIMEOUT * 10))
-        c.ls(dir) shouldBe 'empty
+        c.ls(dir * AllPassFilter) shouldBe 'empty
       }
     }
   }
@@ -188,38 +181,29 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
   "updates" should "be detected" in withTempFile { file =>
     val latch = new CountDownLatch(1)
     val updatedLastModified = 2000L
-    using(FileTreeRepository.default[LastModified]((p: TypedPath) =>
-      LastModified(Files.getLastModifiedTime(p.toPath).toMillis))) { c =>
-      c.addObserver(
-        FileTreeDataView.Observer[LastModified](
-          (_: Entry[LastModified]) => {},
-          (_: Entry[LastModified]) => {},
-          (_: Entry[LastModified], newEntry: Entry[LastModified]) =>
-            if (newEntry.value.fold(_ => 0L, _.at) == updatedLastModified) latch.countDown()
-        )
-      )
+    using(FileTreeRepository.default[LastModified] {
+      case (p: NioPath, a: SimpleFileAttributes) =>
+        CustomFileAttributes.get(p, a, LastModified(Files.getLastModifiedTime(p).toMillis))
+    }) { c =>
+      c.addObserver(new Observer[(NioPath, FileEvent[CustomFileAttributes[LastModified]])] {
+        override def onNext(t: (NioPath, FileEvent[CustomFileAttributes[LastModified]])): Unit = {
+          val (_, event) = t
+          val attributes = event.attributes
+          if (attributes.exists && attributes.value.map(_.at) == Right(updatedLastModified))
+            latch.countDown()
+        }
+      })
       c.register(file.getParent ** AllPassFilter)
-      val Seq(fileEntry) = c.listEntries(file.getParent ** AllPassFilter)
-      val lastModified = fileEntry.value
-      lastModified.right.map((_: LastModified).at) shouldBe Right(
+      val Seq(fileEntry) = c.list(file.getParent ** AllPassFilter, AllPass)
+      val lastModified = fileEntry._2.value
+      lastModified.map((_: LastModified).at) shouldBe Right(
         Files.getLastModifiedTime(file).toMillis)
       Files.setLastModifiedTime(file, FileTime.fromMillis(updatedLastModified))
       assert(latch.await(DEFAULT_TIMEOUT))
-      val Seq(newFileEntry) = c.listEntries(file.getParent ** AllPassFilter)
-      newFileEntry.value.right.map(_.at) shouldBe Right(updatedLastModified)
+      val Seq(newFileEntry) = c.list(file.getParent ** AllPassFilter, AllPass)
+      newFileEntry._2.value.map(_.at) shouldBe Right(updatedLastModified)
     }
   }
-  "results" should "be sortable" in withTempDir { dir =>
-    val file1 = Files.createFile(dir.resolve("file-1"))
-    val file2 = Files.createFile(dir.resolve("file-2"))
-    using(FileTreeRepository.default(_.toPath)) { repo =>
-      repo.register(dir ** AllPassFilter)
-      val res = new util.ArrayList(repo.list(dir ** AllPassFilter).asJava)
-      Collections.shuffle(res)
-      assert(res.asScala.sorted.map(_.toPath) == Seq(file1, file2))
-    }
-  }
-
   private def withThread[R](name: String)(body: => Unit)(f: => R): Unit = {
     val thread = new Thread(s"FileTreeRepositorySpec-$name") {
       override def run(): Unit = body
@@ -234,10 +218,4 @@ class FileTreeRepositorySpec(implicit factory: RepositoryFactory) extends FlatSp
       thread.join(5000L)
     }
   }
-
 }
-class DefaultFileTreeRepositorySpec
-    extends FileTreeRepositorySpec()(new RepositoryFactory {
-      override def newRepository[T](converter: TypedPath => T): FileTreeRepository[T] =
-        FileTreeRepository.default(converter)
-    })

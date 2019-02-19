@@ -12,11 +12,13 @@ package sbt.internal.io
 
 import java.nio.file._
 
+import sbt.internal.io.FileEvent.{ Deletion, Update }
 import sbt.io
 import sbt.io.{ Path => _, _ }
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
+import scala.util.Success
 
 /**
  * Waits for build triggers. Builds can be triggered by source file updates as well as when the
@@ -68,11 +70,16 @@ private[sbt] object EventMonitor {
     val eventLogger = new io.WatchLogger {
       override def debug(msg: => Any): Unit = logger.debug(msg)
     }
-    val observable = new WatchServiceBackedObservable[Path](watchState.toNewWatchState,
-                                                            delay,
-                                                            (_: TypedPath).toPath,
-                                                            closeService = true,
-                                                            eventLogger)
+    val converter: (Path, SimpleFileAttributes) => FileEvent[SimpleFileAttributes] = (p, a) =>
+      if (a.exists) Update(p, a, a) else Deletion(p, a)
+    val underlying: Observable[(Path, SimpleFileAttributes)] =
+      new WatchServiceBackedObservable[SimpleFileAttributes](watchState.toNewWatchState,
+                                                             delay,
+                                                             (p, a) => Success(a),
+                                                             closeService = true,
+                                                             eventLogger)
+    val observable: Observable[FileEvent[SimpleFileAttributes]] =
+      Observable.map(underlying, converter.tupled)
     val monitor =
       FileEventMonitor.antiEntropy(observable, antiEntropy, eventLogger, 50.millis, 10.minutes)
     new EventMonitor {
@@ -81,12 +88,12 @@ private[sbt] object EventMonitor {
       /** Block indefinitely until the monitor receives a file event or the user stops the watch. */
       @tailrec
       override final def awaitEvent(): Boolean = {
-        val triggeredPath = monitor
+        val triggeredEvent = monitor
           .poll(10.millis)
-          .find(p => watchState.sources.exists(s => s.accept(p.entry.typedPath.toPath)))
-        triggeredPath match {
-          case Some(p) =>
-            logger.debug(s"Triggered by ${p.entry.typedPath.toPath}")
+          .find(e => watchState.sources.exists(s => s.accept(e.path)))
+        triggeredEvent match {
+          case Some(e) =>
+            logger.debug(s"Triggered by ${e.path}")
             count += 1
             true
           case _ if terminationCondition => false

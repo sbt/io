@@ -16,6 +16,8 @@ import java.nio.file.{ WatchService => _, _ }
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
+import sbt.internal.io.FileEvent.{ Deletion, Update }
+import sbt.io.FileTreeView.AllPass
 import sbt.io._
 import sbt.io.syntax._
 
@@ -37,12 +39,22 @@ private[sbt] object SourceModificationWatch {
     if (state.count == 0) {
       (true, state.withCount(1))
     } else {
-      val observable = new WatchServiceBackedObservable[Path](state.toNewWatchState,
-                                                              delay,
-                                                              (_: TypedPath).toPath,
-                                                              closeService = false,
-                                                              NullWatchLogger)
-      val monitor =
+      val converter: ((Path, SimpleFileAttributes)) => FileEvent[SimpleFileAttributes] = {
+        case (p, a) =>
+          if (a.exists) Update(p, a, a) else Deletion(p, a)
+      }
+      val observable: Observable[FileEvent[SimpleFileAttributes]] =
+        Observable.map(
+          new WatchServiceBackedObservable[SimpleFileAttributes](
+            state.toNewWatchState,
+            delay,
+            (p: Path, a: SimpleFileAttributes) => a,
+            closeService = false,
+            NullWatchLogger
+          ),
+          converter
+        )
+      val monitor: FileEventMonitor[FileEvent[SimpleFileAttributes]] =
         FileEventMonitor.antiEntropy(observable,
                                      200.milliseconds,
                                      NullWatchLogger,
@@ -132,7 +144,7 @@ private[sbt] final class WatchState private (
   private[sbt] def toNewWatchState: NewWatchState = {
     val globs = ConcurrentHashMap.newKeySet[Glob].asScala
     globs ++= sources.map(s =>
-      Glob(s.base, s.includeFilter -- s.excludeFilter, if (s.recursive) Int.MaxValue else 0))
+      Glob(s.base, if (s.recursive) Int.MaxValue else 0, s.includeFilter -- s.excludeFilter))
     val map = new ConcurrentHashMap[Path, WatchKey]()
     map.putAll(registered.asJava)
     new NewWatchState(globs, service, map.asScala)
@@ -278,12 +290,13 @@ private[sbt] object WatchState {
     globSet ++= globs
     val initFiles = globs.flatMap {
       case glob if glob.depth > 0 =>
-        DefaultFileTreeView.list(glob.base.toGlob).flatMap { d =>
-          d.toPath +: (if (d.isDirectory)
-                         DefaultFileTreeView
-                           .list(glob.withFilter(DirectoryFilter))
-                           .map(_.toPath)
-                       else Nil)
+        DefaultFileTreeView.list(glob.base.toGlob, AllPass).flatMap {
+          case (d, attrs) =>
+            d +: (if (attrs.isDirectory)
+                    DefaultFileTreeView
+                      .list(glob.withFilter(AllPassFilter), _._2.isDirectory)
+                      .map(_._1)
+                  else Nil)
         }
       case glob => Seq(glob.base)
     }.sorted

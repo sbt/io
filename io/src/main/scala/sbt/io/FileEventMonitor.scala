@@ -13,68 +13,32 @@ package sbt.io
 import java.nio.file.{ Path => JPath }
 import java.util.concurrent.{ ArrayBlockingQueue, ConcurrentHashMap, TimeUnit }
 
-import sbt.io.FileTreeDataView.{ Entry, Observable, Observer }
+import sbt.internal.io.FileEvent.{ Creation, Deletion, Update }
+import sbt.internal.io.{ FileEvent, Observable, Observer, SimpleFileAttributes }
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
 /**
- * Provides a blocking interface for awaiting file events.
- * @tparam T the type of [[FileTreeDataView.Entry.value]] instances
+ * Provides a blocking interface for awaiting events from an [[Observable]].
+ * @tparam T the cached value type
  */
 private[sbt] trait FileEventMonitor[+T] extends AutoCloseable {
 
   /**
    * Block for the specified duration until an event is emitted or a timeout occurs.
+   *
    * @param duration the timeout (can be infinite)
-   * @return a sequence of [[FileEventMonitor.Event]] instances.
+   * @return a sequence of [[FileEvent]] instances.
    */
-  def poll(duration: Duration): Seq[FileEventMonitor.Event[T]]
+  def poll(duration: Duration): Seq[T]
 }
 private[sbt] object FileEventMonitor {
-  sealed trait Event[+T] {
-    def entry: Entry[T]
-    def occurredAt: Deadline
-  }
-  object Event {
-    def unapply[T](event: Event[T]): Option[(Entry[T], Deadline)] =
-      Some((event.entry, event.occurredAt))
-  }
 
-  final case class Creation[+T](override val entry: Entry[T],
-                                override val occurredAt: Deadline = Deadline.now)
-      extends Event[T] {
-    override def equals(o: Any): Boolean = o match {
-      case Creation(e, _) => this.entry == e
-      case _              => false
-    }
-    override def hashCode(): Int = entry.hashCode()
-  }
-
-  final case class Update[+T](previous: Entry[T],
-                              entry: Entry[T],
-                              occurredAt: Deadline = Deadline.now)
-      extends Event[T] {
-    override def equals(o: Any): Boolean = o match {
-      case Update(prev, e, _) =>
-        this.previous == prev && this.entry == e
-      case _ => false
-    }
-    override def hashCode(): Int = previous.hashCode() ^ entry.hashCode()
-  }
-
-  final case class Deletion[+T](entry: Entry[T], occurredAt: Deadline = Deadline.now)
-      extends Event[T] {
-    override def equals(o: Any): Boolean = o match {
-      case Deletion(e, _) => this.entry == e
-      case _              => false
-    }
-    override def hashCode(): Int = entry.hashCode()
-  }
-
-  private[sbt] def apply[T](observable: Observable[T],
-                            logger: WatchLogger = NullWatchLogger): FileEventMonitor[T] =
+  def apply[T <: SimpleFileAttributes](
+      observable: Observable[FileEvent[T]],
+      logger: WatchLogger = NullWatchLogger): FileEventMonitor[FileEvent[T]] =
     new FileEventMonitorImpl[T](observable, logger)
 
   /**
@@ -87,7 +51,7 @@ private[sbt] object FileEventMonitor {
    * When the monitor detects a file deletion, it does not actually produce an event for that
    * path until the quarantinePeriod has elapsed or a creation or update event is detected.
    *
-   * @param observable the [[FileTreeDataView.Observable]] to monitor for events
+   * @param observable the [[Observable]] to monitor for events
    * @param period the anti-entropy quarantine period
    * @param logger a debug logger
    * @param quarantinePeriod configures how long we wait before creating an event for a delete file.
@@ -97,14 +61,15 @@ private[sbt] object FileEventMonitor {
    *                        within an anti-entropy window for the event path to trigger. This
    *                        is not a perfect solution, but a smarter solution would require
    *                        introspection of the internal state of the pending events.
-   * @tparam T the generic type for the [[FileTreeDataView.Observable]] that we're monitoring
+   * @tparam T the generic type for the [[Observable]] that we're monitoring
    * @return the [[FileEventMonitor]] instance.
    */
-  private[sbt] def antiEntropy[T](observable: Observable[T],
-                                  period: FiniteDuration,
-                                  logger: WatchLogger,
-                                  quarantinePeriod: FiniteDuration,
-                                  retentionPeriod: FiniteDuration): FileEventMonitor[T] = {
+  def antiEntropy[T <: SimpleFileAttributes](
+      observable: Observable[FileEvent[T]],
+      period: FiniteDuration,
+      logger: WatchLogger,
+      quarantinePeriod: FiniteDuration,
+      retentionPeriod: FiniteDuration): FileEventMonitor[FileEvent[T]] = {
     new AntiEntropyFileEventMonitor(period,
                                     new FileEventMonitorImpl[T](observable, logger),
                                     logger,
@@ -135,19 +100,20 @@ private[sbt] object FileEventMonitor {
    * @tparam T the generic type for the delegate [[FileEventMonitor]] that we're monitoring
    * @return the [[FileEventMonitor]] instance.
    */
-  def antiEntropy[T](monitor: FileEventMonitor[T],
-                     period: FiniteDuration,
-                     logger: WatchLogger,
-                     quarantinePeriod: FiniteDuration,
-                     retentionPeriod: FiniteDuration): FileEventMonitor[T] = {
+  def antiEntropy[T <: SimpleFileAttributes](
+      monitor: FileEventMonitor[FileEvent[T]],
+      period: FiniteDuration,
+      logger: WatchLogger,
+      quarantinePeriod: FiniteDuration,
+      retentionPeriod: FiniteDuration): FileEventMonitor[FileEvent[T]] = {
     new AntiEntropyFileEventMonitor(period, monitor, logger, quarantinePeriod, retentionPeriod)
   }
 
-  private class FileEventMonitorImpl[T](observable: Observable[T], logger: WatchLogger)
-      extends FileEventMonitor[T] {
+  private class FileEventMonitorImpl[T](observable: Observable[FileEvent[T]], logger: WatchLogger)
+      extends FileEventMonitor[FileEvent[T]] {
     private case object Trigger
     private val events =
-      new ConcurrentHashMap[JPath, FileEventMonitor.Event[T]]().asScala
+      new ConcurrentHashMap[JPath, FileEvent[T]]().asScala
     private val queue = new ArrayBlockingQueue[Trigger.type](1)
     private val lock = new Object
     /*
@@ -156,47 +122,44 @@ private[sbt] object FileEventMonitor {
      * state of the file system and the new state, but without the incremental changes that may
      * have occurred along the way.
      */
-    private def add(event: Event[T]): Unit = {
-      def put(path: JPath, event: FileEventMonitor.Event[T]): Unit = lock.synchronized {
+    private def add(event: FileEvent[T]): Unit = {
+      def put(path: JPath, event: FileEvent[T]): Unit = lock.synchronized {
         events.put(path, event)
         queue.offer(Trigger)
         ()
       }
       logger.debug(s"Received $event")
-      val path = event.entry.typedPath.toPath
+      val path = event.path
       lock.synchronized(events.putIfAbsent(path, event)) match {
         case Some(d: Deletion[T]) =>
           event match {
             case _: Deletion[T] =>
-            case Update(previous, _, _) =>
-              put(path, Deletion(previous, event.occurredAt))
-            case _ => put(path, Update(d.entry, event.entry, event.occurredAt))
+            case Update(_, previous, _, _) =>
+              put(path, Deletion(path, previous, event.occurredAt))
+            case _ => put(path, Update(path, d.attributes, event.attributes, event.occurredAt))
           }
         case Some(_: Creation[T]) =>
           event match {
             case _: Deletion[T] => events.remove(path)
-            case _: Update[T]   => put(path, new Creation(event.entry, event.occurredAt))
+            case _: Update[T]   => put(path, Creation(path, event.attributes, event.occurredAt))
             case _              => put(path, event)
           }
-        case Some(Update(previous, _, ts)) =>
+        case Some(Update(_, previous, _, ts)) =>
           event match {
-            case _: Deletion[T] => put(path, Deletion(previous, ts))
-            case e              => put(path, Update(previous, e.entry, ts))
+            case _: Deletion[T] => put(path, Deletion(path, previous, ts))
+            case e              => put(path, Update(path, previous, e.attributes, ts))
           }
         case None =>
           lock.synchronized(queue.offer(Trigger))
       }
       ()
     }
-    private val handle = observable.addObserver(
-      Observer(
-        (entry: Entry[T]) => add(Creation(entry)),
-        (entry: Entry[T]) => add(Deletion(entry)),
-        (previous: Entry[T], current: Entry[T]) => add(Update(previous, current))
-      ))
+    private val handle = observable.addObserver(new Observer[FileEvent[T]] {
+      override def onNext(event: FileEvent[T]): Unit = add(event)
+    })
 
     @tailrec
-    final override def poll(duration: Duration): Seq[FileEventMonitor.Event[T]] = {
+    final override def poll(duration: Duration): Seq[FileEvent[T]] = {
       val start = Deadline.now
       if (lock.synchronized(events.isEmpty) && duration > 0.seconds) {
         duration match {
@@ -217,22 +180,24 @@ private[sbt] object FileEventMonitor {
             case d: FiniteDuration => if (now < start + d) poll((start + d) - now) else Nil
             case _                 => poll(duration)
           }
-        case e => e
+        case e =>
+          e
       }
     }
 
     override def close(): Unit = {
-      observable.removeObserver(handle)
+      handle.close()
       events.clear()
       observable.close()
     }
   }
-  private class AntiEntropyFileEventMonitor[T](period: FiniteDuration,
-                                               fileEventMonitor: FileEventMonitor[T],
-                                               logger: WatchLogger,
-                                               quarantinePeriod: FiniteDuration,
-                                               retentionPeriod: FiniteDuration)
-      extends FileEventMonitor[T] {
+  private class AntiEntropyFileEventMonitor[T <: SimpleFileAttributes](
+      period: FiniteDuration,
+      fileEventMonitor: FileEventMonitor[FileEvent[T]],
+      logger: WatchLogger,
+      quarantinePeriod: FiniteDuration,
+      retentionPeriod: FiniteDuration)
+      extends FileEventMonitor[FileEvent[T]] {
     private[this] val antiEntropyDeadlines = new ConcurrentHashMap[JPath, Deadline].asScala
     /*
      * It is very common for file writes to be implemented as a move, which manifests as a delete
@@ -244,9 +209,9 @@ private[sbt] object FileEventMonitor {
      * creation is detected. This provides a reasonable compromise between low latency and
      * correctness.
      */
-    private[this] val quarantinedEvents = new ConcurrentHashMap[JPath, Event[T]].asScala
+    private[this] val quarantinedEvents = new ConcurrentHashMap[JPath, FileEvent[T]].asScala
     @tailrec
-    override final def poll(duration: Duration): Seq[Event[T]] = {
+    override final def poll(duration: Duration): Seq[FileEvent[T]] = {
       val start = Deadline.now
       /*
        * The impl is tail recursive to handle the case when we quarantine a deleted file or find
@@ -259,16 +224,15 @@ private[sbt] object FileEventMonitor {
        * Note that this transformation is not purely functional because it has the side effect of
        * modifying the quarantinedEvents and antiEntropyDeadlines maps.
        */
-      val transformed = results.flatMap {
-        case event @ Event(entry @ Entry(typedPath, _), occurredAt) =>
-          val path = typedPath.toPath
-          val quarantined = if (typedPath.exists) quarantinedEvents.remove(path) else None
+      val transformed: Seq[FileEvent[T]] = results.flatMap {
+        case event @ FileEvent(path, attributes, occurredAt) =>
+          val quarantined = if (event.attributes.exists) quarantinedEvents.remove(path) else None
           quarantined match {
-            case Some(Deletion(deletedEntry, deletionTs)) =>
+            case Some(Deletion(_, oldAttributes, deletionTs)) =>
               antiEntropyDeadlines.put(path, deletionTs + period)
               logger.debug(
                 s"Triggering event for newly created path $path that was previously quarantined.")
-              Some(Update(deletedEntry, entry, deletionTs))
+              Some(Update(path, oldAttributes, attributes, deletionTs))
             case _ =>
               antiEntropyDeadlines.get(path) match {
                 case Some(deadline) if occurredAt <= deadline =>
@@ -277,7 +241,7 @@ private[sbt] object FileEventMonitor {
                     "the last event for this path."
                   logger.debug(msg)
                   None
-                case _ if !typedPath.exists =>
+                case _ if !attributes.exists =>
                   quarantinedEvents.put(path, event)
                   logger.debug(s"Quarantining deletion event for path $path for $period")
                   None
@@ -288,7 +252,7 @@ private[sbt] object FileEventMonitor {
               }
           }
       } ++ quarantinedEvents.collect {
-        case (path, event @ Deletion(_, deadline)) if (deadline + quarantinePeriod).isOverdue =>
+        case (path, event @ Deletion(_, _, deadline)) if (deadline + quarantinePeriod).isOverdue =>
           quarantinedEvents.remove(path)
           antiEntropyDeadlines.put(path, deadline + period)
           logger.debug(s"Triggering event for previously quarantined deleted file: $path")
@@ -301,8 +265,8 @@ private[sbt] object FileEventMonitor {
       // window for the path. By setting a long retention time, we try to avoid this.
       antiEntropyDeadlines.retain((_, deadline) => !(deadline + retentionPeriod).isOverdue)
       transformed match {
-        case s if s.nonEmpty => s
-        case _ =>
+        case s: Seq[FileEvent[T]] if s.nonEmpty => s
+        case s =>
           val limit = duration - (Deadline.now - start)
           if (limit > 0.millis) poll(limit) else Nil
       }

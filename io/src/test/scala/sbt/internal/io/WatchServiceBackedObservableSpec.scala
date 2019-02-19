@@ -6,7 +6,6 @@ import java.nio.file.{ Files, Path, WatchKey }
 import java.util.concurrent.{ ConcurrentHashMap, CountDownLatch, TimeUnit }
 
 import org.scalatest.FlatSpec
-import sbt.io.FileTreeDataView.Observer
 import sbt.io._
 import sbt.io.syntax._
 
@@ -22,22 +21,18 @@ class WatchServiceBackedObservableSpec extends FlatSpec {
                         WatchService.default,
                         new ConcurrentHashMap[Path, WatchKey].asScala)
     val observable =
-      new WatchServiceBackedObservable[Path](watchState,
-                                             100.millis,
-                                             (_: TypedPath).toPath,
-                                             closeService = true,
-                                             new WatchLogger {
-                                               override def debug(msg: => Any): Unit = {}
-                                             })
+      new WatchServiceBackedObservable(watchState,
+                                       100.millis,
+                                       (_: Path, _: SimpleFileAttributes) => (),
+                                       closeService = true,
+                                       new WatchLogger {
+                                         override def debug(msg: => Any): Unit = {}
+                                       })
     try {
       val latch = new CountDownLatch(1)
       val file = subdir.resolve("file")
-      observable.addObserver(new Observer[Path] {
-        override def onCreate(newEntry: FileTreeDataView.Entry[Path]): Unit =
-          if (newEntry.typedPath.toPath == file) latch.countDown()
-        override def onDelete(oldEntry: FileTreeDataView.Entry[Path]): Unit = {}
-        override def onUpdate(oldEntry: FileTreeDataView.Entry[Path],
-                              newEntry: FileTreeDataView.Entry[Path]): Unit = {}
+      observable.addObserver(new Observer[(Path, Unit)] {
+        override def onNext(t: (Path, Unit)): Unit = if (t._1 == file) latch.countDown()
       })
       observable.register(path ** AllPassFilter)
       Files.createFile(file)
