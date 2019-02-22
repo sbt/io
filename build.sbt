@@ -3,9 +3,6 @@ import com.typesafe.tools.mima.core._, ProblemFilters._
 
 
 ThisBuild / scalafmtOnCompile := true
-ThisBuild / Sbt / scalafmtOnCompile := false
-ThisBuild / scalafmtVersion := "1.4.0"
-
 ThisBuild / git.baseVersion := "1.3.0"
 ThisBuild / bintrayPackage := "io"
 ThisBuild / homepage := Some(url("https://github.com/sbt/io"))
@@ -26,7 +23,7 @@ ThisBuild / headerLicense  := Some(HeaderLicense.Custom(
 def commonSettings: Seq[Setting[_]] = Seq(
   scalaVersion := scala212,
   javacOptions in compile ++= Seq("-Xlint", "-Xlint:-serial"),
-  crossScalaVersions := Seq(scala210, scala211, scala212, scala213),
+  crossScalaVersions := Seq(scala212, scala213),
   headerLicense := (ThisBuild / headerLicense).value,
 )
 

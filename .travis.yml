@@ -8,46 +8,16 @@ env:
 
 matrix:
   include:
-   - scala: 2.10.7
-     env:
-         CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
-         TRAVIS_SCALA_VERSION=2.10.7
-     os: linux
-     dist: trusty
-
-   - scala: 2.10.7
-     os: osx
-     env:
-       CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
-       TRAVIS_SCALA_VERSION=2.10.7
-     language: java
-     osx_image: xcode9.3
-
-   - scala: 2.11.12
-     env:
-       CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
-       TRAVIS_SCALA_VERSION=2.11.12
-     os: linux
-     dist: trusty
-
-   - scala: 2.11.12
-     os: osx
-     env:
-       CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
-       TRAVIS_SCALA_VERSION=2.11.12
-     language: java
-     osx_image: xcode9.3
-
    - scala: 2.12.8
      env:
-         CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test whitesourceCheckPolicies"
+         CMD="mimaReportBinaryIssues scalafmtCheck test whitesourceCheckPolicies"
          TRAVIS_SCALA_VERSION=2.12.8
      os: linux
      dist: trusty
 
    - scala: 2.12.8
      env:
-         CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+         CMD="mimaReportBinaryIssues test"
          TRAVIS_SCALA_VERSION=2.12.8
      os: linux
      dist: trusty
@@ -56,14 +26,14 @@ matrix:
    - scala: 2.12.8
      os: osx
      env:
-       CMD="mimaReportBinaryIssues scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+       CMD="mimaReportBinaryIssues test"
        TRAVIS_SCALA_VERSION=2.12.8
      language: java
      osx_image: xcode9.3
 
    - scala: 2.13.0-M5
      env:
-       CMD="scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+       CMD="test"
        TRAVIS_SCALA_VERSION=2.13.0-M5
      os: linux
      dist: trusty
@@ -71,7 +41,7 @@ matrix:
    - scala: 2.13.0-M5
      os: osx
      env:
-       CMD="scalafmt::test test:scalafmt::test sbt:scalafmt::test test"
+       CMD="test"
        TRAVIS_SCALA_VERSION=2.13.0-M5
      language: java
      osx_image: xcode9.3
