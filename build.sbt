@@ -6,24 +6,33 @@ ThisBuild / scalafmtOnCompile := true
 ThisBuild / Sbt / scalafmtOnCompile := false
 ThisBuild / scalafmtVersion := "1.4.0"
 
+ThisBuild / git.baseVersion := "1.3.0"
+ThisBuild / bintrayPackage := "io"
+ThisBuild / homepage := Some(url("https://github.com/sbt/io"))
+ThisBuild / description := "IO module for sbt"
+ThisBuild / scmInfo := Some(ScmInfo(url("https://github.com/sbt/io"), "git@github.com:sbt/io.git"))
+ThisBuild / licenses := List(("Apache-2.0", url("https://www.apache.org/licenses/LICENSE-2.0")))
+ThisBuild / headerLicense  := Some(HeaderLicense.Custom(
+  s"""sbt IO
+     |
+     |Copyright 2011 - 2019, Lightbend, Inc.
+     |Copyright 2008 - 2010, Mark Harrah
+     |
+     |Licensed under Apache License 2.0
+     |(http://www.apache.org/licenses/LICENSE-2.0).
+     |""".stripMargin
+))
+
 def commonSettings: Seq[Setting[_]] = Seq(
   scalaVersion := scala212,
   javacOptions in compile ++= Seq("-Xlint", "-Xlint:-serial"),
   crossScalaVersions := Seq(scala210, scala211, scala212, scala213),
+  headerLicense := (ThisBuild / headerLicense).value,
 )
 
 lazy val ioRoot = (project in file("."))
   .aggregate(io)
   .settings(
-    inThisBuild(
-      Seq(
-        git.baseVersion := "1.3.0",
-        bintrayPackage := "io",
-        homepage := Some(url("https://github.com/sbt/io")),
-        description := "IO module for sbt",
-        scmInfo := Some(ScmInfo(url("https://github.com/sbt/io"), "git@github.com:sbt/io.git")),
-        scalafmtOnCompile in Sbt := false,
-      )),
     commonSettings,
     name := "IO Root",
     skip in publish := true,
