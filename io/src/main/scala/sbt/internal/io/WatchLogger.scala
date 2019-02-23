@@ -8,7 +8,7 @@
  * (http://www.apache.org/licenses/LICENSE-2.0).
  */
 
-package sbt.io
+package sbt.internal.io
 
 private[sbt] trait WatchLogger {
   def debug(msg: => Any): Unit

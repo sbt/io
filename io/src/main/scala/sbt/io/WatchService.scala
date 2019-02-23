@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.annotation.tailrec
 import scala.collection.{ immutable, mutable }
 import scala.collection.JavaConverters._
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.{ Duration, FiniteDuration }
 import scala.util.Properties
 
 object WatchService {
@@ -100,7 +100,7 @@ object WatchService {
   }
   private[sbt] def default: WatchService =
     if (Properties.isMac) new MacOSXWatchService else FileSystems.getDefault.newWatchService
-
+  def polling(delay: FiniteDuration): WatchService = new PollingWatchService(delay)
 }
 
 /**
@@ -142,7 +142,7 @@ trait WatchService {
   def close(): Unit
 }
 
-trait Unregisterable { self: WatchService =>
+private[sbt] trait Unregisterable { self: WatchService =>
 
   /**
    * Unregisters a monitored path.
@@ -150,3 +150,7 @@ trait Unregisterable { self: WatchService =>
    */
   def unregister(path: JPath): Unit
 }
+
+private[io] class MacOSXWatchService extends sbt.internal.io.MacOSXWatchService
+private[io] class PollingWatchService(delay: FiniteDuration)
+    extends sbt.internal.io.PollingWatchService(delay)

@@ -8,7 +8,7 @@
  * (http://www.apache.org/licenses/LICENSE-2.0).
  */
 
-package sbt.io
+package sbt.internal.io
 
 import java.io.IOException
 import java.nio.file.{ WatchEvent, WatchKey, Path => JPath }
@@ -16,11 +16,13 @@ import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.{ ConcurrentHashMap, TimeUnit }
 
+import sbt.io.{ Unregisterable, WatchService }
+
 import scala.collection.JavaConverters._
 import scala.collection.{ immutable, mutable }
 import scala.concurrent.duration._
 
-class MacOSXWatchService extends WatchService with Unregisterable {
+private[sbt] class MacOSXWatchService extends WatchService with Unregisterable {
   private val underlying = com.swoval.files.RegisterableWatchServices.get()
   private val keys: mutable.Map[JPath, WatchKey] =
     Collections.synchronizedMap(new ConcurrentHashMap[JPath, WatchKey]()).asScala

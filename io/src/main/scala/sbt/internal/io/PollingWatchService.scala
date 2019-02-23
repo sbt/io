@@ -8,7 +8,7 @@
  * (http://www.apache.org/licenses/LICENSE-2.0).
  */
 
-package sbt.io
+package sbt.internal.io
 
 import java.nio.file.StandardWatchEventKinds._
 import java.nio.file.{
@@ -23,8 +23,8 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.{ Collections, Comparator, List => JList }
 
-import sbt.internal.io.SimpleFileAttributes
 import sbt.io.FileTreeView.AllPass
+import sbt.io._
 import sbt.io.syntax._
 
 import scala.annotation.tailrec
@@ -34,7 +34,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 
 /** A `WatchService` that polls the filesystem every `delay`. */
-class PollingWatchService(delay: FiniteDuration) extends WatchService with Unregisterable {
+private[sbt] class PollingWatchService(delay: FiniteDuration)
+    extends WatchService
+    with Unregisterable {
   private[this] val closed = new AtomicBoolean(false)
   private[this] val thread = new PollingThread
   private[this] val registered = new ConcurrentHashMap[NioPath, PollingWatchKey].asScala

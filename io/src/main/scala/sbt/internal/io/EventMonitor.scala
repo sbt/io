@@ -13,8 +13,7 @@ package sbt.internal.io
 import java.nio.file._
 
 import sbt.internal.io.FileEvent.{ Deletion, Update }
-import sbt.io
-import sbt.io.{ Path => _, _ }
+import sbt.io.{ Path => _ }
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -67,7 +66,7 @@ private[sbt] object EventMonitor {
             antiEntropy: FiniteDuration,
             terminationCondition: => Boolean,
             logger: Logger = NullLogger): EventMonitor = {
-    val eventLogger = new io.WatchLogger {
+    val eventLogger = new WatchLogger {
       override def debug(msg: => Any): Unit = logger.debug(msg)
     }
     val converter: (Path, SimpleFileAttributes) => FileEvent[SimpleFileAttributes] = (p, a) =>

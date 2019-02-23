@@ -2,8 +2,6 @@ package sbt.internal.io
 
 import java.nio.file.FileSystems
 
-import sbt.io.MacOSXWatchService
-
 import scala.concurrent.duration._
 import scala.util.Properties
 
