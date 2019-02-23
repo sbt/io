@@ -19,7 +19,7 @@ import sbt.io.FileTreeDataView.Entry
 /**
  * Represents a filtered subtree of the file system.
  */
-sealed trait Glob {
+trait Glob {
 
   /**
    * The root of the file system subtree.
