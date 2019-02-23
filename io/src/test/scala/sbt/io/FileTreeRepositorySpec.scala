@@ -68,31 +68,32 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
   }
   it should "detect new files" in withTempDir { dir =>
     val latch = new CountDownLatch(1)
-    using(simpleCache((_: NioPath) => latch.countDown())) { c =>
+    val file = dir.resolve("file")
+    using(simpleCache((p: NioPath) => if (p == file) latch.countDown())) { c =>
       c.register(dir ** AllPassFilter)
-      withTempFile(dir) { f =>
-        assert(latch.await(DEFAULT_TIMEOUT))
-        c.ls(dir ** AllPassFilter) shouldBe Seq(f)
-      }
+      Files.createFile(file)
+      assert(latch.await(DEFAULT_TIMEOUT))
+      c.ls(dir ** AllPassFilter) shouldBe Seq(file)
     }
   }
   it should "detect new subdirectories" in withTempDir { dir =>
     val latch = new CountDownLatch(1)
-    using(simpleCache((_: NioPath) => latch.countDown())) { c =>
+    val subdir = dir.resolve("subdir")
+    using(simpleCache((p: NioPath) => if (p == subdir) latch.countDown())) { c =>
       c.register(dir ** AllPassFilter)
-      withTempDir(dir) { subdir =>
-        assert(latch.await(DEFAULT_TIMEOUT))
-        c.ls(dir ** AllPassFilter) shouldBe Seq(subdir)
-      }
+      Files.createDirectories(subdir)
+      assert(latch.await(DEFAULT_TIMEOUT))
+      c.ls(dir ** AllPassFilter) shouldBe Seq(subdir)
     }
   }
   it should "detect move events" in withTempDir { dir =>
-    val latch = new CountDownLatch(2)
+    val latch = new CountDownLatch(1)
     val initial = Files.createTempFile(dir, "move", "")
     val moved = NioPaths.get(s"${initial.toString}.moved")
-    val onChange = (_: NioPath, _: CustomFileAttributes[Unit]) => latch.countDown()
+    val onChange = (p: NioPath, _: CustomFileAttributes[Unit]) => if (p == moved) latch.countDown()
     val onUpdate =
-      (_: (NioPath, CustomFileAttributes[Unit]), _: (NioPath, CustomFileAttributes[Unit])) => {}
+      (_: (NioPath, CustomFileAttributes[Unit]), pair: (NioPath, CustomFileAttributes[Unit])) =>
+        if (pair._1 == moved) latch.countDown()
     using(simpleCache(FileEvent.observer(onChange, onChange, onUpdate))) { c =>
       c.register(dir ** AllPassFilter)
       c.ls(dir * AllPassFilter) === Seq(initial)
