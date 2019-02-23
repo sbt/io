@@ -35,16 +35,4 @@ class GlobAsFilterSpec extends FlatSpec {
     val nothingGlob = dir ** NothingFilter
     Seq(dir, file, nestedFile).foreach(f => assert(!nothingGlob.toFileFilter.accept(f)))
   }
-  it should "work with traversable globs" in IO.withTemporaryDirectory { dir =>
-    val file = new File(dir, "file")
-    val subdir = new File(dir, "subdir")
-    val nestedFile = new File(new File(dir, "subdir"), "subdir-file")
-    val globs = Seq(dir * AllPassFilter, subdir * AllPassFilter)
-    assert(!globs.toFileFilter(acceptBase = false).accept(dir))
-    val filter = globs.toFileFilter
-    assert(filter.accept(dir))
-    assert(filter.accept(file))
-    assert(filter.accept(subdir))
-    assert(filter.accept(nestedFile))
-  }
 }

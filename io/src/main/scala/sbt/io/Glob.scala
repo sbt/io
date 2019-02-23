@@ -160,44 +160,4 @@ object Glob {
       case _                  => false
     }
   }
-
-  /**
-   * Provides extension methods for converting a Traversable[Glob] into a file filter.
-   * @param t the collection of [[Glob]]s
-   * @tparam T the generic collection type
-   */
-  private[sbt] implicit class TraversableGlobOps[T <: Traversable[Glob]](val t: T) extends AnyVal {
-
-    /**
-     * Returns a [[FileFilter]] that accepts a file if any glob in the collection accepts the file.
-     * The filter will accept the base file of each [[Glob]] in the collection.
-
-     * @return the [[FileFilter]].
-     */
-    def toFileFilter: FileFilter = new TraversableGlobOps.Filter(t, true)
-
-    /**
-     * Returns a [[FileFilter]] that accepts a file if any glob in the collection accepts the file.
-     *
-     * @param acceptBase toggles whether or not the base file of a [[Glob]] should be accepted by the
-     *                   filter
-     * @return the [[FileFilter]].
-     */
-    def toFileFilter(acceptBase: Boolean): FileFilter = new TraversableGlobOps.Filter(t, acceptBase)
-
-  }
-  private[sbt] object TraversableGlobOps {
-    private class Filter[T <: Traversable[Glob]](private val t: T, private val acceptBase: Boolean)
-        extends FileFilter {
-      private[this] val filters = t.map(_.toFileFilter(acceptBase))
-      override def accept(pathname: File): Boolean = filters.exists(_.accept(pathname))
-      override def equals(o: Any): Boolean = o match {
-        case that: Filter[_] => this.t == that.t && this.acceptBase == that.acceptBase
-        case _               => false
-      }
-      override def hashCode: Int = (t.hashCode * 31) ^ acceptBase.hashCode
-      override def toString: String =
-        s"TraversableGlobFilter(filters = $t, acceptBase = $acceptBase)"
-    }
-  }
 }
