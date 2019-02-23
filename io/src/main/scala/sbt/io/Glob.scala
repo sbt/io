@@ -41,7 +41,7 @@ trait Glob {
   def filter: NioPath => Boolean
 
 }
-sealed trait GlobBuilder[G] extends Any {
+private[sbt] sealed trait GlobBuilder[G] extends Any {
   def /(component: String): G
   def \(component: String): G
   def glob(filter: FileFilter): G
@@ -50,7 +50,7 @@ sealed trait GlobBuilder[G] extends Any {
   def allPaths: G
   def **(filter: FileFilter): G
 }
-sealed trait ToGlob extends Any {
+private[sbt] sealed trait ToGlob extends Any {
   def toGlob: Glob
 }
 object Glob {
@@ -99,11 +99,11 @@ object Glob {
       Glob(base, -1, new ExactFileFilter(base.toFile))
     }
   }
-  final class FileBuilder(val file: File) extends AnyVal with Builder[File] {
+  private[sbt] final class FileBuilder(val file: File) extends AnyVal with Builder[File] {
     override def repr: File = file
     override def converter: File => NioPath = (_: File).toPath
   }
-  final class PathBuilder(val path: NioPath) extends AnyVal with Builder[NioPath] {
+  private[sbt] final class PathBuilder(val path: NioPath) extends AnyVal with Builder[NioPath] {
     override def repr: NioPath = path
     override def converter: NioPath => NioPath = identity
   }
@@ -138,7 +138,7 @@ object Glob {
    * @param acceptBase toggles whether or not we should accept the base path even when the depth is
    *                   greater than or equal to zero.
    */
-  final class GlobAsFilter(private val glob: Glob, private val acceptBase: Boolean)
+  private final class GlobAsFilter(private val glob: Glob, private val acceptBase: Boolean)
       extends FileFilter {
     override def accept(pathname: File): Boolean = {
       val path = pathname.toPath
