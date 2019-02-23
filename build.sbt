@@ -118,7 +118,7 @@ val io = (project in file("io"))
       exclude[MissingClassProblem]("sbt.io.PollingWatchService$Overflow$"),
 
       // private internal classes whose functionality has been replaced
-      exclude[MissingClassProblem]("sbt.internal.io.EventMonitor$*"),
+      exclude[MissingClassProblem]("sbt.internal.io.EventMonitor*"),
       exclude[DirectMissingMethodProblem]("sbt.internal.io.EventMonitor.legacy"),
       exclude[DirectMissingMethodProblem]("sbt.internal.io.EventMonitor.applyImpl"),
 
