@@ -25,27 +25,29 @@ private[sbt] object DefaultFileTreeView extends NioFileTreeView[SimpleFileAttrib
     else
       FileTreeViews.getDefault(true)
 
-  override def list(glob: Glob, filter: ((NioPath, SimpleFileAttributes)) => Boolean)
-    : Seq[(NioPath, SimpleFileAttributes)] = {
-    try {
-      fileTreeView
-        .list(glob.base, glob.depth, new Filter[TypedPath] {
-          override def accept(t: TypedPath): Boolean = true
-        })
-        .asScala
-        .flatMap { typedPath =>
-          val path = typedPath.getPath
-          val attributes = SimpleFileAttributes.get(typedPath.exists,
-                                                    typedPath.isDirectory,
-                                                    typedPath.isFile,
-                                                    typedPath.isSymbolicLink)
-          val pair = path -> attributes
-          if (glob.filter(path) && filter(pair)) Some(pair) else None
-        }
-        .toIndexedSeq
-    } catch {
-      case _: NoSuchFileException | _: NotDirectoryException =>
-        Nil
+  override def list(
+      glob: Glob,
+      filter: ((NioPath, SimpleFileAttributes)) => Boolean): Seq[(NioPath, SimpleFileAttributes)] =
+    Retry {
+      try {
+        fileTreeView
+          .list(glob.base, glob.depth, new Filter[TypedPath] {
+            override def accept(t: TypedPath): Boolean = true
+          })
+          .asScala
+          .flatMap { typedPath =>
+            val path = typedPath.getPath
+            val attributes = SimpleFileAttributes.get(typedPath.exists,
+                                                      typedPath.isDirectory,
+                                                      typedPath.isFile,
+                                                      typedPath.isSymbolicLink)
+            val pair = path -> attributes
+            if (glob.filter(path) && filter(pair)) Some(pair) else None
+          }
+          .toIndexedSeq
+      } catch {
+        case _: NoSuchFileException | _: NotDirectoryException =>
+          Nil
+      }
     }
-  }
 }
