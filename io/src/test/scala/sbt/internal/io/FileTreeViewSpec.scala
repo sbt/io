@@ -1,10 +1,10 @@
-package sbt.io
+package sbt.internal.io
 
 import java.nio.file._
 
 import org.scalatest.FlatSpec
-import sbt.internal.io.FileTreeView
 import sbt.internal.io.FileTreeView.AllPass
+import sbt.io.{ AllPassFilter, IO }
 import sbt.io.syntax._
 
 class FileTreeViewSpec extends FlatSpec {

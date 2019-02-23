@@ -1,14 +1,13 @@
-package sbt.io
+package sbt.internal.io
 
 import java.nio.file.attribute.FileTime
 import java.nio.file.{ Files, Path => NioPath, Paths => NioPaths }
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import org.scalatest.{ FlatSpec, Matchers }
-import sbt.internal.io._
-import sbt.io.FileTreeRepositorySpec._
-import FileTreeView.AllPass
+import sbt.internal.io.FileTreeView.AllPass
 import sbt.io.syntax._
+import sbt.io.{ AllPassFilter, Glob, IO }
 
 import scala.concurrent.duration._
 
@@ -59,6 +58,7 @@ object FileTreeRepositorySpec {
   case class LastModified(at: Long)
 }
 class FileTreeRepositorySpec extends FlatSpec with Matchers {
+  import FileTreeRepositorySpec._
   "register" should "see existing files" in withTempFile { file =>
     using(simpleCache((_: NioPath) => {})) { c =>
       val glob = file.getParent ** AllPassFilter
