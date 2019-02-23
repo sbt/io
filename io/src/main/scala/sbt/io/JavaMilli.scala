@@ -11,9 +11,8 @@
 package sbt.io
 
 import java.io.FileNotFoundException
-import java.nio.file.{ Files, NoSuchFileException }
-import java.nio.file.{ Paths => JPaths }
 import java.nio.file.attribute.FileTime
+import java.nio.file.{ Files, NoSuchFileException, Paths => JPaths }
 
 import sbt.internal.io.MilliMilliseconds
 

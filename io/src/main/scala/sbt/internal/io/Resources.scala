@@ -11,6 +11,7 @@
 package sbt.internal.io
 
 import java.io.File
+
 import sbt.io.IO
 
 private[sbt] object Resources {

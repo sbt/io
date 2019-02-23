@@ -12,11 +12,10 @@ package sbt
 package io
 
 import java.io._
-import java.util.zip.GZIPInputStream
 import java.net.URL
 import java.nio.charset.Charset
 import java.util.jar.{ JarFile, JarInputStream, JarOutputStream }
-import java.util.zip._
+import java.util.zip.{ GZIPInputStream, _ }
 
 import sbt.internal.io.ErrorHandling.translate
 

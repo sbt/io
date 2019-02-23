@@ -10,39 +10,24 @@
 
 package sbt.internal.io
 
-import java.io.IOException
-import java.io.FileNotFoundException
-import java.io.File
+import java.io.{ File, FileNotFoundException, IOException }
+import java.nio.{ ByteBuffer, ByteOrder }
 import java.util.Date
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-
-import scala.reflect.{ ClassTag, classTag }
-import scala.collection.JavaConverters.mapAsJavaMapConverter
-
-import com.sun.jna.NativeMapped
-import com.sun.jna.Library
-import com.sun.jna.FromNativeContext
-import com.sun.jna.{ Native => JNANative }
-import com.sun.jna.Platform
 
 import com.sun.jna.platform.win32.Kernel32
-import com.sun.jna.platform.win32.WinNT.FILE_SHARE_READ
-import com.sun.jna.platform.win32.WinNT.FILE_SHARE_WRITE
-import com.sun.jna.platform.win32.WinNT.FILE_SHARE_DELETE
-import com.sun.jna.platform.win32.WinNT.FILE_READ_ATTRIBUTES
-import com.sun.jna.platform.win32.WinNT.FILE_WRITE_ATTRIBUTES
-import com.sun.jna.platform.win32.WinNT.FILE_FLAG_BACKUP_SEMANTICS
-import com.sun.jna.platform.win32.WinNT.OPEN_EXISTING
-import com.sun.jna.platform.win32.WinNT.HANDLE
-import com.sun.jna.platform.win32.WinBase.INVALID_HANDLE_VALUE
-import com.sun.jna.platform.win32.WinBase.FILETIME
-import com.sun.jna.platform.win32.WinError.ERROR_FILE_NOT_FOUND
-import com.sun.jna.platform.win32.WinError.ERROR_PATH_NOT_FOUND
-import com.sun.jna.platform.win32.WinError.ERROR_ACCESS_DENIED
-
-import sbt.io.JavaMilli
+import com.sun.jna.platform.win32.WinBase.{ FILETIME, INVALID_HANDLE_VALUE }
+import com.sun.jna.platform.win32.WinError.{
+  ERROR_ACCESS_DENIED,
+  ERROR_FILE_NOT_FOUND,
+  ERROR_PATH_NOT_FOUND
+}
+import com.sun.jna.platform.win32.WinNT._
+import com.sun.jna.{ FromNativeContext, Library, NativeMapped, Platform, Native => JNANative }
 import sbt.internal.io.MacJNA._
+import sbt.io.JavaMilli
+
+import scala.collection.JavaConverters.mapAsJavaMapConverter
+import scala.reflect.{ ClassTag, classTag }
 
 private abstract class Stat[Time_T](size: Int) extends NativeMapped {
   val buffer = ByteBuffer.allocate(size).order(ByteOrder.nativeOrder())
@@ -267,7 +252,7 @@ private object MacMilli extends PosixMilliLong[Mac] {
 }
 
 private object WinMilli extends MilliNative[FILETIME] {
-  import Kernel32.INSTANCE.{ CreateFile, GetLastError, CloseHandle, GetFileTime, SetFileTime }
+  import Kernel32.INSTANCE._
 
   private def getHandle(lpFileName: String, dwDesiredAccess: Int, dwShareMode: Int): HANDLE = {
     val hFile = CreateFile(lpFileName,

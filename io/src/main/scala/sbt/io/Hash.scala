@@ -76,7 +76,7 @@ object Hash {
 
   /** Calculates the SHA-1 hash of the given stream, closing it when finished.*/
   def apply(stream: InputStream): Array[Byte] = {
-    import java.security.{ MessageDigest, DigestInputStream }
+    import java.security.{ DigestInputStream, MessageDigest }
     val digest = MessageDigest.getInstance("SHA")
     try {
       val dis = new DigestInputStream(stream, digest)
