@@ -7,7 +7,7 @@ import java.util.concurrent.{ CountDownLatch, TimeUnit }
 import org.scalatest.{ FlatSpec, Matchers }
 import sbt.internal.io._
 import sbt.io.FileTreeRepositorySpec._
-import sbt.io.FileTreeView.AllPass
+import FileTreeView.AllPass
 import sbt.io.syntax._
 
 import scala.concurrent.duration._

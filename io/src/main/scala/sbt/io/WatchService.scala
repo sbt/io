@@ -151,6 +151,6 @@ private[sbt] trait Unregisterable { self: WatchService =>
   def unregister(path: JPath): Unit
 }
 
-private[io] class MacOSXWatchService extends sbt.internal.io.MacOSXWatchService
-private[io] class PollingWatchService(delay: FiniteDuration)
+private[sbt] class MacOSXWatchService extends sbt.internal.io.MacOSXWatchService
+private[sbt] class PollingWatchService(delay: FiniteDuration)
     extends sbt.internal.io.PollingWatchService(delay)

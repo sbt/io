@@ -20,8 +20,8 @@ import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
 
 import sbt.internal.io.ErrorHandling.translate
-import sbt.internal.io.Milli
-import sbt.io.FileTreeView.AllPass
+import sbt.internal.io.{ FileTreeView, Milli }
+import sbt.internal.io.FileTreeView.AllPass
 import sbt.io.Using._
 
 import scala.Function.tupled

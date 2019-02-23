@@ -23,7 +23,7 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.{ Collections, Comparator, List => JList }
 
-import sbt.io.FileTreeView.AllPass
+import FileTreeView.AllPass
 import sbt.io._
 import sbt.io.syntax._
 

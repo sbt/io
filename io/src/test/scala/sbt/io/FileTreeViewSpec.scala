@@ -3,7 +3,8 @@ package sbt.io
 import java.nio.file._
 
 import org.scalatest.FlatSpec
-import sbt.io.FileTreeView.AllPass
+import sbt.internal.io.FileTreeView
+import sbt.internal.io.FileTreeView.AllPass
 import sbt.io.syntax._
 
 class FileTreeViewSpec extends FlatSpec {

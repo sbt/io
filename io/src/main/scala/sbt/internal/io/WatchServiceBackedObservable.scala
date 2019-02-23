@@ -16,7 +16,7 @@ import java.nio.file.{ Files, Path, WatchKey }
 import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
 import java.util.concurrent.{ ConcurrentHashMap, CountDownLatch, TimeUnit }
 
-import sbt.io.FileTreeView.AllPass
+import FileTreeView.AllPass
 import sbt.io._
 import sbt.io.syntax._
 

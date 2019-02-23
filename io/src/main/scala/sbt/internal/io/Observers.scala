@@ -80,7 +80,7 @@ private[sbt] object Observable {
  * generated [[Observer]] invoke the corresponding callback for each of the [[Observer]]s that
  * are added via [[addObserver]].
  *
- * @tparam T the generic type of value instances for the [[sbt.io.FileTreeRepository]]
+ * @tparam T the generic type of value instances for the [[FileTreeRepository]]
  */
 private[sbt] class Observers[T] extends Observer[T] with Observable[T] {
   private class Handle(id: Int) extends AutoCloseable {

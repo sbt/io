@@ -8,11 +8,11 @@
  * (http://www.apache.org/licenses/LICENSE-2.0).
  */
 
-package sbt.io
+package sbt.internal.io
 
 import java.nio.file.{ Path => NioPath }
 
-import sbt.internal.io._
+import sbt.io.{ Glob, WatchService }
 
 /**
  * Provides a view into the file system that allows retrieval of the children of a particular path.

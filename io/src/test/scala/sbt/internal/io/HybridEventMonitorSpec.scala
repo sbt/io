@@ -4,7 +4,7 @@ import java.nio.file.{ Files, Path }
 
 import org.scalatest.{ FlatSpec, Matchers }
 import sbt.internal.io.HybridEventMonitorSpec._
-import sbt.io.FileTreeView.AllPass
+import FileTreeView.AllPass
 import sbt.io._
 import sbt.io.syntax._
 
