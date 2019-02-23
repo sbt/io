@@ -12,8 +12,13 @@ matrix:
      env:
          CMD="mimaReportBinaryIssues scalafmtCheck test whitesourceCheckPolicies doc"
          TRAVIS_SCALA_VERSION=2.12.8
+         TRAVIS_JDK=adopt@1.8.192-12
      os: linux
      dist: trusty
+     install:
+         - $JABBA_HOME/bin/jabba install $TRAVIS_JDK
+         - unset _JAVA_OPTIONS
+         - export JAVA_HOME="$JABBA_HOME/jdk/$TRAVIS_JDK" && export PATH="$JAVA_HOME/bin:$PATH" && java -Xmx32m -version
 
    - scala: 2.12.8
      env:
@@ -35,8 +40,13 @@ matrix:
      env:
        CMD="test"
        TRAVIS_SCALA_VERSION=2.13.0-RC1
+       TRAVIS_JDK=adopt@1.8.192-12
      os: linux
      dist: trusty
+     install:
+         - $JABBA_HOME/bin/jabba install $TRAVIS_JDK
+         - unset _JAVA_OPTIONS
+         - export JAVA_HOME="$JABBA_HOME/jdk/$TRAVIS_JDK" && export PATH="$JAVA_HOME/bin:$PATH" && java -Xmx32m -version
 
    - scala: 2.13.0-RC1
      os: osx
@@ -50,6 +60,7 @@ script: /tmp/sbt/bin/sbt -Dsbt.version=$SBT_VER ++$TRAVIS_SCALA_VERSION $CMD
 
 before_install:
   # https://github.com/travis-ci/travis-ci/issues/8408
+  - curl -sL https://raw.githubusercontent.com/shyiko/jabba/0.11.0/install.sh | bash && . ~/.jabba/jabba.sh
   - unset _JAVA_OPTIONS
   - wget https://github.com/sbt/sbt/releases/download/v$SBT_VER/sbt-$SBT_VER.tgz;
   - tar -xvf sbt-$SBT_VER.tgz;
