@@ -21,8 +21,8 @@ import java.nio.file.{
 import java.util.concurrent.TimeUnit
 
 import scala.annotation.tailrec
-import scala.collection.{ immutable, mutable }
 import scala.collection.JavaConverters._
+import scala.collection.{ immutable, mutable }
 import scala.concurrent.duration.{ Duration, FiniteDuration }
 import scala.util.Properties
 
@@ -95,8 +95,7 @@ object WatchService {
       service.close()
     }
 
-    override def toString(): String =
-      service.toString()
+    override def toString: String = service.toString
   }
   private[sbt] def default: WatchService =
     if (Properties.isMac) new MacOSXWatchService else FileSystems.getDefault.newWatchService
