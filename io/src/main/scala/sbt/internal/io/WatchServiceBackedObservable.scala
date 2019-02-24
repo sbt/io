@@ -12,10 +12,11 @@ package sbt.internal.io
 
 import java.io.IOException
 import java.nio.file.StandardWatchEventKinds.OVERFLOW
-import java.nio.file.{ ClosedWatchServiceException, Files, Path, WatchKey }
+import java.nio.file.{ Path, WatchKey }
 import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
-import java.util.concurrent.{ ConcurrentHashMap, CountDownLatch, TimeUnit }
+import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
+import sbt.internal.io.FileEvent.{ Creation, Deletion }
 import sbt.internal.io.FileTreeView.AllPass
 import sbt.io._
 import sbt.io.syntax._
@@ -37,12 +38,16 @@ private[sbt] class WatchServiceBackedObservable[+T](s: NewWatchState,
                                                     logger: WatchLogger)
     extends Registerable[(Path, T)]
     with Observable[(Path, T)] {
+  private[this] type Event[A] = FileEvent[CustomFileAttributes[A]]
   private[this] val closed = new AtomicBoolean(false)
   private[this] val observers = new Observers[(Path, T)]
-  private[this] val view = FileTreeView.DEFAULT
+  private[this] val attributeConverter: (Path, SimpleFileAttributes) => CustomFileAttributes[T] =
+    (p, a) => CustomFileAttributes.get(p, a, converter(p, a))
+  private[this] val fileCache = new FileCache(attributeConverter)
+  private[this] val view: NioFileTreeView[CustomFileAttributes[T]] =
+    FileTreeView.DEFAULT.map(attributeConverter)
   private[this] val thread: Thread = {
     //val entryConverter = Entry.converter(converter)
-    val lock = new Object
     val latch = new CountDownLatch(1)
     new Thread(s"watch-state-event-thread-${eventThreadId.incrementAndGet()}") {
       setDaemon(true)
@@ -52,9 +57,8 @@ private[sbt] class WatchServiceBackedObservable[+T](s: NewWatchState,
       @tailrec
       final def loopImpl(): Unit = {
         try {
-          if (!closed.get) getFilesForKey(s.service.poll(delay)).foreach {
-            case (path, attrs) =>
-              Evaluate(converter(path, attrs)).foreach(t => observers.onNext(path -> t))
+          if (!closed.get) getFilesForKey(s.service.poll(delay)).foreach { event =>
+            event.attributes.value.foreach(t => observers.onNext(event.path -> t))
           }
         } catch {
           case NonFatal(e) =>
@@ -72,7 +76,7 @@ private[sbt] class WatchServiceBackedObservable[+T](s: NewWatchState,
         }
       }
 
-      def getFilesForKey(key: WatchKey): Vector[(Path, SimpleFileAttributes)] = key match {
+      def getFilesForKey(key: WatchKey): Seq[Event[T]] = key match {
         case null => Vector.empty
         case k =>
           val rawEvents = k.synchronized {
@@ -81,96 +85,36 @@ private[sbt] class WatchServiceBackedObservable[+T](s: NewWatchState,
             events
           }
           val keyPath = k.watchable.asInstanceOf[Path]
-          val allEvents: Seq[(Path, SimpleFileAttributes)] = rawEvents.flatMap {
+          val allEvents: Seq[Event[T]] = rawEvents.flatMap {
             case e if e.kind.equals(OVERFLOW) =>
-              handleOverflow(k).toSeq
+              fileCache.refresh(keyPath ** AllPassFilter)
             case e if !e.kind.equals(OVERFLOW) && e.context != null =>
               val path = keyPath.resolve(e.context.asInstanceOf[Path])
               SimpleFileAttributes.get(path) match {
-                case Success(attrs) => Some(path -> attrs)
-                case _              => None
+                case Success(attrs) => fileCache.update(path, attrs)
+                case _              => Nil
               }
-            case _ => Nil: Seq[(Path, SimpleFileAttributes)]
+            case _ => Nil: Seq[Event[T]]
           }
           logger.debug(s"Received events:\n${allEvents.mkString("\n")}")
-          val (exist, notExist) = allEvents.partition(_._2.exists)
-          val (updatedDirectories, updatedFiles) = exist.partition(_._2.isDirectory)
-          val newFiles: Seq[(Path, SimpleFileAttributes)] =
-            updatedDirectories.flatMap(filesForNewDirectory.tupled)
-          lock.synchronized { s.registered --= notExist.map(_._1) }
-          notExist.foreach { case (p, _) => s.unregister(p) }
-          updatedDirectories.toVector ++ updatedFiles ++ newFiles ++ notExist
+          def process(event: Event[T]): Seq[Event[T]] = {
+            event match {
+              case Creation(path, attrs, _) if attrs.isDirectory =>
+                s.register(path)
+                event +: view.list(path * AllPassFilter, AllPass).flatMap {
+                  case (p, a) =>
+                    process(Creation(p, a))
+                }
+              case Deletion(p, a, _) if a.isDirectory =>
+                val events = fileCache.refresh(p ** AllPassFilter)
+                events.view.filter(_.attributes.isDirectory).foreach(e => s.unregister(e.path))
+                events
+              case e => e :: Nil
+            }
+          }
+          allEvents.flatMap(process)
       }
 
-      /*
-       * In the case of an overflow, we must poll the file system to find out if there are added
-       * or removed directories. When there are new directories, we also want to return file
-       * events for the files that are found therein. Because an overflow is likely to occur while
-       * a directory is still being modified, we poll repeatedly until we get the same list of
-       * files consecutively. We will not trigger for any files that are updated while the WatchKey
-       * is in the OVERFLOW state. There is no good way to fix this without caching mtimes for
-       * all of the files, which I don't think is worth doing at this juncture.
-       */
-      private def handleOverflow(key: WatchKey): Iterable[(Path, SimpleFileAttributes)] =
-        lock.synchronized {
-          val allFiles = new ConcurrentHashMap[Path, SimpleFileAttributes].asScala
-          def addNewFiles(): Unit = {
-            allFiles.clear()
-            val view = FileTreeView.DEFAULT
-            view.list(key.watchable.asInstanceOf[Path] ** AllPassFilter, AllPass).foreach {
-              case (path, attrs) =>
-                allFiles += path -> attrs
-                if (attrs.isDirectory && !s.registered.contains(path)) {
-                  s.register(path)
-                }
-            }
-            ()
-          }
-
-          var oldFiles = new ConcurrentHashMap[Path, SimpleFileAttributes].asScala
-          do {
-            oldFiles = allFiles
-            addNewFiles()
-          } while (oldFiles != allFiles)
-          s.registered --= s.registered.collect {
-            case (d, k) if !Files.exists(d) =>
-              k.reset()
-              k.cancel()
-              d
-          }
-          allFiles
-        }
-
-      /*
-       * Returns new files found in new directory and any subdirectories, assuming that there is
-       * a recursive source with a base that is parent to the directory.
-       */
-      private val filesForNewDirectory
-        : (Path, SimpleFileAttributes) => Seq[(Path, SimpleFileAttributes)] =
-        (dir: Path, _) =>
-          if (!closed.get()) {
-            lazy val recursive =
-              s.globs.exists(glob => dir.startsWith(glob.base) && glob.depth > 0)
-            if (!s.registered.contains(dir) && recursive && !closed.get()) {
-              try {
-                s.register(dir)
-              } catch {
-                case _: ClosedWatchServiceException => closed.set(true)
-              }
-              @tailrec
-              def poll(paths: Seq[Path] = Nil): Seq[(Path, SimpleFileAttributes)] = {
-                val typedPaths = FileTreeView.DEFAULT.list(dir ** AllPassFilter, AllPass)
-                val newPaths = typedPaths.map(_._1)
-                if (newPaths == paths) typedPaths else poll(newPaths)
-              }
-              val result = poll()
-              result.foreach {
-                case (path, attrs) if attrs.isDirectory && !closed.get() => path -> s.register(path)
-                case _                                                   =>
-              }
-              result.toVector
-            } else Nil
-          } else Nil
     }
   }
   override def addObserver(observer: Observer[(Path, T)]): AutoCloseable =
@@ -187,10 +131,11 @@ private[sbt] class WatchServiceBackedObservable[+T](s: NewWatchState,
 
   override def register(glob: Glob): Either[IOException, Observable[(Path, T)]] = {
     try {
-      s.register(glob.base)
-      view
-        .list(glob.withFilter(AllPassFilter), _._2.isDirectory)
-        .foreach(r => s.register(r._1))
+      fileCache.register(glob)
+      fileCache.list(glob.withFilter(AllPassFilter), _.isDirectory) foreach {
+        case (p, _) =>
+          s.register(p)
+      }
       new RegisterableObservable(observers).register(glob)
     } catch {
       case e: IOException => Left(e)

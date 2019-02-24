@@ -55,7 +55,7 @@ private[sbt] object SimpleFileAttributes {
       ((isDirectory.hashCode * 31) ^ (isRegularFile.hashCode * 31)) ^ (isSymbolicLink.hashCode * 31)
     override def toString: String =
       s"SimpleFileAttributes(isDirectory = $isDirectory, isRegularFile = $isRegularFile" +
-        s", isSymbolicLink = $isSymbolicLink)"
+        s", isSymbolicLink = $isSymbolicLink, exists = $exists)"
   }
 }
 

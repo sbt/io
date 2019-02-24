@@ -571,7 +571,7 @@ private[sbt] abstract class SourceModificationWatchSpec(
     val observable = new WatchServiceBackedObservable[SimpleFileAttributes](
       watchState,
       5.millis,
-      (p: Path, attrs: SimpleFileAttributes) => attrs,
+      (_: Path, attrs: SimpleFileAttributes) => attrs,
       closeService = true,
       logger)
     observable.register(globs)
