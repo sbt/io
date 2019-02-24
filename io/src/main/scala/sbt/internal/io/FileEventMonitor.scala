@@ -31,7 +31,16 @@ private[sbt] trait FileEventMonitor[+T] extends AutoCloseable {
    * @param duration the timeout (can be infinite)
    * @return a sequence of [[FileEvent]] instances.
    */
-  def poll(duration: Duration): Seq[T]
+  final def poll(duration: Duration): Seq[T] = poll(duration, (_: T) => true)
+
+  /**
+   * Block for the specified duration until an event is emitted or a timeout occurs.
+   *
+   * @param duration the timeout (can be infinite)
+   * @param filter a filter that may be applied to events
+   * @return a sequence of [[FileEvent]] instances.
+   */
+  def poll(duration: Duration, filter: T => Boolean): Seq[T]
 }
 private[sbt] object FileEventMonitor {
 
@@ -158,7 +167,8 @@ private[sbt] object FileEventMonitor {
     })
 
     @tailrec
-    final override def poll(duration: Duration): Seq[FileEvent[T]] = {
+    final override def poll(duration: Duration,
+                            filter: FileEvent[T] => Boolean): Seq[FileEvent[T]] = {
       val start = Deadline.now
       if (lock.synchronized(events.isEmpty) && duration > 0.seconds) {
         duration match {
@@ -168,7 +178,7 @@ private[sbt] object FileEventMonitor {
       }
       val res = lock.synchronized {
         queue.poll(0, TimeUnit.MILLISECONDS)
-        val r = events.values.toVector
+        val r = events.values.toVector.filter(filter)
         events.clear()
         r
       }
@@ -176,8 +186,8 @@ private[sbt] object FileEventMonitor {
         case e if e.isEmpty =>
           val now = Deadline.now
           duration match {
-            case d: FiniteDuration => if (now < start + d) poll((start + d) - now) else Nil
-            case _                 => poll(duration)
+            case d: FiniteDuration => if (now < start + d) poll((start + d) - now, filter) else Nil
+            case _                 => poll(duration, filter)
           }
         case e =>
           e
@@ -210,7 +220,8 @@ private[sbt] object FileEventMonitor {
      */
     private[this] val quarantinedEvents = new ConcurrentHashMap[JPath, FileEvent[T]].asScala
     @tailrec
-    override final def poll(duration: Duration): Seq[FileEvent[T]] = {
+    override final def poll(duration: Duration,
+                            filter: FileEvent[T] => Boolean): Seq[FileEvent[T]] = {
       val start = Deadline.now
       /*
        * The impl is tail recursive to handle the case when we quarantine a deleted file or find
@@ -218,7 +229,7 @@ private[sbt] object FileEventMonitor {
        * events in the queue, we want to immediately pull them. Otherwise it's possible to return
        * None while there events ready in the queue.
        */
-      val results = fileEventMonitor.poll(duration)
+      val results = fileEventMonitor.poll(duration, filter)
       /*
        * Note that this transformation is not purely functional because it has the side effect of
        * modifying the quarantinedEvents and antiEntropyDeadlines maps.
@@ -267,7 +278,7 @@ private[sbt] object FileEventMonitor {
         case s: Seq[FileEvent[T]] if s.nonEmpty => s
         case s =>
           val limit = duration - (Deadline.now - start)
-          if (limit > 0.millis) poll(limit) else Nil
+          if (limit > 0.millis) poll(limit, filter) else Nil
       }
     }
 
