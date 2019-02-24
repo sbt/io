@@ -93,8 +93,8 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
     val moved = NioPaths.get(s"${initial.toString}.moved")
     val observer: Observer[FileEvent[CustomFileAttributes[Unit]]] =
       (_: FileEvent[CustomFileAttributes[Unit]]) match {
-        case Creation(path, _, _) => if (path == moved) latch.countDown()
-        case _                    =>
+        case Creation(path, _) => if (path == moved) latch.countDown()
+        case _                 =>
       }
     using(simpleCache(observer)) { c =>
       c.register(dir ** AllPassFilter)
@@ -156,9 +156,9 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
     val deletionLatch = new CountDownLatch(filesToAdd * 2)
     val observer: Observer[FileEvent[CustomFileAttributes[Unit]]] =
       (_: FileEvent[CustomFileAttributes[Unit]]) match {
-        case Creation(_, attrs, _) if attrs.isRegularFile => creationLatch.countDown()
-        case Deletion(_, attrs, _) if attrs.isRegularFile => deletionLatch.countDown()
-        case _                                            =>
+        case Creation(_, attrs) if attrs.isRegularFile => creationLatch.countDown()
+        case Deletion(_, attrs) if attrs.isRegularFile => deletionLatch.countDown()
+        case _                                         =>
       }
     using(simpleCache(observer)) { c =>
       c.register(dir ** AllPassFilter)

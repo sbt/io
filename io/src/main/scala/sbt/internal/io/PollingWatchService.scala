@@ -24,12 +24,14 @@ import sbt.io.syntax._
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.immutable
-import scala.concurrent.duration._
+import scala.concurrent.duration.{ Deadline => _, _ }
 
 /** A `WatchService` that polls the filesystem every `delay`. */
-private[sbt] class PollingWatchService(delay: FiniteDuration)
+private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSource)
     extends WatchService
     with Unregisterable {
+  def this(delay: FiniteDuration) = this(delay, TimeSource.default)
+  private[this] implicit def ts: TimeSource = timeSource
   private[this] val closed = new AtomicBoolean(false)
   private[this] val registered = new ConcurrentHashMap[Path, PollingWatchKey].asScala
   private[this] val lastModifiedConverter
@@ -49,8 +51,8 @@ private[sbt] class PollingWatchService(delay: FiniteDuration)
     ensureNotClosed()
     val numKeys = pollQueue.size
     val (adjustedTimeout, deadline) = timeout match {
-      case t: FiniteDuration => t -> t.fromNow
-      case _                 => (numKeys * 2.millis) -> Int.MaxValue.seconds.fromNow
+      case t: FiniteDuration => t -> (Deadline.now + t)
+      case _                 => (numKeys * 2.millis) -> Deadline.Inf
     }
     val millis = adjustedTimeout.toMillis
     val (batchSize, batchTimeout) = (1 to Int.MaxValue)
@@ -147,9 +149,9 @@ private[sbt] class PollingWatchService(delay: FiniteDuration)
         events.drainTo(rawEvents)
         val res = new util.ArrayList[WatchEvent[Path]](size)
         res.addAll(rawEvents.asScala.map {
-          case Creation(p, _, _)  => new PollingWatchEvent(p, ENTRY_CREATE)
-          case Deletion(p, _, _)  => new PollingWatchEvent(p, ENTRY_DELETE)
-          case Update(p, _, _, _) => new PollingWatchEvent(p, ENTRY_MODIFY)
+          case Creation(p, _)  => new PollingWatchEvent(p, ENTRY_CREATE)
+          case Deletion(p, _)  => new PollingWatchEvent(p, ENTRY_DELETE)
+          case Update(p, _, _) => new PollingWatchEvent(p, ENTRY_MODIFY)
         }.asJava)
         if (overflow) res.add(Overflow)
         res

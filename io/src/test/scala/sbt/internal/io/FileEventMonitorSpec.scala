@@ -1,19 +1,19 @@
 package sbt.internal.io
 
 import java.nio.file.Paths
+import java.util.concurrent.atomic.AtomicReference
 
 import org.scalatest.{ FlatSpec, Matchers }
 import sbt.internal.io.FileEvent.{ Creation, Deletion, Update }
-import sbt.io._
 
-import scala.concurrent.duration._
+import scala.concurrent.duration.{ Deadline => _, _ }
 
 class FileEventMonitorSpec extends FlatSpec with Matchers {
   import FileEventMonitorSpec._
-  private[sbt] def antiEntropyMonitor[T <: SimpleFileAttributes](
+  private[io] def antiEntropyMonitor[T <: SimpleFileAttributes](
       observable: Observable[FileEvent[T]],
       period: FiniteDuration,
-      logger: WatchLogger): FileEventMonitor[FileEvent[T]] =
+      logger: WatchLogger)(implicit timeSource: TimeSource): FileEventMonitor[FileEvent[T]] =
     FileEventMonitor.antiEntropy(observable, period, logger, 50.millis, 10.minutes)
   object TestAttributes {
     def apply(exists: Boolean = true,
@@ -22,11 +22,57 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
               isSymbolicLink: Boolean = false): SimpleFileAttributes =
       SimpleFileAttributes.get(exists, isDirectory, isRegularFile, isSymbolicLink)
   }
-  "anti-entropy" should "in redundant events" in {
+  class DeterminsticTimeSource extends TimeSource with AutoCloseable {
+    private val currentTime = new AtomicReference[FiniteDuration](System.currentTimeMillis.millis)
+    private val timeoutThread = new Thread {
+      setDaemon(true)
+      start()
+      override def run(): Unit = {
+        try {
+          Thread.sleep(5.seconds.toMillis)
+          increment(5.minutes)
+        } catch { case _: InterruptedException => } // drop interrupts since they come from close.
+      }
+    }
+    override def close(): Unit = {
+      timeoutThread.interrupt()
+      timeoutThread.join(500)
+    }
+    override def now: Deadline = new DeadlineImpl()
+    def increment(duration: FiniteDuration): Unit = {
+      val current = currentTime.get()
+      currentTime.set(current + duration)
+    }
+    def incrementAsync(duration: FiniteDuration): Unit = {
+      new Thread("increment-deadline-source") {
+        setDaemon(true)
+        start()
+        override def run(): Unit = {
+          Thread.sleep(2)
+          increment(duration)
+        }
+      }
+      ()
+    }
+    private class DeadlineImpl(override val value: FiniteDuration) extends Deadline {
+      def this() = this(currentTime.get())
+      override def isOverdue: Boolean = {
+        val now = currentTime.get()
+        now > value
+      }
+      override def +(duration: FiniteDuration): Deadline = new DeadlineImpl(value + duration)
+      override def -(duration: FiniteDuration): Deadline = new DeadlineImpl(value - duration)
+    }
+  }
+  def withDeterministicSource[R](f: DeterminsticTimeSource => R): R = {
+    val deadlineSource = new DeterminsticTimeSource
+    try f(deadlineSource)
+    finally deadlineSource.close()
+  }
+  "anti-entropy" should "ignore redundant events" in withDeterministicSource { implicit source =>
     val observers = new Observers[Event]
     val antiEntropyPeriod = 20.millis
     val monitor = antiEntropyMonitor(observers, antiEntropyPeriod, NullWatchLogger)
-    val start = Deadline.now
     val foo = Paths.get("foo")
     val startAttributes = TestAttributes(isRegularFile = true)
     val fooCreation = Creation(foo, startAttributes)
@@ -36,17 +82,20 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
     val bar = Paths.get("bar")
     val barCreation = Creation(bar, barAttributes)
     observers.onNext(barCreation)
-    monitor.poll(antiEntropyPeriod).toSet[Event] compare Set(fooCreation, barCreation)
-    val wait = start + antiEntropyPeriod + 100.millis - Deadline.now
+    source.incrementAsync(antiEntropyPeriod + 5.millis)
+    assert(monitor.poll(antiEntropyPeriod).toSet[Event] == Set(fooCreation, barCreation))
+    val wait = antiEntropyPeriod + 100.millis
+    source.incrementAsync(wait + 5.millis)
     monitor.poll(wait) shouldBe Nil
     val update = Update(foo, startAttributes, startAttributes)
     observers.onNext(update)
-    monitor.poll(antiEntropyPeriod) compare Seq(update)
+    assert(monitor.poll(antiEntropyPeriod) == Seq(update))
   }
-  it should "not in new events" in {
+  it should "not ignore new events" in withDeterministicSource { implicit source =>
     val observers = new Observers[Event]
     val antiEntropyPeriod = 20.millis
-    val monitor = antiEntropyMonitor(observers, antiEntropyPeriod, NullWatchLogger)
+    val monitor =
+      antiEntropyMonitor(observers, antiEntropyPeriod, NullWatchLogger)
     val foo = Paths.get("foo")
     val fooAttributes = TestAttributes(isRegularFile = true)
     val fooCreation = Creation(foo, fooAttributes)
@@ -57,19 +106,20 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
     val barAttributes = TestAttributes(isRegularFile = true)
     val barCreation = Creation(bar, barAttributes)
     observers.onNext(barCreation)
-    monitor.poll(antiEntropyPeriod).toSet[Event] compare Set(fooCreation, barCreation)
-    val thread = new Thread("anti-entropy-test") {
+    assert(monitor.poll(antiEntropyPeriod).toSet[Event] == Set(fooCreation, barCreation))
+    new Thread("anti-entropy-test") {
+      setDaemon(true)
+      start()
       override def run(): Unit = {
-        Thread.sleep(2 * antiEntropyPeriod.toMillis)
-        observers.onNext(Update(foo, fooAttributes, fooAttributes))
+        source.increment(2 * antiEntropyPeriod)
+        observers.onNext(Update(foo, fooAttributes, fooAttributes, Deadline.now))
+        source.increment(10.seconds)
       }
     }
-    thread.setDaemon(true)
-    thread.start()
     // Ensure the timeout is long enough for the background thread to call onUpdate
-    monitor.poll(5.seconds) compare Seq(fooUpdate)
+    assert(monitor.poll(5.seconds) == Seq(fooUpdate))
   }
-  it should "quarantine deletions" in {
+  it should "quarantine deletions" in withDeterministicSource { implicit source =>
     val observers = new Observers[Event]
     val antiEntropyPeriod = 40.millis
     val quarantinePeriod = antiEntropyPeriod / 2
@@ -81,9 +131,10 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
                                    10.minutes)
     val foo = Paths.get("foo")
     val fooAttributes = TestAttributes(exists = false, isRegularFile = true)
-    val fooDeletion = Deletion(foo, fooAttributes)
+    val fooDeletion = Deletion(foo, fooAttributes, Deadline.now)
     observers.onNext(fooDeletion)
     monitor.poll(0.millis) shouldBe Nil
+    source.incrementAsync(quarantinePeriod * 3)
     monitor.poll(quarantinePeriod * 2) shouldBe Seq(fooDeletion)
   }
   it should "immediately trigger for creations" in {
@@ -104,25 +155,9 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
     observers.onNext(fooDeletion)
     observers.onNext(fooCreation)
 
-    monitor.poll(0.millis) compare Seq(Update(foo, deletionAttributes, creationAttributes))
+    assert(monitor.poll(0.millis) == Seq(Update(foo, deletionAttributes, creationAttributes)))
   }
 }
 object FileEventMonitorSpec extends Matchers {
   private type Event = FileEvent[SimpleFileAttributes]
-  private val now = Deadline.now
-  private implicit class FileEventOps(val fileEvent: Event) extends AnyVal {
-    def stripOccurredAt: FileEvent[SimpleFileAttributes] = fileEvent match {
-      case Creation(path, attributes, _)         => Creation(path, attributes, now)
-      case Deletion(path, attributes, _)         => Deletion(path, attributes, now)
-      case Update(path, previous, attributes, _) => Update(path, previous, attributes, now)
-    }
-  }
-  private implicit class TraversableEventOps[T <: Traversable[Event]](val t: T) extends AnyVal {
-    def compare[S <: Traversable[Event]](that: S): Unit = {
-      val left = t.map(_.stripOccurredAt)
-      val right = that.map(_.stripOccurredAt)
-      assert(left == right)
-      ()
-    }
-  }
 }

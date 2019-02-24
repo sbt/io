@@ -97,19 +97,19 @@ private[sbt] class WatchServiceBackedObservable[+T](
           logger.debug(s"Received events:\n${allEvents.mkString("\n")}")
           def process(event: Event[T]): Seq[Event[T]] = {
             (event match {
-              case Creation(path, attrs, _) if attrs.isDirectory =>
+              case Creation(path, attrs) if attrs.isDirectory =>
                 s.register(path)
                 event +: view.list(path * AllPassFilter, AllPass).flatMap {
                   case (p, a) =>
                     process(Creation(p, a))
                 }
-              case Deletion(p, a, _) if a.isDirectory =>
+              case Deletion(p, a) if a.isDirectory =>
                 val events = fileCache.refresh(p ** AllPassFilter)
                 events.view.filter(_.attributes.isDirectory).foreach(e => s.unregister(e.path))
                 events
               case e => e :: Nil
             }).map {
-              case Deletion(path, attributes, o) =>
+              case d @ Deletion(path, attributes) =>
                 val newAttrs = SimpleFileAttributes.get(exists = false,
                                                         attributes.isDirectory,
                                                         attributes.isRegularFile,
@@ -117,7 +117,7 @@ private[sbt] class WatchServiceBackedObservable[+T](
                 Deletion(
                   path,
                   CustomFileAttributes.getEither[T](path, newAttrs, attributes.value),
-                  o
+                  d.occurredAt
                 )
               case e => e
             }

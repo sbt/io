@@ -24,8 +24,8 @@ class HybridPollingFileTreeRepositorySpec extends FlatSpec with Matchers {
       val regularFile = dir.resolve("regular-file")
       val observer: Observer[FileEvent[CustomFileAttributes[Unit]]] =
         (_: FileEvent[CustomFileAttributes[Unit]]) match {
-          case Creation(p, _, _) if p == regularFile => latch.countDown()
-          case _                                     =>
+          case Creation(p, _) if p == regularFile => latch.countDown()
+          case _                                  =>
         }
       repo.addObserver(observer)
 

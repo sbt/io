@@ -10,7 +10,7 @@ import sbt.io.syntax._
 import sbt.io.{ WatchService, _ }
 
 import scala.annotation.tailrec
-import scala.concurrent.duration._
+import scala.concurrent.duration.{ Deadline => _, _ }
 
 private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
   def pollDelay: FiniteDuration
@@ -319,6 +319,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     .withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val file = parentDir / "Foo.scala"
+      val otherFile = parentDir / "bar.scala"
 
       writeNewFile(file, "foo")
       val observable = newObservable(parentDir)
@@ -332,19 +333,10 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
         })
         assert(IO.read(file) == "bar")
 
-        val deadline = maxWait.fromNow
-        @tailrec
-        def poll(): Boolean = {
-          val wait = deadline - Deadline.now
-          monitor.poll(wait) match {
-            case sources if sources.map(_.path).contains(file.toPath) => true
-            case _ if Deadline.now < deadline                         => poll()
-            case _                                                    => false
-          }
+        val triggered1 = watchTest(monitor, pathFilter(file.toPath), contains(file.toPath)) {
+          IO.write(file, "baz")
+          IO.touch(otherFile)
         }
-        monitor.drain(maxWait)
-        IO.write(file, "baz")
-        val triggered1 = poll()
         if (triggered1) logger.printLines("Unexpected trigger during anti-entropy period.")
         assert(!triggered1)
         assert(IO.read(file) == "baz")
@@ -477,7 +469,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     if (attempt == 0) IO.write(file, content)
     // IO.setModifiedTimeOrFalse sometimes throws an invalid argument exception
     val res = try {
-      IO.setModifiedTimeOrFalse(file, (Deadline.now - 5.seconds).timeLeft.toMillis)
+      IO.setModifiedTimeOrFalse(file, (Deadline.now - 5.seconds).value.toMillis)
     } catch { case _: IOException if attempt < 10 => false }
     if (!res) writeNewFile(file, content, attempt + 1)
   }
@@ -523,8 +515,8 @@ object EventMonitorSpec {
   def isDeletion(path: Path): FileEvent[_] => Boolean = {
     val real = realPath(path)
     (_: FileEvent[_]) match {
-      case Deletion(p, _, _) if p == real => true
-      case _                              => false
+      case Deletion(p, _) if p == real => true
+      case _                           => false
     }
   }
   def hasDeletion(path: Path): Seq[FileEvent[_]] => Boolean = {
