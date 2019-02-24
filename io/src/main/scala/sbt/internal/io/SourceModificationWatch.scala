@@ -16,7 +16,6 @@ import java.nio.file.{ WatchService => _, _ }
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
-import sbt.internal.io.FileEvent.{ Deletion, Update }
 import sbt.internal.io.FileTreeView.AllPass
 import sbt.io._
 import sbt.io.syntax._
