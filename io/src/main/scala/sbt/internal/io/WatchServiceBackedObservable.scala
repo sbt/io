@@ -12,7 +12,7 @@ package sbt.internal.io
 
 import java.io.IOException
 import java.nio.file.StandardWatchEventKinds.OVERFLOW
-import java.nio.file.{ Files, Path, WatchKey }
+import java.nio.file.{ ClosedWatchServiceException, Files, Path, WatchKey }
 import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
 import java.util.concurrent.{ ConcurrentHashMap, CountDownLatch, TimeUnit }
 
@@ -144,8 +144,12 @@ private[sbt] class WatchServiceBackedObservable[+T](s: NewWatchState,
           if (!closed.get()) {
             lazy val recursive =
               s.globs.exists(glob => dir.startsWith(glob.base) && glob.depth > 0)
-            if (!s.registered.contains(dir) && recursive) {
-              s.register(dir)
+            if (!s.registered.contains(dir) && recursive && !closed.get()) {
+              try {
+                s.register(dir)
+              } catch {
+                case _: ClosedWatchServiceException => closed.set(true)
+              }
               @tailrec
               def poll(paths: Seq[Path] = Nil): Seq[(Path, SimpleFileAttributes)] = {
                 val typedPaths = FileTreeView.DEFAULT.list(dir ** AllPassFilter, AllPass)
