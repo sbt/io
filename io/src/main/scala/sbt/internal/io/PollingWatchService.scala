@@ -11,26 +11,19 @@
 package sbt.internal.io
 
 import java.nio.file.StandardWatchEventKinds._
-import java.nio.file.{
-  ClosedWatchServiceException,
-  WatchEvent,
-  WatchKey,
-  Watchable,
-  Path => NioPath
-}
+import java.nio.file.{ WatchService => _, _ }
 import java.util
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.{ Collections, Comparator, List => JList }
+import java.util.{ List => JList }
 
-import sbt.internal.io.FileTreeView.AllPass
+import sbt.internal.io.FileEvent.{ Creation, Deletion, Update }
 import sbt.io._
 import sbt.io.syntax._
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.immutable
-import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 
 /** A `WatchService` that polls the filesystem every `delay`. */
@@ -38,155 +31,95 @@ private[sbt] class PollingWatchService(delay: FiniteDuration)
     extends WatchService
     with Unregisterable {
   private[this] val closed = new AtomicBoolean(false)
-  private[this] val thread = new PollingThread
-  private[this] val registered = new ConcurrentHashMap[NioPath, PollingWatchKey].asScala
-  private[this] var lastTimestamps: Map[NioPath, Long] = Map.empty
-  private[this] val readyKeys = new LinkedBlockingQueue[PollingWatchKey]
-  private[this] val view: NioFileTreeView[Long] = {
-    val converter: (NioPath, SimpleFileAttributes) => Long = (path, _) =>
-      IO.getModifiedTimeOrZero(path.toFile)
-    FileTreeView.DEFAULT.map(converter)
-  }
-  private[this] val shutdownLatch = new CountDownLatch(1)
-  private[this] val comparator: Comparator[PollingWatchKey] = new Comparator[PollingWatchKey] {
-    override def compare(left: PollingWatchKey, right: PollingWatchKey): Int =
-      left.path.compareTo(right.path)
-  }
+  private[this] val registered = new ConcurrentHashMap[Path, PollingWatchKey].asScala
+  private[this] val lastModifiedConverter
+    : (Path, SimpleFileAttributes) => CustomFileAttributes[Long] = (p, a) =>
+    CustomFileAttributes.get(p, a, IO.getModifiedTimeOrZero(p.toFile))
+  private[this] val pollQueue: util.Queue[PollingWatchKey] =
+    new LinkedBlockingDeque[PollingWatchKey]
   override def close(): Unit = if (closed.compareAndSet(false, true)) {
-    thread.interrupt()
-    if (shutdownLatch.await(5, TimeUnit.SECONDS)) thread.join()
     registered.clear()
-    readyKeys.clear()
   }
 
   override def init(): Unit = {
     ensureNotClosed()
-    thread.start()
   }
 
   override def poll(timeout: Duration): WatchKey = {
     ensureNotClosed()
-    timeout match {
-      case d: FiniteDuration if d > 0.seconds => readyKeys.poll(d.toNanos, TimeUnit.NANOSECONDS)
-      case _: FiniteDuration                  => readyKeys.poll(0, TimeUnit.NANOSECONDS)
-      case _                                  => readyKeys.take()
+    val numKeys = pollQueue.size
+    val (adjustedTimeout, deadline) = timeout match {
+      case t: FiniteDuration => t -> t.fromNow
+      case _                 => (numKeys * 2.millis) -> Int.MaxValue.seconds.fromNow
+    }
+    val millis = adjustedTimeout.toMillis
+    val (batchSize, batchTimeout) = (1 to Int.MaxValue)
+      .dropWhile(i => (millis * i) / numKeys == 0)
+      .headOption
+      .fold(1 -> 1.millis)(i => i -> (adjustedTimeout / i.toLong))
+    pollImpl(batchSize, batchTimeout, deadline).orNull
+  }
+
+  @tailrec
+  private def pollImpl(batchSize: Int,
+                       duration: FiniteDuration,
+                       deadline: Deadline): Option[WatchKey] = {
+    pollQueue.poll() match {
+      case null => None
+      case key =>
+        pollQueue.add(key)
+        key.poll() match {
+          case r if r.isDefined => r
+          case _ =>
+            if (batchSize > 1) { pollImpl(batchSize - 1, duration, deadline) } else if (!deadline.isOverdue) {
+              Thread.sleep(duration.toMillis)
+              pollImpl(batchSize, duration, deadline)
+            } else {
+              None
+            }
+        }
     }
   }
 
-  override def pollEvents(): Map[WatchKey, immutable.Seq[WatchEvent[NioPath]]] = {
+  override def pollEvents(): Map[WatchKey, immutable.Seq[WatchEvent[Path]]] = {
     ensureNotClosed()
-    val events = readyKeys.synchronized {
-      val e = new util.ArrayList[PollingWatchKey](readyKeys.size)
-      readyKeys.drainTo(e)
-      e
-    }
-    events.asScala.map(e => e -> e.pollEventsImpl.asScala.toVector).toMap
+    registered.values.map(k => (k: WatchKey) -> k.pollEventsImpl.asScala.toVector).toMap
   }
 
-  override def register(path: NioPath, events: WatchEvent.Kind[NioPath]*): WatchKey = {
+  override def register(path: Path, events: WatchEvent.Kind[Path]*): WatchKey = {
     ensureNotClosed()
-    val newKey = new PollingWatchKey(path, events: _*)
-    registered.putIfAbsent(path, newKey) match {
+    registered.get(path) match {
       case Some(k) => k
       case None =>
-        val timestamps = getTimestamps(path)
-        lastTimestamps.synchronized(lastTimestamps ++= timestamps)
+        val newKey = new PollingWatchKey(path, events: _*)
+        registered.put(path, newKey)
+        pollQueue.add(newKey)
         newKey
     }
   }
-  override def unregister(path: NioPath): Unit = {
+  override def unregister(path: Path): Unit = {
     ensureNotClosed()
     registered.remove(path)
+    pollQueue.removeIf(_.path == path)
     ()
   }
 
   private def ensureNotClosed(): Unit =
     if (closed.get()) throw new ClosedWatchServiceException
 
-  private def getTimestamps(path: NioPath): Seq[(NioPath, Long)] =
-    view.list(path.toGlob, AllPass) ++ view.list(path * AllPassFilter, AllPass)
-
-  private def getTimestamps: immutable.Seq[(NioPath, Long)] = {
-    registered.keys.toIndexedSeq.flatMap(getTimestamps)
-  }
-
-  private class PollingThread extends Thread("sbt.io.watch.PollingThread") {
-    def this(duration: FiniteDuration) = this()
-    setDaemon(true)
-    private[this] val latch = new CountDownLatch(1)
-    override def start(): Unit = {
-      super.start()
-      if (!latch.await(5, TimeUnit.SECONDS))
-        throw new IllegalStateException("Couldn't start polling thread!")
-    }
-    override def run(): Unit = {
-      latch.countDown()
-      def continue: Boolean = !closed.get() && !Thread.currentThread.isInterrupted
-      def getKeyAndContext(path: NioPath): Option[(PollingWatchKey, NioPath)] =
-        (registered.get(path.getParent) orElse registered.get(path)).map(k =>
-          k -> k.path.relativize(path))
-      @tailrec
-      def updateFileTimes(): Unit = {
-        if (continue) {
-          val newState = getTimestamps
-          val map = newState.toMap
-          val oldState = lastTimestamps.synchronized {
-            val res = lastTimestamps
-            lastTimestamps = map
-            res
-          }
-          val deleted = new ArrayBuffer[NioPath]()
-          val updated = new ArrayBuffer[NioPath]()
-          val created = new ArrayBuffer[NioPath]()
-          newState.foreach {
-            case (path, lastModified) =>
-              oldState.get(path) match {
-                case Some(lm) => if (lm != lastModified) updated += path
-                case None     => created += path
-              }
-          }
-          oldState.foreach { case (path, _) => if (!map.contains(path)) deleted += path }
-
-          val keys = new util.HashSet[PollingWatchKey].asScala
-          def addEvents(paths: ArrayBuffer[NioPath], kind: WatchEvent.Kind[NioPath]): Unit =
-            paths.sorted.foreach { path =>
-              getKeyAndContext(path).foreach {
-                case (k, c) => keys ++= k.maybeAddEvent(new PollingWatchEvent(c, kind))
-              }
-            }
-          addEvents(created, ENTRY_CREATE)
-          addEvents(updated, ENTRY_MODIFY)
-          addEvents(deleted, ENTRY_DELETE)
-          val sorted = new util.ArrayList[PollingWatchKey](keys.asJava)
-          Collections.sort(sorted, comparator)
-          readyKeys.synchronized(readyKeys.addAll(sorted))
-          if (continue) {
-            val keepGoing = try {
-              Thread.sleep(delay.toMillis)
-              true
-            } catch {
-              case _: InterruptedException => false
-            }
-            if (keepGoing) updateFileTimes()
-          }
-        }
-      }
-      updateFileTimes()
-      shutdownLatch.countDown()
-    }
-
-  }
-
   private object Overflow
-      extends PollingWatchEvent(null, OVERFLOW.asInstanceOf[WatchEvent.Kind[NioPath]])
-  private class PollingWatchKey(private[PollingWatchService] val path: NioPath,
-                                eventKinds: WatchEvent.Kind[NioPath]*)
+      extends PollingWatchEvent(null, OVERFLOW.asInstanceOf[WatchEvent.Kind[Path]])
+  private class PollingWatchKey(private[PollingWatchService] val path: Path,
+                                eventKinds: WatchEvent.Kind[Path]*)
       extends WatchKey {
-    private[this] val events = new ArrayBlockingQueue[WatchEvent[NioPath]](256)
+    private[this] val events = new ArrayBlockingQueue[FileEvent[CustomFileAttributes[Long]]](256)
     private[this] val hasOverflow = new AtomicBoolean(false)
     private[this] lazy val acceptCreate = eventKinds.contains(ENTRY_CREATE)
     private[this] lazy val acceptDelete = eventKinds.contains(ENTRY_DELETE)
     private[this] lazy val acceptModify = eventKinds.contains(ENTRY_MODIFY)
+    private[this] val glob = path * AllPassFilter
+    private[this] val fileCache = new FileCache[Long](lastModifiedConverter)
+    fileCache.register(glob)
     override def cancel(): Unit = {
       reset()
       registered.remove(path)
@@ -201,26 +134,38 @@ private[sbt] class PollingWatchService(delay: FiniteDuration)
     }
     override def watchable(): Watchable = path
 
-    private[PollingWatchService] def pollEventsImpl: JList[WatchEvent[NioPath]] =
+    private[PollingWatchService] def poll(): Option[WatchKey] = {
+      val res = fileCache.refresh(glob)
+      res.foreach(maybeAddEvent)
+      if (events.isEmpty) None else Some(this)
+    }
+    private[PollingWatchService] def pollEventsImpl: JList[WatchEvent[Path]] = {
       events.synchronized {
         val overflow = hasOverflow.getAndSet(false)
         val size = events.size + (if (overflow) 1 else 0)
-        val res = new util.ArrayList[WatchEvent[NioPath]](size)
+        val rawEvents = new util.ArrayList[FileEvent[CustomFileAttributes[Long]]](size)
+        events.drainTo(rawEvents)
+        val res = new util.ArrayList[WatchEvent[Path]](size)
+        res.addAll(rawEvents.asScala.map {
+          case Creation(p, _, _)  => new PollingWatchEvent(p, ENTRY_CREATE)
+          case Deletion(p, _, _)  => new PollingWatchEvent(p, ENTRY_DELETE)
+          case Update(p, _, _, _) => new PollingWatchEvent(p, ENTRY_MODIFY)
+        }.asJava)
         if (overflow) res.add(Overflow)
-        events.drainTo(res)
         res
       }
+    }
     private[PollingWatchService] def maybeAddEvent(
-        event: WatchEvent[NioPath]): Option[PollingWatchKey] = {
-      def offer(event: WatchEvent[NioPath]): Option[PollingWatchKey] = {
+        event: FileEvent[CustomFileAttributes[Long]]): Option[PollingWatchKey] = {
+      def offer(event: FileEvent[CustomFileAttributes[Long]]): Option[PollingWatchKey] = {
         if (!events.synchronized(events.offer(event))) hasOverflow.set(true)
         Some(this)
       }
-      event.kind match {
-        case ENTRY_CREATE if acceptCreate => offer(event)
-        case ENTRY_DELETE if acceptDelete => offer(event)
-        case ENTRY_MODIFY if acceptModify => offer(event)
-        case _                            => None
+      event match {
+        case _: Creation[_] if acceptCreate => offer(event)
+        case _: Deletion[_] if acceptDelete => offer(event)
+        case _: Update[_] if acceptModify   => offer(event)
+        case _                              => None
       }
     }
   }
@@ -228,8 +173,8 @@ private[sbt] class PollingWatchService(delay: FiniteDuration)
 }
 
 private class PollingWatchEvent(
-    override val context: NioPath,
-    override val kind: WatchEvent.Kind[NioPath]
-) extends WatchEvent[NioPath] {
+    override val context: Path,
+    override val kind: WatchEvent.Kind[Path]
+) extends WatchEvent[Path] {
   override val count: Int = 1
 }
