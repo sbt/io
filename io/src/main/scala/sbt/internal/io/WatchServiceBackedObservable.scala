@@ -24,6 +24,7 @@ import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.util.Success
+import scala.util.control.NonFatal
 
 private[sbt] object WatchServiceBackedObservable {
   private val eventThreadId = new AtomicInteger(0)
@@ -50,9 +51,15 @@ private[sbt] class WatchServiceBackedObservable[+T](s: NewWatchState,
         throw new IllegalStateException("Couldn't start event thread")
       @tailrec
       final def loopImpl(): Unit = {
-        if (!closed.get) getFilesForKey(s.service.poll(delay)).foreach {
-          case (path, attrs) =>
-            Evaluate(converter(path, attrs)).foreach(t => observers.onNext(path -> t))
+        try {
+          if (!closed.get) getFilesForKey(s.service.poll(delay)).foreach {
+            case (path, attrs) =>
+              Evaluate(converter(path, attrs)).foreach(t => observers.onNext(path -> t))
+          }
+        } catch {
+          case NonFatal(e) =>
+            logger.debug(
+              s"Error getting files from ${s.service}: $e\n${e.getStackTrace mkString "\n"}")
         }
         if (!closed.get) loopImpl()
       }
