@@ -33,22 +33,22 @@ private[sbt] class LegacyFileTreeRepository[+T](
     FileTreeView.DEFAULT.map((p: Path, a: SimpleFileAttributes) => converter(p, a))
   private[this] val globs = ConcurrentHashMap.newKeySet[Glob].asScala
   private[this] val fileCache = new FileCache(converter, globs)
-  private[this] val observable: Observable[(Path, CustomFileAttributes[T])]
-    with Registerable[(Path, CustomFileAttributes[T])] =
-    new WatchServiceBackedObservable[CustomFileAttributes[T]](
+  private[this] val observable: Observable[FileEvent[CustomFileAttributes[T]]]
+    with Registerable[FileEvent[CustomFileAttributes[T]]] =
+    new WatchServiceBackedObservable[T](
       new NewWatchState(globs, watchService, new ConcurrentHashMap[Path, WatchKey].asScala),
       100.millis,
-      (path: Path, attributes: SimpleFileAttributes) => converter(path, attributes),
+      converter,
       closeService = true,
       logger
     )
-  private[this] val observers = new Observers[(Path, FileEvent[CustomFileAttributes[T]])]
+  private[this] val observers = new Observers[FileEvent[CustomFileAttributes[T]]]
   private[this] val handle =
-    observable.addObserver(new Observer[(Path, CustomFileAttributes[T])] {
-      override def onNext(tuple: (Path, CustomFileAttributes[T])): Unit = {
-        val (path, attrs) = tuple
-        val events: Seq[FileEvent[CustomFileAttributes[T]]] = fileCache.update(path, attrs)
-        events.foreach(e => observers.onNext(e.path -> e))
+    observable.addObserver(new Observer[FileEvent[CustomFileAttributes[T]]] {
+      override def onNext(event: FileEvent[CustomFileAttributes[T]]): Unit = {
+        val events: Seq[FileEvent[CustomFileAttributes[T]]] =
+          fileCache.update(event.path, event.attributes)
+        events.foreach(observers.onNext)
       }
     })
   override def close(): Unit = {
@@ -56,7 +56,7 @@ private[sbt] class LegacyFileTreeRepository[+T](
     observable.close()
   }
   override def register(
-      glob: Glob): Either[IOException, Observable[(Path, FileEvent[CustomFileAttributes[T]])]] = {
+      glob: Glob): Either[IOException, Observable[FileEvent[CustomFileAttributes[T]]]] = {
     fileCache.register(glob)
     observable.register(glob).right.foreach(_.close())
     new RegisterableObservable(observers).register(glob)
@@ -72,7 +72,6 @@ private[sbt] class LegacyFileTreeRepository[+T](
    * @param observer the callbacks to invoke
    * @return a handle to the callback.
    */
-  override def addObserver(
-      observer: Observer[(Path, FileEvent[CustomFileAttributes[T]])]): AutoCloseable =
+  override def addObserver(observer: Observer[FileEvent[CustomFileAttributes[T]]]): AutoCloseable =
     observers.addObserver(observer)
 }

@@ -61,8 +61,20 @@ private[io] class FileCache[+T](converter: (Path, SimpleFileAttributes) => Custo
           current.get(p) match {
             case Some(newAttributes) if prevAttributes != newAttributes =>
               result += Update(p, prevAttributes, newAttributes)
-            case None => result += Deletion(p, prevAttributes)
-            case _    =>
+            case None =>
+              val value = prevAttributes.value
+              result += Deletion(
+                p,
+                CustomFileAttributes.get(
+                  path,
+                  SimpleFileAttributes.get(false,
+                                           prevAttributes.isDirectory,
+                                           prevAttributes.isRegularFile,
+                                           prevAttributes.isSymbolicLink),
+                  value.fold((t: Throwable) => throw t, identity)
+                )
+              )
+            case _ =>
           }
       }
       current.foreach {

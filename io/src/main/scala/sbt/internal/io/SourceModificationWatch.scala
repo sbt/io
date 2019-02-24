@@ -38,20 +38,13 @@ private[sbt] object SourceModificationWatch {
     if (state.count == 0) {
       (true, state.withCount(1))
     } else {
-      val converter: ((Path, SimpleFileAttributes)) => FileEvent[SimpleFileAttributes] = {
-        case (p, a) =>
-          if (a.exists) Update(p, a, a) else Deletion(p, a)
-      }
-      val observable: Observable[FileEvent[SimpleFileAttributes]] =
-        Observable.map(
-          new WatchServiceBackedObservable[SimpleFileAttributes](
-            state.toNewWatchState,
-            delay,
-            (p: Path, a: SimpleFileAttributes) => a,
-            closeService = false,
-            NullWatchLogger
-          ),
-          converter
+      val observable: Observable[FileEvent[CustomFileAttributes[Unit]]] =
+        new WatchServiceBackedObservable[Unit](
+          state.toNewWatchState,
+          delay,
+          (p: Path, a: SimpleFileAttributes) => CustomFileAttributes.get(p, a, ()),
+          closeService = false,
+          NullWatchLogger
         )
       val monitor: FileEventMonitor[FileEvent[SimpleFileAttributes]] =
         FileEventMonitor.antiEntropy(observable,

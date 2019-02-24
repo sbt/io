@@ -22,11 +22,12 @@ class HybridPollingFileTreeRepositorySpec extends FlatSpec with Matchers {
       repo.register(dir ** AllPassFilter)
       repo.register(pollingDir ** AllPassFilter)
       val regularFile = dir.resolve("regular-file")
-      repo.addObserver(new Observer[(Path, FileEvent[CustomFileAttributes[Unit]])] {
-        override def onNext(t: (Path, FileEvent[CustomFileAttributes[Unit]])): Unit = t._2 match {
-          case Creation(path, _, _) if path == regularFile => latch.countDown()
+      val observer: Observer[FileEvent[CustomFileAttributes[Unit]]] =
+        (_: FileEvent[CustomFileAttributes[Unit]]) match {
+          case Creation(p, _, _) if p == regularFile => latch.countDown()
+          case _                                     =>
         }
-      })
+      repo.addObserver(observer)
 
       def listBoth: Seq[Path] =
         repo.ls(dir ** AllPassFilter) ++ repo.ls(pollingDir ** AllPassFilter)

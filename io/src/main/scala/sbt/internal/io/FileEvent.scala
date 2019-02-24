@@ -20,17 +20,6 @@ private[sbt] sealed trait FileEvent[+T] {
   def occurredAt: Deadline
 }
 private[sbt] object FileEvent {
-  private[sbt] def observer[T](
-      onCreate: (NioPath, T) => Unit,
-      onDelete: (NioPath, T) => Unit,
-      onUpdate: ((NioPath, T), (NioPath, T)) => Unit): Observer[(NioPath, FileEvent[T])] =
-    new Observer[(NioPath, FileEvent[T])] {
-      override def onNext(t: (NioPath, FileEvent[T])): Unit = t match {
-        case (_, c: Creation[T]) => onCreate(c.path, c.attributes)
-        case (_, d: Deletion[T]) => onDelete(d.path, d.attributes)
-        case (_, u: Update[T])   => onUpdate(u.path -> u.previousAttributes, u.path -> u.attributes)
-      }
-    }
   def unapply[T](event: FileEvent[T]): Option[(NioPath, T, Deadline)] =
     event match {
       case Creation(path, attributes, occurredAt)  => Some((path, attributes, occurredAt))

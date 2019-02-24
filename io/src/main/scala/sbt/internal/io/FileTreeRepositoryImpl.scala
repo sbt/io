@@ -48,20 +48,20 @@ private[sbt] class FileTreeRepositoryImpl[+T](
     },
     true
   )
-  private[this] val observers = new Observers[(NioPath, FileEvent[CustomFileAttributes[T]])]
+  private[this] val observers = new Observers[FileEvent[CustomFileAttributes[T]]]
 
   underlying.addCacheObserver(new CacheObserver[CustomFileAttributes[T]] {
     override def onCreate(newEntry: FileTreeDataViews.Entry[CustomFileAttributes[T]]): Unit = {
       val path = newEntry.getTypedPath.getPath
       newEntry.getValue.asScala.right.foreach { v =>
-        observers.onNext(path -> Creation(path, v))
+        observers.onNext(Creation(path, v))
       }
       ()
     }
     override def onDelete(oldEntry: FileTreeDataViews.Entry[CustomFileAttributes[T]]): Unit = {
       val path = oldEntry.getTypedPath.getPath
       oldEntry.getValue.asScala.right.foreach { v =>
-        observers.onNext(path -> Deletion(path, v))
+        observers.onNext(Deletion(path, v))
       }
       ()
     }
@@ -73,12 +73,12 @@ private[sbt] class FileTreeRepositoryImpl[+T](
       oldEither match {
         case Right(o) =>
           newEither match {
-            case Right(n) => observers.onNext(path -> Update(path, o, n))
-            case _        => observers.onNext(path -> Deletion(path, o))
+            case Right(n) => observers.onNext(Update(path, o, n))
+            case _        => observers.onNext(Deletion(path, o))
           }
         case _ =>
           newEither match {
-            case Right(n) => observers.onNext(path -> Creation(path, n))
+            case Right(n) => observers.onNext(Creation(path, n))
             case _        =>
           }
       }
@@ -86,7 +86,7 @@ private[sbt] class FileTreeRepositoryImpl[+T](
     override def onError(exception: IOException): Unit = {}
   }: CacheObserver[CustomFileAttributes[T]])
   override def addObserver(
-      observer: Observer[(NioPath, FileEvent[CustomFileAttributes[T]])]): AutoCloseable = {
+      observer: Observer[FileEvent[CustomFileAttributes[T]]]): AutoCloseable = {
     throwIfClosed("addObserver")
     observers.addObserver(observer)
   }
@@ -110,8 +110,8 @@ private[sbt] class FileTreeRepositoryImpl[+T](
       }
     res.result
   }
-  override def register(glob: Glob)
-    : Either[IOException, Observable[(NioPath, FileEvent[CustomFileAttributes[T]])]] = {
+  override def register(
+      glob: Glob): Either[IOException, Observable[FileEvent[CustomFileAttributes[T]]]] = {
     throwIfClosed("register")
     underlying.register(glob.base, glob.depth).asScala match {
       case Right(_) => new RegisterableObservable(observers).register(glob)

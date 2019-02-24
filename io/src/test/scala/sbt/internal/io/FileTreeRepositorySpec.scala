@@ -5,6 +5,7 @@ import java.nio.file.{ Files, Path => NioPath, Paths => NioPaths }
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import org.scalatest.{ FlatSpec, Matchers }
+import sbt.internal.io.FileEvent.{ Creation, Deletion }
 import sbt.internal.io.FileTreeView.AllPass
 import sbt.io.syntax._
 import sbt.io.{ AllPassFilter, Glob, IO }
@@ -45,10 +46,10 @@ object FileTreeRepositorySpec {
   }
   def withTempFile[R](f: NioPath => R): R = withTempDir(withTempFile(_)(f))
   def simpleCache(f: NioPath => Unit): FileTreeRepository[CustomFileAttributes[Unit]] =
-    simpleCache(new Observer[(NioPath, FileEvent[CustomFileAttributes[Unit]])] {
-      override def onNext(t: (NioPath, FileEvent[CustomFileAttributes[Unit]])): Unit = f(t._1)
+    simpleCache(new Observer[FileEvent[CustomFileAttributes[Unit]]] {
+      override def onNext(t: FileEvent[CustomFileAttributes[Unit]]): Unit = f(t.path)
     })
-  def simpleCache(observer: Observer[(NioPath, FileEvent[CustomFileAttributes[Unit]])])
+  def simpleCache(observer: Observer[FileEvent[CustomFileAttributes[Unit]]])
     : FileTreeRepository[CustomFileAttributes[Unit]] = {
     val underlying = new FileTreeRepositoryImpl((path: NioPath, attributes: SimpleFileAttributes) =>
       CustomFileAttributes.get(path, attributes, ()))
@@ -90,11 +91,12 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
     val latch = new CountDownLatch(1)
     val initial = Files.createTempFile(dir, "move", "")
     val moved = NioPaths.get(s"${initial.toString}.moved")
-    val onChange = (p: NioPath, _: CustomFileAttributes[Unit]) => if (p == moved) latch.countDown()
-    val onUpdate =
-      (_: (NioPath, CustomFileAttributes[Unit]), pair: (NioPath, CustomFileAttributes[Unit])) =>
-        if (pair._1 == moved) latch.countDown()
-    using(simpleCache(FileEvent.observer(onChange, onChange, onUpdate))) { c =>
+    val observer: Observer[FileEvent[CustomFileAttributes[Unit]]] =
+      (_: FileEvent[CustomFileAttributes[Unit]]) match {
+        case Creation(path, _, _) => if (path == moved) latch.countDown()
+        case _                    =>
+      }
+    using(simpleCache(observer)) { c =>
       c.register(dir ** AllPassFilter)
       c.ls(dir * AllPassFilter) === Seq(initial)
       Files.move(initial, moved)
@@ -152,10 +154,12 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
     var files = Set.empty[NioPath]
     val creationLatch = new CountDownLatch(filesToAdd * 2)
     val deletionLatch = new CountDownLatch(filesToAdd * 2)
-    val observer =
-      FileEvent.observer[CustomFileAttributes[Unit]](onCreate = (_, _) => creationLatch.countDown(),
-                                                     onDelete = (_, _) => deletionLatch.countDown(),
-                                                     onUpdate = (_, _) => {})
+    val observer: Observer[FileEvent[CustomFileAttributes[Unit]]] =
+      (_: FileEvent[CustomFileAttributes[Unit]]) match {
+        case Creation(_, attrs, _) if attrs.isRegularFile => creationLatch.countDown()
+        case Deletion(_, attrs, _) if attrs.isRegularFile => deletionLatch.countDown()
+        case _                                            =>
+      }
     using(simpleCache(observer)) { c =>
       c.register(dir ** AllPassFilter)
 
@@ -186,14 +190,11 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
       case (p: NioPath, a: SimpleFileAttributes) =>
         CustomFileAttributes.get(p, a, LastModified(Files.getLastModifiedTime(p).toMillis))
     }) { c =>
-      c.addObserver(new Observer[(NioPath, FileEvent[CustomFileAttributes[LastModified]])] {
-        override def onNext(t: (NioPath, FileEvent[CustomFileAttributes[LastModified]])): Unit = {
-          val (_, event) = t
-          val attributes = event.attributes
-          if (attributes.exists && attributes.value.map(_.at) == Right(updatedLastModified))
-            latch.countDown()
-        }
-      })
+      c.addObserver { event =>
+        val attributes = event.attributes
+        if (attributes.exists && attributes.value.map(_.at) == Right(updatedLastModified))
+          latch.countDown()
+      }
       c.register(file.getParent ** AllPassFilter)
       val Seq(fileEntry) = c.list(file.getParent ** AllPassFilter, AllPass)
       val lastModified = fileEntry._2.value

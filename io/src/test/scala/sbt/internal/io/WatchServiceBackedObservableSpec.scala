@@ -21,19 +21,17 @@ class WatchServiceBackedObservableSpec extends FlatSpec {
                         WatchService.default,
                         new ConcurrentHashMap[Path, WatchKey].asScala)
     val observable =
-      new WatchServiceBackedObservable(watchState,
-                                       100.millis,
-                                       (_: Path, _: SimpleFileAttributes) => (),
-                                       closeService = true,
-                                       new WatchLogger {
-                                         override def debug(msg: => Any): Unit = {}
-                                       })
+      new WatchServiceBackedObservable(
+        watchState,
+        100.millis,
+        (p: Path, a: SimpleFileAttributes) => CustomFileAttributes.get(p, a, ()),
+        closeService = true,
+        (_: Any) => {}
+      )
     try {
       val latch = new CountDownLatch(1)
       val file = subdir.resolve("file")
-      observable.addObserver(new Observer[(Path, Unit)] {
-        override def onNext(t: (Path, Unit)): Unit = if (t._1 == file) latch.countDown()
-      })
+      observable.addObserver(e => if (e.path == file) latch.countDown())
       observable.register(path ** AllPassFilter)
       Files.createFile(file)
       assert(latch.await(1, TimeUnit.SECONDS))

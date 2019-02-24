@@ -13,7 +13,6 @@ package sbt.internal.io
 import java.io.IOException
 import java.nio.file.Path
 
-import sbt.internal.io.FileEvent.{ Deletion, Update }
 import sbt.internal.io.HybridPollingFileTreeRepository._
 import sbt.io._
 import sbt.io.syntax._
@@ -42,13 +41,13 @@ private[io] case class HybridPollingFileTreeRepositoryImpl[+T](
   private val repo = new FileTreeRepositoryImpl[T](converter)
   private val view: NioFileTreeView[CustomFileAttributes[T]] =
     DefaultFileTreeView.map((p: Path, a: SimpleFileAttributes) => converter(p, a))
-  private[this] val observers = new Observers[(Path, Event[T])]
+  private[this] val observers = new Observers[Event[T]]
   private[this] val handle = repo.addObserver(observers)
 
   private def shouldPoll(glob: Glob): Boolean =
     pollingGlobs.exists(_.toFileFilter(acceptBase = true).accept(glob.base.toFile))
   override def addObserver(
-      observer: Observer[(Path, FileEvent[CustomFileAttributes[T]])]): AutoCloseable = {
+      observer: Observer[FileEvent[CustomFileAttributes[T]]]): AutoCloseable = {
     observers.addObserver(observer)
   }
   override def list(glob: Glob, filter: ((Path, CustomFileAttributes[T])) => Boolean)
@@ -90,27 +89,18 @@ private[io] case class HybridPollingFileTreeRepositoryImpl[+T](
       logger: WatchLogger): Observable[Event[T]] with Registerable[Event[T]] =
     new Observable[Event[T]] with Registerable[Event[T]] {
       private val childObservers = new Observers[Event[T]]
-      private val expandedChildObservers = new Observer[(Path, Event[T])] {
-        override def onNext(t: (Path, Event[T])): Unit = {
-          childObservers.onNext(t._2)
-        }
-      }
       private val watchState = WatchState.empty(pollingGlobs, new PollingWatchService(delay))
-      private val observable: Observable[(Path, Event[T])] with Registerable[(Path, Event[T])] =
-        new WatchServiceBackedObservable[Event[T]](
+      private val observable: Observable[Event[T]] with Registerable[Event[T]] =
+        new WatchServiceBackedObservable[T](
           watchState,
           delay,
-          (path: Path, simpleFileAttributes: SimpleFileAttributes) => {
-            val attributes = converter(path, simpleFileAttributes)
-            if (attributes.exists) Update(path, attributes, attributes)
-            else Deletion(path, attributes)
-          },
+          converter,
           true,
           logger
         )
       val handle: AutoCloseable = {
         val handles = Seq(
-          observers.addObserver(expandedChildObservers),
+          observers.addObserver(childObservers),
           observable.addObserver(observers)
         )
         new AutoCloseable { override def close(): Unit = handles.foreach(_.close()) }
@@ -119,9 +109,8 @@ private[io] case class HybridPollingFileTreeRepositoryImpl[+T](
       pollingGlobs.foreach(observable.register(_).right.foreach(_.close()))
 
       override def register(glob: Glob): Either[IOException, Observable[Event[T]]] = {
-        if (shouldPoll(glob))
-          observable.register(glob).right.map(o => Observable.map(o, (_: (Path, Event[T]))._2))
-        else Registerable.fileEvent(glob, childObservers)
+        if (shouldPoll(glob)) observable.register(glob)
+        else Registerable(glob, childObservers)
       }
       override def close(): Unit = {
         handle.close()
@@ -140,7 +129,7 @@ private[io] case class HybridPollingFileTreeRepositoryImpl[+T](
    *         thrown while registering the path. The result should be true if the path has
    *         never been previously registered or if the recursive flag flips from false to true.
    */
-  override def register(glob: Glob): Either[IOException, Observable[(Path, Event[T])]] = {
+  override def register(glob: Glob): Either[IOException, Observable[Event[T]]] = {
     repo.register(glob)
     new RegisterableObservable(observers).register(glob)
   }

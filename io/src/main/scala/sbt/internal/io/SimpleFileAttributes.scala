@@ -69,6 +69,12 @@ private[sbt] object CustomFileAttributes {
     val attrs = new LazyFileAttributes(path, Some(simpleFileAttributes))
     new Impl(Right(t), simpleFileAttributes.exists, attrs)
   }
+  private[sbt] def getEither[T](path: NioPath,
+                                simpleFileAttributes: SimpleFileAttributes,
+                                t: Either[Throwable, T]): CustomFileAttributes[T] = {
+    val attrs = new LazyFileAttributes(path, Some(simpleFileAttributes))
+    new Impl(t, simpleFileAttributes.exists, attrs)
+  }
   private[sbt] def get[T](path: NioPath,
                           simpleFileAttributes: SimpleFileAttributes,
                           f: (NioPath, SimpleFileAttributes) => T): CustomFileAttributes[T] = {

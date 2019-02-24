@@ -15,7 +15,6 @@ import java.nio.file.{ Path => NioPath }
 import java.util
 import java.util.concurrent.atomic.AtomicInteger
 
-import sbt.internal.io.FileEvent.{ Deletion, Update }
 import sbt.io.Glob
 
 import scala.collection.JavaConverters._
@@ -115,7 +114,7 @@ private[sbt] class Observers[T] extends Observer[T] with Observable[T] {
     }
   }
   override def toString: String =
-    s"Observers(\n${observers.map { case (k, v) => s"  $k -> $v" }.mkString("\n")}\n)"
+    s"Observers(observers = ${observers.values}, observables = ${observables.keys})"
   override def onNext(t: T): Unit = observers.synchronized {
     observers.values.foreach(
       o =>
@@ -123,8 +122,8 @@ private[sbt] class Observers[T] extends Observer[T] with Observable[T] {
         catch { case NonFatal(_) => })
   }
 }
-private[sbt] class RegisterableObservable[T](val delegate: Observers[(NioPath, T)]) extends AnyVal {
-  def register(glob: Glob): Either[IOException, Observable[(NioPath, T)]] =
+private[sbt] class RegisterableObservable[T](val delegate: Observers[FileEvent[T]]) extends AnyVal {
+  def register(glob: Glob): Either[IOException, Observable[FileEvent[T]]] =
     Registerable(glob, delegate)
 }
 
@@ -145,24 +144,16 @@ private[sbt] trait Registerable[+T] extends AutoCloseable {
   def register(glob: Glob): Either[IOException, Observable[T]]
 }
 private[sbt] object Registerable {
-  def fileEvent[T <: SimpleFileAttributes](
-      glob: Glob,
-      delegate: Observers[FileEvent[T]]): Either[IOException, Observable[FileEvent[T]]] = {
-    val delegateObserver = new Observers[(NioPath, T)]
-    val transformation: (NioPath, T) => FileEvent[T] = (path, attributes) =>
-      if (attributes.exists) Update(path, attributes, attributes) else Deletion(path, attributes)
-    apply(glob, delegateObserver).right.map(Observable.map(_, transformation.tupled))
-  }
   def apply[T](glob: Glob,
-               delegate: Observers[(NioPath, T)]): Either[IOException, Observable[(NioPath, T)]] = {
+               delegate: Observers[FileEvent[T]]): Either[IOException, Observable[FileEvent[T]]] = {
     val filter = glob.toFileFilter
-    val underlying = new Observers[(NioPath, T)]
+    val underlying = new Observers[FileEvent[T]]
     val observers =
-      Observable.filter(underlying, (r: (NioPath, T)) => filter.accept(r._1.toFile))
+      Observable.filter(underlying, (e: FileEvent[T]) => filter.accept(e.path.toFile))
     val handle = delegate.addObserver(underlying)
 
-    Right(new Observable[(NioPath, T)] {
-      override def addObserver(observer: Observer[(NioPath, T)]): AutoCloseable =
+    Right(new Observable[FileEvent[T]] {
+      override def addObserver(observer: Observer[FileEvent[T]]): AutoCloseable =
         observers.addObserver(observer)
       override def close(): Unit = handle.close()
     })

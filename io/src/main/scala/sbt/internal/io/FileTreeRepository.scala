@@ -95,8 +95,8 @@ private[sbt] object FileTreeView {
  */
 private[sbt] trait FileTreeRepository[+T]
     extends NioFileTreeView[T]
-    with Registerable[(NioPath, FileEvent[T])]
-    with Observable[(NioPath, FileEvent[T])]
+    with Registerable[FileEvent[T]]
+    with Observable[FileEvent[T]]
     with AutoCloseable
 
 private[sbt] object FileTreeRepository {

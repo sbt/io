@@ -5,7 +5,6 @@ import java.nio.file.{ ClosedWatchServiceException, Files, Path, Paths }
 
 import org.scalatest.{ Assertion, FlatSpec, Matchers }
 import sbt.internal.io.EventMonitorSpec._
-import sbt.internal.io.FileEvent.{ Deletion, Update }
 import sbt.io.syntax._
 import sbt.io.{ WatchService, _ }
 
@@ -444,7 +443,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 }
 
 object EventMonitorSpec {
-  type Event = FileEvent[SimpleFileAttributes]
+  type Event = FileEvent[CustomFileAttributes[Unit]]
   trait Logger extends WatchLogger
   object NullLogger extends Logger { override def debug(msg: => Any): Unit = {} }
   // This can't be defined in MonitorOps because of a bug in the scala 2.10 compiler
@@ -471,21 +470,10 @@ object EventMonitorSpec {
     override def debug(msg: => Any): Unit = lines.synchronized { lines += msg.toString; () }
     def printLines(msg: String): Unit = println(s"$msg. Log lines:\n${lines mkString "\n"}")
   }
-  implicit class ObservableOps[T <: SimpleFileAttributes](
-      val observable: Observable[(Path, T)] with Registerable[(Path, T)])
+  implicit class ObservableOps(val observable: Observable[Event] with Registerable[Event])
       extends AnyVal {
     def register(globs: Seq[Glob]): Observable[Event] = {
-      val transformer: (Path, SimpleFileAttributes) => Event =
-        (path: Path, attrs: SimpleFileAttributes) =>
-          if (attrs.exists) Update(path, attrs, attrs)
-          else Deletion(path, attrs)
-      val delegate = aggregate(globs.flatMap { g =>
-        observable
-          .register(g)
-          .right
-          .map(o => Observable.map(o, transformer.tupled))
-          .fold(_ => None, Some(_))
-      }: _*)
+      val delegate = aggregate(globs.flatMap(observable.register(_).toOption): _*)
       new Observable[Event] {
         override def addObserver(o: Observer[Event]): AutoCloseable = delegate.addObserver(o)
         override def close(): Unit = {
@@ -516,9 +504,8 @@ private[sbt] trait RepoEventMonitorSpec extends FlatSpec with Matchers with Even
   override def newObservable(globs: Seq[Glob], logger: Logger): Observable[Event] = {
     val repository = factory(converter)
     new Observable[Event] {
-      val aggregated = EventMonitorSpec.aggregate(globs.map(repository.register).collect {
-        case Right(o) => Observable.map(o, (_: (Path, Event))._2)
-      }: _*)
+      val aggregated =
+        EventMonitorSpec.aggregate(globs.flatMap(repository.register(_).toOption): _*)
       override def addObserver(observer: Observer[Event]): AutoCloseable =
         aggregated.addObserver(observer)
       override def close(): Unit = {
@@ -568,10 +555,10 @@ private[sbt] abstract class SourceModificationWatchSpec(
 
   override def newObservable(globs: Seq[Glob], logger: Logger): Observable[Event] = {
     val watchState = WatchState.empty(globs, getService)
-    val observable = new WatchServiceBackedObservable[SimpleFileAttributes](
+    val observable = new WatchServiceBackedObservable[Unit](
       watchState,
       5.millis,
-      (_: Path, attrs: SimpleFileAttributes) => attrs,
+      (p: Path, attrs: SimpleFileAttributes) => CustomFileAttributes.get(p, attrs, ()),
       closeService = true,
       logger)
     observable.register(globs)
