@@ -3,8 +3,9 @@ package sbt.internal.io
 import java.io.IOException
 import java.nio.file.{ ClosedWatchServiceException, Files, Path, Paths }
 
-import org.scalatest.{ Assertion, FlatSpec, Matchers }
+import org.scalatest.{ FlatSpec, Matchers }
 import sbt.internal.io.EventMonitorSpec._
+import sbt.internal.io.FileEvent.Deletion
 import sbt.io.syntax._
 import sbt.io.{ WatchService, _ }
 
@@ -17,16 +18,24 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
   def newObservable(file: File): Observable[Event] =
     newObservable(Seq(file.toPath.toRealPath().toFile ** AllPassFilter), NullLogger)
   private val maxWait = 2 * pollDelay
+  private[this] val random = new scala.util.Random()
+  private def randomTouch(file: File, add: Boolean = true): Unit = {
+    IO.touch(file)
+    val rand = (10000 + random.nextInt(50000)) * (if (add) 1 else -1)
+    IO.setModifiedTimeOrFalse(file, System.currentTimeMillis + rand)
+    ()
+  }
 
   it should "detect modified files" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val file = parentDir / "Foo.scala"
 
     writeNewFile(file, "foo")
+    val real = realPath(file.toPath)
 
-    watchTest(parentDir) {
+    assert(watchTest(parentDir, pathFilter(real), contains(real)) {
       IO.write(file, "bar")
-    }
+    })
   }
 
   it should "watch a directory for file creation" in IO.withTemporaryDirectory { dir =>
@@ -35,56 +44,66 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 
     IO.createDirectory(parentDir)
 
-    watchTest(parentDir) {
+    assert(watchTest(parentDir, pathFilter(created.toPath), contains(created.toPath)) {
       IO.write(created, "foo")
-    }
+    })
   }
 
   it should "ignore creation of directories with no tracked globs" in IO
     .withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val created = parentDir / "ignoreme"
+      val subdir = parentDir / "subdir"
+      val subFile = subdir / "foo.scala"
 
-      IO.createDirectory(parentDir)
+      IO.createDirectory(subdir)
 
-      watchTest(parentDir, expectedTrigger = false) {
+      assert(watchTest(parentDir, AllPass, excludes(created.toPath)) {
         IO.createDirectory(created)
-      }
+        Files.createFile(subFile.toPath)
+        ()
+      })
     }
 
   it should "ignore creation of files that do not match inclusion filter" in
     IO.withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val created = parentDir / "ignoreme"
+      val scalaCreated = parentDir / "foo.scala"
 
       IO.createDirectory(parentDir)
 
-      watchTest(parentDir, expectedTrigger = false) {
-        IO.touch(created)
-      }
+      assert(watchTest(parentDir, AllPass, excludes(created.toPath)) {
+        randomTouch(created)
+        randomTouch(scalaCreated)
+      })
     }
 
-  it should "ignore creation of files that are explicitly ind" in IO
+  it should "ignore creation of files that are explicitly ignored" in IO
     .withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val created = parentDir / ".hidden.scala"
+      val notIgnored = parentDir / "foo.scala"
 
       IO.createDirectory(parentDir)
 
-      watchTest(parentDir, expectedTrigger = false) {
-        IO.touch(created)
-      }
+      assert(watchTest(parentDir, AllPass, excludes(created.toPath)) {
+        randomTouch(created)
+        randomTouch(notIgnored)
+      })
     }
 
   it should "ignore creation of an empty directory" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val created = parentDir / "ignoreme"
+    val source = parentDir / "foo.scala"
 
     IO.createDirectory(parentDir)
 
-    watchTest(parentDir, expectedTrigger = false) {
+    assert(watchTest(parentDir, AllPass, excludes(created.toPath)) {
       IO.createDirectory(created)
-    }
+      randomTouch(source)
+    })
   }
 
   it should "detect files created in a subdirectory" in IO.withTemporaryDirectory { dir =>
@@ -94,9 +113,9 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 
     IO.createDirectory(subDir)
 
-    watchTest(parentDir) {
+    assert(watchTest(parentDir, pathFilter(created.toPath), contains(created.toPath)) {
       IO.write(created, "foo")
-    }
+    })
   }
 
   it should "ignore creation of files not included in inclusion filter in subdirectories" in
@@ -104,25 +123,29 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "sub"
       val created = subDir / "ignoreme"
+      val source = subDir / "foo.scala"
 
       IO.createDirectory(subDir)
 
-      watchTest(parentDir, expectedTrigger = false) {
-        IO.touch(created)
-      }
+      assert(watchTest(parentDir, AllPass, excludes(created.toPath)) {
+        randomTouch(created)
+        randomTouch(source)
+      })
     }
 
-  it should "ignore creation of files explicitly ind in subdirectories" in
+  it should "ignore creation of files explicitly ignored in subdirectories" in
     IO.withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "sub"
       val created = subDir / ".hidden.scala"
+      val source = subDir / "foo.scala"
 
       IO.createDirectory(subDir)
 
-      watchTest(parentDir, expectedTrigger = false) {
-        IO.touch(created)
-      }
+      assert(watchTest(parentDir, AllPass, excludes(created.toPath)) {
+        randomTouch(created)
+        randomTouch(source)
+      })
     }
 
   it should "ignore creation of empty directories in a subdirectory" in IO
@@ -130,12 +153,14 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "sub"
       val created = subDir / "ignoreme"
+      val source = subDir / "foo.scala"
 
       IO.createDirectory(subDir)
 
-      watchTest(parentDir, expectedTrigger = false) {
+      assert(watchTest(parentDir, AllPass, excludes(created.toPath)) {
         IO.createDirectory(created)
-      }
+        randomTouch(source)
+      })
     }
 
   it should "detect deleted files" in IO.withTemporaryDirectory { dir =>
@@ -143,9 +168,9 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     val file = parentDir / "WillBeDeleted.scala"
     IO.write(file, "foo")
 
-    watchTest(parentDir) {
+    assert(watchTest(parentDir, isDeletion(file.toPath), hasDeletion(file.toPath)) {
       IO.delete(file)
-    }
+    })
   }
 
   it should "ignore deletion of files not included in inclusion filter" in IO
@@ -153,30 +178,36 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val parentDir = dir / "src" / "watchme"
       val file = parentDir / "ignoreme"
       IO.write(file, "foo")
+      val source = parentDir / "foo.scala"
 
-      watchTest(parentDir, expectedTrigger = false) {
+      assert(watchTest(parentDir, AllPass, excludes(file.toPath)) {
         IO.delete(file)
-      }
+        randomTouch(source)
+      })
     }
 
-  it should "ignore deletion of files explicitly ind" in IO.withTemporaryDirectory { dir =>
+  it should "ignore deletion of files explicitly ignored" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val file = parentDir / ".hidden.scala"
     IO.write(file, "foo")
+    val source = parentDir / "foo.scala"
 
-    watchTest(parentDir, expectedTrigger = false) {
+    assert(watchTest(parentDir, AllPass, excludes(file.toPath)) {
       IO.delete(file)
-    }
+      randomTouch(source)
+    })
   }
 
   it should "ignore deletion of empty directories" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
     val subDir = parentDir / "ignoreme"
     IO.createDirectory(subDir)
+    val source = parentDir / "foo.scala"
 
-    watchTest(parentDir, expectedTrigger = false) {
+    assert(watchTest(parentDir, AllPass, excludes(subDir.toPath)) {
       IO.delete(subDir)
-    }
+      randomTouch(source)
+    })
   }
 
   it should "detect deleted files in subdirectories" in IO.withTemporaryDirectory { dir =>
@@ -185,9 +216,10 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     val willBeDeleted = subDir / "WillBeDeleted.scala"
     IO.write(willBeDeleted, "foo")
 
-    watchTest(parentDir) {
-      IO.delete(willBeDeleted)
-    }
+    assert(
+      watchTest(parentDir, isDeletion(willBeDeleted.toPath), hasDeletion(willBeDeleted.toPath)) {
+        IO.delete(willBeDeleted)
+      })
   }
 
   it should "ignore deletion of files not included in inclusion filter in subdirectories" in
@@ -196,22 +228,26 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val subDir = parentDir / "subdir"
       val willBeDeleted = subDir / "ignoreme"
       IO.write(willBeDeleted, "foo")
+      val source = subDir / "foo.scala"
 
-      watchTest(parentDir, expectedTrigger = false) {
+      assert(watchTest(parentDir, AllPass, excludes(willBeDeleted.toPath)) {
         IO.delete(willBeDeleted)
-      }
+        randomTouch(source)
+      })
     }
 
-  it should "ignore deletion of files explicitly ind in subdirectories" in
+  it should "ignore deletion of files explicitly ignored in subdirectories" in
     IO.withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "subdir"
       val willBeDeleted = subDir / ".hidden.scala"
       IO.write(willBeDeleted, "foo")
+      val source = subDir / "foo.scala"
 
-      watchTest(parentDir, expectedTrigger = false) {
+      assert(watchTest(parentDir, AllPass, excludes(willBeDeleted.toPath)) {
         IO.delete(willBeDeleted)
-      }
+        randomTouch(source)
+      })
     }
 
   it should "ignore deletion of empty directories in subdirectories" in IO
@@ -220,10 +256,12 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val subDir = parentDir / "subdir"
       val willBeDeleted = subDir / "ignoreme"
       IO.createDirectory(willBeDeleted)
+      val source = parentDir / "foo.scala"
 
-      watchTest(parentDir, expectedTrigger = false) {
+      assert(watchTest(parentDir, AllPass, excludes(willBeDeleted.toPath)) {
         IO.delete(willBeDeleted)
-      }
+        randomTouch(source)
+      })
     }
 
   it should "ignore creation and then deletion of empty directories" in IO
@@ -231,19 +269,23 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "subdir"
       IO.createDirectory(parentDir)
+      val source = parentDir / "foo.scala"
 
       val observable = newObservable(parentDir.scalaSourceGlobs, NullLogger)
       val monitor = FileEventMonitor(observable)
+      IO.touch(source)
       try {
-        val triggered0 = watchTest(monitor) {
+        assert(watchTest(monitor, AllPass, excludes(subDir.toPath)) {
           IO.createDirectory(subDir)
-        }
-        triggered0 shouldBe false
+          randomTouch(source)
+          ()
+        })
 
-        val triggered1 = watchTest(monitor) {
+        assert(watchTest(monitor, AllPass, excludes(subDir.toPath)) {
           IO.delete(subDir)
-        }
-        triggered1 shouldBe false
+          randomTouch(source, add = false)
+          ()
+        })
       } finally {
         monitor.close()
       }
@@ -260,17 +302,16 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val logger = new CachingWatchLogger
       val monitor = FileEventMonitor(observable, logger)
       try {
-        val triggered0 = watchTest(monitor) {
+        assert(watchTest(monitor, AllPass, excludes(subDir.toPath)) {
           IO.createDirectory(subDir)
-          IO.touch(src)
-        }
-        triggered0 shouldBe true
+          randomTouch(src)
+        })
 
-        val triggered1 = watchTest(monitor) {
+        val triggered = watchTest(monitor, AllPass, AllPass) {
           IO.delete(subDir)
         }
-        if (!triggered1) logger.printLines("Did not trigger when expected")
-        triggered1 shouldBe true
+        if (!triggered) logger.printLines("Did not trigger when expected")
+        assert(triggered)
       } finally monitor.close()
     }
 
@@ -286,10 +327,9 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val monitor =
         FileEventMonitor.antiEntropy(observable, 10.seconds, logger, 50.millis, 10.minutes)
       try {
-        val triggered0 = watchTest(monitor) {
+        assert(watchTest(monitor, pathFilter(file.toPath), includesOnly(file.toPath)) {
           IO.write(file, "bar")
-        }
-        assert(triggered0)
+        })
         assert(IO.read(file) == "bar")
 
         val deadline = maxWait.fromNow
@@ -319,11 +359,12 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       val globs = dir.toPath.toRealPath().toFile * "*.scala" :: Nil
       val observable = newObservable(globs, NullLogger)
       val monitor = FileEventMonitor(observable)
+      val valid = dir / "foo.scala"
       try {
-        val triggered = watchTest(monitor) {
+        assert(watchTest(monitor, AllPass, includesOnly(valid.toPath)) {
           IO.write(file, "foo")
-        }
-        assert(!triggered)
+          randomTouch(valid)
+        })
         assert(IO.read(file) == "foo")
       } finally {
         monitor.close()
@@ -346,10 +387,9 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     val observable = newObservable(globs, NullLogger)
     val monitor = FileEventMonitor(observable, logger)
     try {
-      val triggered = watchTest(monitor) {
+      assert(watchTest(monitor, AllPass, includesOnly(file.toPath)) {
         IO.write(file, "bar")
-      }
-      assert(triggered)
+      })
       assert(lines.exists(_.startsWith("Received")))
     } finally {
       monitor.close()
@@ -412,19 +452,21 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       }
     }
 
-  def watchTest(monitor: FileEventMonitor[_])(modifier: => Unit): Boolean = {
+  def watchTest(monitor: FileEventMonitor[FileEvent[_]],
+                filter: FileEvent[_] => Boolean,
+                check: Seq[FileEvent[_]] => Boolean)(modifier: => Unit): Boolean = {
     modifier
-    monitor.poll(maxWait * 2).nonEmpty
+    val events = monitor.poll(maxWait * 2, filter)
+    check(events)
   }
 
-  def watchTest(base: File, expectedTrigger: Boolean = true)(modifier: => Unit): Assertion = {
+  def watchTest(base: File, filter: FileEvent[_] => Boolean, check: Seq[FileEvent[_]] => Boolean)(
+      modifier: => Unit): Boolean = {
     val globs = base.toPath.toRealPath().toFile.scalaSourceGlobs
     val logger = new CachingWatchLogger
     val observable: Observable[Event] = newObservable(globs, logger)
     try {
-      val triggered = watchTest(FileEventMonitor(observable, logger))(modifier)
-      if (triggered != expectedTrigger) logger.printLines(s"Expected $expectedTrigger")
-      triggered shouldBe expectedTrigger
+      watchTest(FileEventMonitor(observable, logger), filter, check)(modifier)
     } finally {
       observable.close()
     }
@@ -444,6 +486,53 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 
 object EventMonitorSpec {
   type Event = FileEvent[CustomFileAttributes[Unit]]
+  val AllPass: Any => Boolean = ((_: Any) => true).label("AllPass")
+  val NonEmpty: Seq[FileEvent[_]] => Boolean = ((_: Seq[FileEvent[_]]).nonEmpty).label("NonEmpty")
+  private implicit class LabeledFunction[T, R](val f: T => R) extends AnyVal {
+    def label(string: String): T => R = new (T => R) {
+      override def apply(t: T): R = f(t)
+      override def toString: String = string
+    }
+  }
+  @tailrec
+  final def realPath(path: Path, fileName: Option[Path] = None): Path = {
+    val res: Path = try path.toRealPath()
+    catch { case _: IOException => null }
+    if (res != null) fileName.fold(res)(res.resolve)
+    else {
+      val newFileName = path.getFileName
+      realPath(path.getParent, fileName.map(newFileName.resolve) orElse Some(newFileName))
+    }
+  }
+  def pathFilter(path: Path): FileEvent[_] => Boolean = {
+    val real = realPath(path)
+    ((_: FileEvent[_]).path == real).label(s"PathFilter($real)")
+  }
+  def contains(path: Path): Seq[FileEvent[_]] => Boolean = {
+    val real = realPath(path)
+    ((_: Seq[FileEvent[_]]).exists(_.path == real)).label(s"Contains($real)")
+  }
+  def excludes(path: Path): Seq[FileEvent[_]] => Boolean = {
+    val real = realPath(path)
+    ((s: Seq[FileEvent[_]]) => s.nonEmpty && s.forall(_.path != real)).label(s"Excludes($real)")
+  }
+  def includesOnly(path: Path): Seq[FileEvent[_]] => Boolean = {
+    val real = realPath(path)
+    ((s: Seq[FileEvent[_]]) => s.nonEmpty && s.forall(_.path == real)).label(s"IncludesOnly($real)")
+  }
+  def isDeletion(path: Path): FileEvent[_] => Boolean = {
+    val real = realPath(path)
+    (_: FileEvent[_]) match {
+      case Deletion(p, _, _) if p == real => true
+      case _                              => false
+    }
+  }
+  def hasDeletion(path: Path): Seq[FileEvent[_]] => Boolean = {
+    val real = realPath(path)
+    val deletion = isDeletion(real)
+    ((_: Seq[FileEvent[_]]).exists(deletion)).label(s"HasDeletion($real)")
+  }
+
   trait Logger extends WatchLogger
   object NullLogger extends Logger { override def debug(msg: => Any): Unit = {} }
   // This can't be defined in MonitorOps because of a bug in the scala 2.10 compiler
