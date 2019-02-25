@@ -2,7 +2,7 @@ package sbt.internal.io
 
 import java.nio.file.attribute.FileTime
 import java.nio.file.{ Files, Path => NioPath, Paths => NioPaths }
-import java.util.concurrent.{ CountDownLatch, TimeUnit }
+import java.util.concurrent.{ ConcurrentHashMap, CountDownLatch, TimeUnit }
 
 import org.scalatest.{ FlatSpec, Matchers }
 import sbt.internal.io.FileEvent.{ Creation, Deletion }
@@ -10,6 +10,7 @@ import sbt.internal.io.FileTreeView.AllPass
 import sbt.io.syntax._
 import sbt.io.{ AllPassFilter, Glob, IO }
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
 object FileTreeRepositorySpec {
@@ -150,34 +151,48 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
   }
 
   it should "detect many creations and deletions" in withTempDir { dir =>
-    val filesToAdd = 1000
-    var files = Set.empty[NioPath]
-    val creationLatch = new CountDownLatch(filesToAdd * 2)
-    val deletionLatch = new CountDownLatch(filesToAdd * 2)
+    val base = dir.toRealPath()
+    val dirsToAdd = 400
+    val filesToAdd = 5
+    val subdirs = (0 until dirsToAdd).map(i => base.resolve(s"subdir-$i"))
+    val files = subdirs.flatMap { subdir =>
+      (0 to filesToAdd).map(i => subdir.resolve(s"file-$i"))
+    }
+    val creationLatch = new CountDownLatch(subdirs.length + files.length)
+    val deletionLatch = new CountDownLatch(subdirs.length + files.length)
+    val creationLatches = new ConcurrentHashMap[NioPath, CountDownLatch].asScala
+    val deletionLatches = new ConcurrentHashMap[NioPath, CountDownLatch].asScala
+    (subdirs ++ files).foreach { f =>
+      creationLatches.put(f, creationLatch)
+      deletionLatches.put(f, deletionLatch)
+    }
     val observer: Observer[FileEvent[CustomFileAttributes[Unit]]] =
       (_: FileEvent[CustomFileAttributes[Unit]]) match {
-        case Creation(_, attrs) if attrs.isRegularFile => creationLatch.countDown()
-        case Deletion(_, attrs) if attrs.isRegularFile => deletionLatch.countDown()
-        case _                                         =>
+        case Creation(p, _) => creationLatches.remove(p).foreach(_.countDown())
+        case Deletion(p, _) => deletionLatches.remove(p).foreach(_.countDown())
+        case _              =>
       }
     using(simpleCache(observer)) { c =>
       c.register(dir ** AllPassFilter)
 
       withThread("file-creation-thread") {
-        files = (0 until filesToAdd).flatMap { i =>
-          val subdir = Files.createTempDirectory(dir, s"subdir-$i-")
-          val file = Files.createTempFile(subdir, s"file-$i-", "")
-          Seq(subdir, file)
-        }.toSet
+        subdirs.foreach { dir =>
+          Files.createDirectories(dir)
+        }
+        files.foreach { f =>
+          Files.createFile(f)
+        }
       } {
         assert(creationLatch.await(DEFAULT_TIMEOUT * 10))
-        c.ls(dir ** AllPassFilter).toSet shouldBe files
+        c.ls(dir ** AllPassFilter).toSet shouldBe (files ++ subdirs).toSet
       }
 
       withThread("file-deletion-thread") {
-        files.foreach(p => if (Files.isDirectory(p)) IO.delete(p.toFile))
+        subdirs.foreach(p => IO.delete(p.toFile))
       } {
-        assert(deletionLatch.await(DEFAULT_TIMEOUT * 10))
+        if (!deletionLatch.await(DEFAULT_TIMEOUT * 10)) {
+          assert(deletionLatch.getCount == 0)
+        }
         c.ls(dir * AllPassFilter) shouldBe 'empty
       }
     }
