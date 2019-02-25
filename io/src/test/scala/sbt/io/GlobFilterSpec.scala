@@ -32,4 +32,17 @@ class GlobFilterSpec extends FlatSpec with Matchers {
     assert(filter.accept(new File("foobar.txt")))
     assert(!filter.accept(new File("bar.txt")))
   }
+  it should "work with trailing *" in {
+    val filter = GlobFilter("foo*")
+    assert(filter.isInstanceOf[PrefixFilter])
+    assert(filter.accept(new File("foobar.txt")))
+    assert(!filter.accept(new File("fobar.txt")))
+  }
+  it should "work with leading *" in {
+    val filter = GlobFilter("*foo.txt")
+    assert(filter.isInstanceOf[SuffixFilter])
+    assert(filter.accept(new File("foo.txt")))
+    assert(filter.accept(new File("afoo.txt")))
+    assert(!filter.accept(new File("afoo.txta")))
+  }
 }

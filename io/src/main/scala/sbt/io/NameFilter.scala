@@ -176,6 +176,26 @@ object ExtensionFilter {
   val ScalaOrJavaSource = new ExtensionFilter("scala", "java")
 }
 
+final class PrefixFilter(val prefix: String) extends NameFilter {
+  override def accept(name: String): Boolean = name.startsWith(prefix)
+  override def equals(o: Any): Boolean = o match {
+    case that: PrefixFilter => this.prefix == that.prefix
+    case _                  => false
+  }
+  override def hashCode: Int = prefix.hashCode
+  override def toString: String = s"PrefixFilter($prefix)"
+}
+
+final class SuffixFilter(val suffix: String) extends NameFilter {
+  override def accept(name: String): Boolean = name.endsWith(suffix)
+  override def equals(o: Any): Boolean = o match {
+    case that: SuffixFilter => this.suffix == that.suffix
+    case _                  => false
+  }
+  override def hashCode: Int = suffix.hashCode
+  override def toString: String = s"SuffixFilter($suffix)"
+}
+
 /** A [[FileFilter]] that selects files that are hidden according to `java.nio.file.Files.isHidden` or if they start with a dot (`.`). */
 case object HiddenFileFilter extends FileFilter {
   def accept(file: File): Boolean =
@@ -195,7 +215,7 @@ case object DirectoryFilter extends FileFilter {
 
 /** A [[FileFilter]] that selects files according the predicate `acceptFunction`. */
 sealed class SimpleFileFilter(val acceptFunction: File => Boolean) extends FileFilter {
-  final def accept(file: File) = acceptFunction(file)
+  final def accept(file: File): Boolean = acceptFunction(file)
   override def equals(o: Any): Boolean = o match {
     // Note that anonymous functions often get compiled to a constant value so this equality
     // check may be true more often than one might naively assume given that this is often
@@ -306,6 +326,8 @@ object GlobFilter {
       val parts = expression.split("\\*", -1)
       parts match {
         case Array("", ext) if ext.startsWith(".") => new ExtensionFilter(ext.drop(1))
+        case Array(prefix, "")                     => new PrefixFilter(prefix)
+        case Array("", suffix)                     => new SuffixFilter(suffix)
         case _                                     => new PatternFilter(Pattern.compile(parts.map(quote).mkString(".*")))
       }
     }
