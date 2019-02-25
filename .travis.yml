@@ -4,6 +4,7 @@ env:
   global:
   - TRAVIS_SCALA_VERSION=2.12.8
   - SBT_VER=1.2.4
+  - TEST_FORK=true
   - secure: HFp0Jm4r+bk7CKT5YJX6rlqo0+itHfcae0gC4BY7rNrv8JN7POHs+Db2BeCwwOJXKFxHDxFjLyKwzX4LcFkBzQataUfzqHvBlkLh2XkCkMUZsOt4xhflwJZMXYihLyoX0Wct42AE4DWmBiFiC5wePI6/7/nWFk+gv0KN+X8zK0y1WdtZR6PqyFxE0NengnRB9sliiDQU2ESdZ7zuoMytbRDlcmTqj70C8ym9KGLdZvM/8R7n+5GGbkfvCXAiNnYDd2uARw/Ep4JDqM/UoXC21NqOknIHuaC3j3Rb66+wgNev+Nmfg5YU1mGWWGWSsFPTh6MVuUM84aFtoStUwsTSjvVvHTrzPyHEg4kP44Qco5fdRgDQUz+7MVOjVL4hogW0eLSiVceOle7tcN6Q5zn/5wNaKoJRJjo9Dw5zEI+w4AgEkiky/TKRnJQiqzTbLQ2kN9ALGJAHan1+Kg7SaC5GWdjm6bDFz4zjbAPYEqPosePRB9X2sxUjndTE/HYLgLLqK5yIUj06XY7YNmWOwRS83+5VzwAl82lkfaI9oXb8Giy7XiAtT0jfviAHwSx1fo1QRyBUCCPyxiLccgFLCFyaUBwwUXXBEieWJWLbRIbScj3b0RTZRtR/VZ54rz3rMzDxD9J09x7NGJvn3Ext0ampMuOcJpEHOy2akojZ60qQcV8=
 
 matrix:
@@ -38,6 +39,7 @@ matrix:
 
    - scala: 2.13.0-RC1
      env:
+       TEST_FORK=false
        CMD="test"
        TRAVIS_SCALA_VERSION=2.13.0-RC1
        TRAVIS_JDK=adopt@1.8.192-12
@@ -51,12 +53,13 @@ matrix:
    - scala: 2.13.0-RC1
      os: osx
      env:
+       TEST_FORK=false
        CMD="test"
        TRAVIS_SCALA_VERSION=2.13.0-RC1
      language: java
      osx_image: xcode9.3
 
-script: /tmp/sbt/bin/sbt -Dsbt.version=$SBT_VER ++$TRAVIS_SCALA_VERSION $CMD
+script: /tmp/sbt/bin/sbt -Dsbt.test.fork=$TEST_FORK -Dsbt.version=$SBT_VER ++$TRAVIS_SCALA_VERSION $CMD
 
 before_install:
   # https://github.com/travis-ci/travis-ci/issues/8408
