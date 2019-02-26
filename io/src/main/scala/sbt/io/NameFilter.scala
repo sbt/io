@@ -266,7 +266,8 @@ sealed class SimpleFilter(val acceptFunction: String => Boolean) extends NameFil
 
 /** A [[NameFilter]] that accepts a name if it matches the regular expression defined by `pattern`. */
 final class PatternFilter(val pattern: Pattern) extends NameFilter {
-  def accept(name: String): Boolean = pattern.matcher(name).matches
+  private[this] val lock = new Object
+  def accept(name: String): Boolean = lock.synchronized(pattern.matcher(name).matches)
   override def toString = s"PatternFilter($pattern)"
   override def equals(o: Any): Boolean = o match {
     case that: PatternFilter => this.pattern == that.pattern
