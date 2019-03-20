@@ -176,7 +176,6 @@ private[sbt] class NewWatchState(private[sbt] val globs: mutable.Set[Glob],
  * @param excludeFilter Filter to apply to determine whether to ignore a file.
  * @param recursive     Whether the lists is recursive or immediate children.
  */
-@deprecated("Source has been replaced by glob", "1.3.0")
 final class Source(
     val base: File,
     val includeFilter: FileFilter,
