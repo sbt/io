@@ -20,10 +20,10 @@ import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
 /**
- * Provides a blocking interface for awaiting events from an [[FileTreeDataView.Observable]].
+ * Provides a blocking interface for awaiting file events.
  * @tparam T the type of [[FileTreeDataView.Entry.value]] instances
  */
-trait FileEventMonitor[+T] extends AutoCloseable {
+private[sbt] trait FileEventMonitor[+T] extends AutoCloseable {
 
   /**
    * Block for the specified duration until an event is emitted or a timeout occurs.
@@ -32,7 +32,7 @@ trait FileEventMonitor[+T] extends AutoCloseable {
    */
   def poll(duration: Duration): Seq[FileEventMonitor.Event[T]]
 }
-object FileEventMonitor {
+private[sbt] object FileEventMonitor {
   sealed trait Event[+T] {
     def entry: Entry[T]
     def occurredAt: Deadline
@@ -73,8 +73,8 @@ object FileEventMonitor {
     override def hashCode(): Int = entry.hashCode()
   }
 
-  def apply[T](observable: Observable[T],
-               logger: WatchLogger = NullWatchLogger): FileEventMonitor[T] =
+  private[sbt] def apply[T](observable: Observable[T],
+                            logger: WatchLogger = NullWatchLogger): FileEventMonitor[T] =
     new FileEventMonitorImpl[T](observable, logger)
 
   /**
@@ -100,11 +100,11 @@ object FileEventMonitor {
    * @tparam T the generic type for the [[FileTreeDataView.Observable]] that we're monitoring
    * @return the [[FileEventMonitor]] instance.
    */
-  def antiEntropy[T](observable: Observable[T],
-                     period: FiniteDuration,
-                     logger: WatchLogger,
-                     quarantinePeriod: FiniteDuration,
-                     retentionPeriod: FiniteDuration): FileEventMonitor[T] = {
+  private[sbt] def antiEntropy[T](observable: Observable[T],
+                                  period: FiniteDuration,
+                                  logger: WatchLogger,
+                                  quarantinePeriod: FiniteDuration,
+                                  retentionPeriod: FiniteDuration): FileEventMonitor[T] = {
     new AntiEntropyFileEventMonitor(period,
                                     new FileEventMonitorImpl[T](observable, logger),
                                     logger,

@@ -188,7 +188,7 @@ object Glob {
    * @param t the collection of [[Glob]]s
    * @tparam T the generic collection type
    */
-  implicit class TraversableGlobOps[T <: Traversable[Glob]](val t: T) extends AnyVal {
+  private[sbt] implicit class TraversableGlobOps[T <: Traversable[Glob]](val t: T) extends AnyVal {
 
     /**
      * Returns a [[FileFilter]] that accepts a file if any glob in the collection accepts the file.
