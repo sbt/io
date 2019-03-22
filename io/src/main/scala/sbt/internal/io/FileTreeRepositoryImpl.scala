@@ -18,7 +18,7 @@ import com.swoval.files.FileTreeDataViews.{ CacheObserver, Converter }
 import com.swoval.files.{ FileTreeDataViews, FileTreeRepositories, TypedPath => STypedPath }
 import com.swoval.functional.Filters
 import sbt.internal.io.FileEvent.{ Creation, Deletion, Update }
-import sbt.internal.io.SwovalConverters.SwovalEitherOps
+import sbt.internal.io.SwovalConverters._
 import sbt.io._
 
 import scala.collection.JavaConverters._
@@ -95,7 +95,7 @@ private[sbt] class FileTreeRepositoryImpl[+T](
     throwIfClosed("list")
     val res = new VectorBuilder[(NioPath, CustomFileAttributes[T])]
     underlying
-      .listEntries(glob.base, glob.depth, Filters.AllPass)
+      .listEntries(glob.base, glob.range.toSwovalDepth, Filters.AllPass)
       .iterator
       .asScala
       .foreach { e =>
@@ -113,7 +113,7 @@ private[sbt] class FileTreeRepositoryImpl[+T](
   override def register(
       glob: Glob): Either[IOException, Observable[FileEvent[CustomFileAttributes[T]]]] = {
     throwIfClosed("register")
-    underlying.register(glob.base, glob.depth).asScala match {
+    underlying.register(glob.base, glob.range.toSwovalDepth).asScala match {
       case Right(_) => new RegisterableObservable(observers).register(glob)
       case Left(ex) => Left(ex)
     }

@@ -17,6 +17,7 @@ import com.swoval.functional.Filter
 import sbt.io._
 
 import scala.collection.JavaConverters._
+import SwovalConverters._
 
 private[sbt] object DefaultFileTreeView extends NioFileTreeView[SimpleFileAttributes] {
   private[this] val fileTreeView =
@@ -31,7 +32,7 @@ private[sbt] object DefaultFileTreeView extends NioFileTreeView[SimpleFileAttrib
     Retry {
       try {
         fileTreeView
-          .list(glob.base, glob.depth, new Filter[TypedPath] {
+          .list(glob.base, glob.range.toSwovalDepth, new Filter[TypedPath] {
             override def accept(t: TypedPath): Boolean = true
           })
           .asScala

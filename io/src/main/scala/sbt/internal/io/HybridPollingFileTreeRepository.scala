@@ -61,7 +61,7 @@ private[io] case class HybridPollingFileTreeRepositoryImpl[+T](
        */
       val (needPoll, ready) = repo.list(glob, filter).partition {
         case (path: Path, _) =>
-          shouldPoll(Glob(path.toFile, -1, new ExactFileFilter(path.toFile)))
+          shouldPoll(Glob(path.toFile, (0, 0), new ExactFileFilter(path.toFile)))
       }
       ready ++ needPoll
         .filter(_._2.isDirectory)
@@ -71,9 +71,9 @@ private[io] case class HybridPollingFileTreeRepositoryImpl[+T](
         .flatMap {
           case pair @ (path: Path, _: CustomFileAttributes[T]) =>
             val depth =
-              if (glob.depth == Integer.MAX_VALUE) Integer.MAX_VALUE
-              else glob.depth - path.relativize(path).getNameCount - 1
-            Seq(pair) ++ view.list((pair._1 ** AllPassFilter).withDepth(depth), filter)
+              if (glob.range._2 == Integer.MAX_VALUE) Integer.MAX_VALUE
+              else glob.range._2 - path.relativize(path).getNameCount - 1
+            Seq(pair) ++ view.list((pair._1 ** AllPassFilter).withMaxDepth(depth), filter)
         }
     } else {
       view.list(glob, filter)

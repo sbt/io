@@ -16,7 +16,7 @@ class FileTreeViewSpec extends FlatSpec {
   "FileTreeView" should "not return the source root with depth >= 0" in IO.withTemporaryDirectory {
     dir =>
       assert(view.list(dir.toPath * AllPassFilter, AllPass).isEmpty)
-      assert(view.list((dir.toPath * AllPassFilter).withDepth(10), AllPass).isEmpty)
+      assert(view.list((dir.toPath * AllPassFilter).withMaxDepth(10), AllPass).isEmpty)
   }
   "FileTreeView" should "get recursive files" in IO.withTemporaryDirectory { dir =>
     val subdir = Files.createDirectory(dir.toPath.resolve("subdir"))

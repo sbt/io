@@ -26,13 +26,16 @@ trait Glob {
   def base: NioPath
 
   /**
-   * The maximum depth of elements to traverse. A depth of -1 implies that this glob applies only
-   * to the root specified by [[base]]. A depth of zero implies that only immediate children of
-   * the root are included in this glob. For positive depth, files may be included so long as their
-   * pathname, relativized with respect to the base, has no more than `depth + 1` components.
-   * @return the maximum depth.
+   * Controls which paths should be considered part of the glob based on the number of components
+   * in the path when it is relativized with respect to the base path. The boundaries are inclusive.
+   * A range of `(0, 0)` implies that only the base path is accepted. A range of `(0, 1)` implies
+   * that the base path and its immediate children are accepted but no children of subdirectories
+   * are included. A range of `(1, Int.MaxValue)` implies that all children of the base path are
+   * accepted and so on.
+   *
+   * @return the range of relative path name lengths to accepts.
    */
-  def depth: Int
+  def range: (Int, Int)
 
   /**
    * The filter to apply to elements found in the file system subtree.
@@ -66,37 +69,37 @@ object Glob {
   private implicit class PathOps(val p: NioPath) extends AnyVal {
     def abs: NioPath = if (p.isAbsolute) p else p.toAbsolutePath
   }
-  def apply(base: File, depth: Int, filter: FileFilter): Glob =
-    new GlobImpl(base.toPath.abs, depth, filter)
-  def apply(base: NioPath, depth: Int, filter: NioPath => Boolean): Glob =
-    new GlobImpl(base.abs, depth, filter)
-  private class GlobImpl(val base: NioPath, val depth: Int, val filter: NioPath => Boolean)
+  def apply(base: File, range: (Int, Int), filter: FileFilter): Glob =
+    new GlobImpl(base.toPath.abs, range, filter)
+  def apply(base: NioPath, range: (Int, Int), filter: NioPath => Boolean): Glob =
+    new GlobImpl(base.abs, range, filter)
+  private class GlobImpl(val base: NioPath, val range: (Int, Int), val filter: NioPath => Boolean)
       extends Glob {
     override def toString: String =
-      s"Glob(\n  base = $base,\n  filter = $filter,\n  depth = $depth\n)"
+      s"Glob(\n  base = $base,\n  filter = $filter,\n  depth = $range\n)"
     override def equals(o: Any): Boolean = o match {
       case that: Glob =>
-        this.base == that.base && this.depth == that.depth && this.filter == that.filter
+        this.base == that.base && this.range == that.range && this.filter == that.filter
       case _ => false
     }
-    override def hashCode: Int = (((base.hashCode * 31) ^ filter.hashCode) * 31) ^ depth
+    override def hashCode: Int = (((base.hashCode * 31) ^ filter.hashCode) * 31) ^ range.hashCode
   }
   private[sbt] trait Builder[T] extends Any with GlobBuilder[Glob] with ToGlob {
     def repr: T
     def converter: T => NioPath
     def /(component: String): Glob = {
       val base = converter(repr).resolve(component)
-      Glob(base, -1, new ExactFileFilter(base.toFile))
+      Glob(base, (0, 0), new ExactFileFilter(base.toFile))
     }
     def \(component: String): Glob = this / component
-    def glob(filter: FileFilter): Glob = Glob(converter(repr), 0, filter)
+    def glob(filter: FileFilter): Glob = Glob(converter(repr), (1, 1), filter)
     def *(filter: FileFilter): Glob = glob(filter)
-    def globRecursive(filter: FileFilter): Glob = Glob(converter(repr), Int.MaxValue, filter)
+    def globRecursive(filter: FileFilter): Glob = Glob(converter(repr), (1, Int.MaxValue), filter)
     def allPaths: Glob = globRecursive(AllPassFilter)
     def **(filter: FileFilter): Glob = globRecursive(filter)
     def toGlob: Glob = {
       val base = converter(repr)
-      Glob(base, -1, new ExactFileFilter(base.toFile))
+      Glob(base, (0, 0), new ExactFileFilter(base.toFile))
     }
   }
   private[sbt] final class FileBuilder(val file: File) extends AnyVal with Builder[File] {
@@ -108,12 +111,13 @@ object Glob {
     override def converter: NioPath => NioPath = identity
   }
   implicit class GlobOps(val glob: Glob) extends AnyVal {
-    def withBase(base: File): Glob = new GlobImpl(base.toPath, glob.depth, glob.filter)
-    def withBase(base: NioPath): Glob = new GlobImpl(base, glob.depth, glob.filter)
-    def withFilter(filter: FileFilter): Glob = new GlobImpl(glob.base, glob.depth, filter)
-    def withDepth(depth: Int): Glob = new GlobImpl(glob.base, depth, glob.filter)
-    def withRecursive(recursive: Boolean): Glob =
-      new GlobImpl(glob.base, if (recursive) Int.MaxValue else 0, glob.filter)
+    def withBase(base: File): Glob = new GlobImpl(base.toPath, glob.range, glob.filter)
+    def withBase(base: NioPath): Glob = new GlobImpl(base, glob.range, glob.filter)
+    def withFilter(filter: FileFilter): Glob = new GlobImpl(glob.base, glob.range, filter)
+    def withMinDepth(depth: Int): Glob =
+      new GlobImpl(glob.base, (depth, glob.range._2), glob.filter)
+    def withMaxDepth(depth: Int): Glob =
+      new GlobImpl(glob.base, (glob.range._1, depth), glob.filter)
     def toFileFilter: FileFilter = toFileFilter(acceptBase = true)
     def toFileFilter(acceptBase: Boolean): FileFilter = new GlobAsFilter(glob, acceptBase)
   }
@@ -124,10 +128,7 @@ object Glob {
       // register with the file system cache, it is more efficient to register the broadest glob
       // first so that we don't have to list the base directory multiple times.
       case 0 =>
-        // If we inline -left.depth.compareTo(right.depth), scala 2.10 incorrectly reports
-        // an implicit numeric widening error. This could be inlined if we drop 2.10 support.
-        val leftDepth: Int = left.depth
-        -leftDepth.compareTo(right.depth)
+        right.range._2.compareTo(left.range._2)
       case i => i
     }
   }
@@ -145,10 +146,10 @@ object Glob {
       val globPath = glob.base
       if (path.startsWith(globPath)) {
         if (path == globPath) {
-          (acceptBase || glob.depth == -1) && glob.filter(path)
+          (acceptBase || glob.range._1 <= 0) && glob.filter(path)
         } else {
-          val nameCount = globPath.relativize(path).getNameCount - 1
-          nameCount <= glob.depth && glob.filter(path)
+          val nameCount = globPath.relativize(path).getNameCount
+          checkRange(nameCount, glob.range) && glob.filter(path)
         }
       } else {
         false
@@ -160,4 +161,6 @@ object Glob {
       case _                  => false
     }
   }
+  private def checkRange(depth: Int, range: (Int, Int)): Boolean =
+    depth >= range._1 && depth <= range._2
 }

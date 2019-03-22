@@ -17,6 +17,12 @@ import com.swoval.functional.{ Either => SEither }
  */
 private[io] object SwovalConverters {
 
+  implicit class RangeOps(val range: (Int, Int)) extends AnyVal {
+    def toSwovalDepth: Int = range._2 match {
+      case Int.MaxValue => Int.MaxValue
+      case d            => d - 1
+    }
+  }
   implicit class SwovalEitherOps[L, R](val either: SEither[L, R]) extends AnyVal {
     def asScala[R0](implicit f: R => R0): Either[L, R0] = either match {
       case l: com.swoval.functional.Either.Left[L, R] =>

@@ -554,7 +554,7 @@ object IO {
   /** Deletes `file`, recursively if it is a directory. */
   def delete(file: File): Unit = Retry {
     try {
-      FileTreeView.DEFAULT.list(Glob(file, 0, AllPassFilter), AllPass).foreach {
+      FileTreeView.DEFAULT.list(Glob(file, (1, 1), AllPassFilter), AllPass).foreach {
         case (dir, attrs) if attrs.isDirectory => delete(dir.toFile)
         case (f, _)                            => Files.deleteIfExists(f)
       }

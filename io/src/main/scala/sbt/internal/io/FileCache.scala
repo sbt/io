@@ -30,7 +30,7 @@ private[io] class FileCache[+T](converter: (Path, SimpleFileAttributes) => Custo
         val subMap = files.subMap(path, ceiling(path))
         subMap.get(path) match {
           case null if attributes.exists =>
-            add(Glob(path, maxDepthForPath(path), (_: Path) => true), attributes)
+            add(Glob(path, (0, maxDepthForPath(path)), (_: Path) => true), attributes)
             subMap.asScala.map { case (p, a) => Creation(p, a) }.toIndexedSeq
           case null => Nil // we weren't monitoring this no longer extant path
           case p if attributes.exists =>
@@ -147,11 +147,11 @@ private[io] class FileCache[+T](converter: (Path, SimpleFileAttributes) => Custo
     globs.toIndexedSeq.view
       .map(g =>
         if (path.startsWith(g.base)) {
-          if (path == g.base) g.depth
+          if (path == g.base) g.range._2
           else
-            g.depth match {
+            g.range._2 match {
               case Int.MaxValue => Int.MaxValue
-              case d            => d - (g.base.relativize(path).getNameCount - 1)
+              case d            => d - g.base.relativize(path).getNameCount
             }
         } else Int.MinValue)
       .min
@@ -164,9 +164,9 @@ private[io] object FileCache {
     def covers(other: Glob): Boolean = {
       val (left, right) = (glob.withFilter(AllPassFilter), other.withFilter(AllPassFilter))
       right.base.startsWith(left.base) && {
-        (left.base == right.base && left.depth >= right.depth) || {
-          val depth = left.base.relativize(right.base).getNameCount - 1
-          left.depth >= right.depth - depth
+        (left.base == right.base && left.range._2 >= right.range._2) || {
+          val depth = left.base.relativize(right.base).getNameCount
+          left.range._2 >= right.range._2 - depth
         }
       }
     }

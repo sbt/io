@@ -306,7 +306,7 @@ object Path extends Mapper {
   def toURLs(files: Seq[File]): Array[URL] = files.map(_.toURI.toURL).toArray
 
   private[sbt] val defaultLinkOptions: Vector[LinkOption] = Vector.empty
-  private[sbt] val defaultDescendantHandler: (File, FileFilter, mutable.Set[File]) => Unit =
+  private[sbt] val defaultDescendantHandler: (File, FileFilter, mutable.Set[File], Int) => Unit =
     if ("nio" == sys.props.getOrElse("sbt.pathfinder", ""))
       DescendantOrSelfPathFinder.nio
     else DescendantOrSelfPathFinder.default
@@ -317,7 +317,7 @@ object Path extends Mapper {
       val fileTreeView = FileTreeView.DEFAULT
       (file, filter) =>
         fileTreeView
-          .list(Glob(file, 0, AllPassFilter), AllPass)
+          .list(Glob(file, (1, 1), AllPassFilter), AllPass)
           .flatMap {
             case (path: NioPath, attrs: SimpleFileAttributes) =>
               if (filter.accept(new AttributedFile(path, attrs))) Some(path.toFile) else None
@@ -417,11 +417,11 @@ object PathFinder {
   }
   private[io] final class GlobPathFinder(val glob: Glob) extends PathFinder {
     override def get(): Seq[File] = {
-      if (glob.depth == -1) {
+      if (glob.range._1 == 0 && glob.range._2 == 0) {
         glob.base.toFile :: Nil
-      } else if (glob.depth > 0) {
+      } else if (glob.range._2 > 1) {
         val files = new java.util.LinkedHashSet[File].asScala
-        Path.defaultDescendantHandler(glob.base.toFile, glob.toFileFilter, files)
+        Path.defaultDescendantHandler(glob.base.toFile, glob.toFileFilter, files, glob.range._2)
         files.toIndexedSeq
       } else {
         Path.defaultChildHandler(glob.base.toFile, glob.toFileFilter)
@@ -492,7 +492,7 @@ sealed trait PathFinderDefaults extends PathFinder.Combinator {
    * @param filter only include files that this filter accepts
    */
   def globRecursive(filter: FileFilter): PathFinder =
-    new DescendantOrSelfPathFinder(this, filter, defaultDescendantHandler)
+    new DescendantOrSelfPathFinder(this, filter)
 
   /**
    * Constructs a new finder that selects all paths with a name that matches <code>filter</code> and are
@@ -635,7 +635,7 @@ private class DescendantOrSelfPathFinder(
     handleFileDescendant: (File, FileFilter, mutable.Set[File]) => Unit)
     extends FilterFiles {
   def this(parent: PathFinder, filter: FileFilter) =
-    this(parent, filter, DescendantOrSelfPathFinder.nio)
+    this(parent, filter, DescendantOrSelfPathFinder.default(_, _, _, Int.MaxValue))
   override private[sbt] def addTo(fileSet: mutable.Set[File]): Unit = {
     for (file <- parent.get()) {
       if (accept(file)) fileSet += file
@@ -645,13 +645,13 @@ private class DescendantOrSelfPathFinder(
   override def toString: String = s"DescendantOrSelfPathFinder($parent, $filter)"
 }
 private object DescendantOrSelfPathFinder {
-  def default(file: File, filter: FileFilter, fileSet: mutable.Set[File]): Unit = {
+  def default(file: File, filter: FileFilter, fileSet: mutable.Set[File], depth: Int): Unit = {
     try {
       FileTreeViews
         .getDefault(true)
         .list(
           file.toPath,
-          Integer.MAX_VALUE,
+          depth - 1,
           new Filter[com.swoval.files.TypedPath] {
             override def accept(t: com.swoval.files.TypedPath): Boolean = {
               filter.accept(new File(t.getPath.toString) {
@@ -673,11 +673,11 @@ private object DescendantOrSelfPathFinder {
       case _: IOException =>
     }
   }
-  def nio(file: File, filter: FileFilter, fileSet: mutable.Set[File]): Unit = {
+  def nio(file: File, filter: FileFilter, fileSet: mutable.Set[File], depth: Int): Unit = {
     Files.walkFileTree(
       file.toPath,
       mutable.Set(FileVisitOption.FOLLOW_LINKS).asJava,
-      java.lang.Integer.MAX_VALUE,
+      depth - 1,
       new FileVisitor[NioPath] {
         override def preVisitDirectory(dir: NioPath,
                                        attrs: BasicFileAttributes): FileVisitResult = {
