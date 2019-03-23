@@ -67,7 +67,7 @@ private[io] class FileCache[+T](converter: (Path, SimpleFileAttributes) => Custo
                 p,
                 CustomFileAttributes.get(
                   path,
-                  SimpleFileAttributes.get(false,
+                  SimpleFileAttributes.get(exists = false,
                                            prevAttributes.isDirectory,
                                            prevAttributes.isRegularFile,
                                            prevAttributes.isSymbolicLink),
@@ -129,7 +129,7 @@ private[io] class FileCache[+T](converter: (Path, SimpleFileAttributes) => Custo
     val newFiles = new util.HashMap[Path, CustomFileAttributes[T]]
     val asScala = newFiles.asScala
     asScala += glob.base -> converter(glob.base, simpleFileAttributes)
-    if (simpleFileAttributes.isDirectory())
+    if (simpleFileAttributes.isDirectory)
       newFiles.asScala ++= view.list(glob, AllPass)
     files.putAll(newFiles)
   }

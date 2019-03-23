@@ -10,7 +10,7 @@
 
 package sbt.internal.io
 
-import java.nio.file.attribute.{ BasicFileAttributes, FileTime }
+import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.{ Files, NoSuchFileException, Path => NioPath }
 
 import scala.util.Try
@@ -21,12 +21,10 @@ import scala.util.control.NonFatal
  * stat on the file as part of listing a directory.
  */
 private[sbt] trait SimpleFileAttributes {
-  // Ignore warnings about dropping the parens. We can't mix SimpleFileAttributes with
-  // BasicFileAttributes if these have nullary param lists.
-  def isDirectory(): Boolean
-  def isRegularFile(): Boolean
-  def isSymbolicLink(): Boolean
   def exists: Boolean
+  def isDirectory: Boolean
+  def isRegularFile: Boolean
+  def isSymbolicLink: Boolean
 }
 private[sbt] object SimpleFileAttributes {
   def get(path: NioPath): Try[SimpleFileAttributes] =
@@ -59,43 +57,30 @@ private[sbt] object SimpleFileAttributes {
   }
 }
 
-private[sbt] trait CustomFileAttributes[+T] extends SimpleFileAttributes with BasicFileAttributes {
+private[sbt] trait CustomFileAttributes[+T] extends SimpleFileAttributes {
   def value: Either[Throwable, T]
 }
 private[sbt] object CustomFileAttributes {
   private[sbt] def get[T](path: NioPath,
                           simpleFileAttributes: SimpleFileAttributes,
-                          t: T): CustomFileAttributes[T] = {
-    val attrs = new LazyFileAttributes(path, Some(simpleFileAttributes))
-    new Impl(Right(t), simpleFileAttributes.exists, attrs)
-  }
+                          t: T): CustomFileAttributes[T] = new Impl(Right(t), simpleFileAttributes)
   private[sbt] def getEither[T](path: NioPath,
                                 simpleFileAttributes: SimpleFileAttributes,
-                                t: Either[Throwable, T]): CustomFileAttributes[T] = {
-    val attrs = new LazyFileAttributes(path, Some(simpleFileAttributes))
-    new Impl(t, simpleFileAttributes.exists, attrs)
-  }
+                                t: Either[Throwable, T]): CustomFileAttributes[T] =
+    new Impl(t, simpleFileAttributes)
   private[sbt] def get[T](path: NioPath,
                           simpleFileAttributes: SimpleFileAttributes,
                           f: (NioPath, SimpleFileAttributes) => T): CustomFileAttributes[T] = {
-    val attrs = new LazyFileAttributes(path, Some(simpleFileAttributes))
-    val value = try Right(f(path, attrs))
+    val value = try Right(f(path, simpleFileAttributes))
     catch { case NonFatal(t) => Left(t) }
-    new Impl(value, simpleFileAttributes.exists, attrs)
+    new Impl(value, simpleFileAttributes)
   }
-  private class Impl[T](override val value: Either[Throwable, T],
-                        override val exists: Boolean,
-                        attributes: BasicFileAttributes)
+  private class Impl[T](override val value: Either[Throwable, T], attributes: SimpleFileAttributes)
       extends CustomFileAttributes[T] {
-    override def lastModifiedTime(): FileTime = attributes.lastModifiedTime()
-    override def lastAccessTime(): FileTime = attributes.lastAccessTime()
-    override def creationTime: FileTime = attributes.creationTime()
-    override def isRegularFile(): Boolean = attributes.isRegularFile
-    override def isDirectory(): Boolean = attributes.isDirectory
-    override def isSymbolicLink(): Boolean = attributes.isSymbolicLink
-    override def isOther: Boolean = attributes.isOther
-    override def size(): Long = attributes.size()
-    override def fileKey(): AnyRef = attributes.fileKey()
+    override def exists: Boolean = attributes.exists
+    override def isRegularFile: Boolean = attributes.isRegularFile
+    override def isDirectory: Boolean = attributes.isDirectory
+    override def isSymbolicLink: Boolean = attributes.isSymbolicLink
     override def equals(o: Any): Boolean = o match {
       case that: CustomFileAttributes[_] =>
         (this.isDirectory == that.isDirectory) && (this.isRegularFile == that.isRegularFile) &&
@@ -104,9 +89,9 @@ private[sbt] object CustomFileAttributes {
       case _ => false
     }
     override def hashCode: Int =
-      ((isDirectory().hashCode * 31) ^ (isRegularFile().hashCode * 31)) ^ (isSymbolicLink().hashCode * 31)
+      ((isDirectory.hashCode * 31) ^ (isRegularFile.hashCode * 31)) ^ (isSymbolicLink.hashCode * 31)
     override def toString: String =
-      s"CustomFileAttributes(isDirectory = ${isDirectory()}, isRegularFile = ${isRegularFile()}" +
-        s", isSymbolicLink = ${isSymbolicLink()}, exists = $exists, value = $value)"
+      s"CustomFileAttributes(isDirectory = $isDirectory, isRegularFile = $isRegularFile" +
+        s", isSymbolicLink = $isSymbolicLink, value = $value)"
   }
 }
