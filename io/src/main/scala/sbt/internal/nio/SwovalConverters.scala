@@ -8,14 +8,14 @@
  * (http://www.apache.org/licenses/LICENSE-2.0).
  */
 
-package sbt.internal.io
+package sbt.internal.nio
 
 import com.swoval.functional.{ Either => SEither }
 
 /**
  * Utilities for converting between swoval and sbt data types.
  */
-private[io] object SwovalConverters {
+private[nio] object SwovalConverters {
 
   implicit class RangeOps(val range: (Int, Int)) extends AnyVal {
     def toSwovalDepth: Int = range._2 match {

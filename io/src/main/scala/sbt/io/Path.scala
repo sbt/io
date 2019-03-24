@@ -25,8 +25,7 @@ import java.nio.file.{
 
 import com.swoval.files.FileTreeViews
 import com.swoval.functional.Filter
-import sbt.internal.io.FileTreeView.AllPass
-import sbt.internal.io.{ FileTreeView, SimpleFileAttributes }
+import sbt.nio.{ AllPass, FileAttributes, FileTreeView, Glob }
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -314,22 +313,20 @@ object Path extends Mapper {
     if ("nio" == sys.props.getOrElse("sbt.pathfinder", "")) { (file, filter) =>
       IO.wrapNull(file.listFiles(filter)).toSeq
     } else {
-      val fileTreeView = FileTreeView.DEFAULT
+      val fileTreeView = FileTreeView.DEFAULT_NIO
       (file, filter) =>
         fileTreeView
-          .list(Glob(file, (1, 1), AllPassFilter), AllPass)
+          .list(Glob(file.toPath, (1, 1), AllPass), _ => true)
           .flatMap {
-            case (path: NioPath, attrs: SimpleFileAttributes) =>
+            case (path: NioPath, attrs: FileAttributes) =>
               if (filter.accept(new AttributedFile(path, attrs))) Some(path.toFile) else None
           }
     }
-  private class AttributedFile(path: NioPath, attributes: SimpleFileAttributes)
+  private class AttributedFile(path: NioPath, attributes: FileAttributes)
       extends File(path.toString) {
     override def isDirectory: Boolean = attributes.isDirectory
-    def isRegularFile: Boolean = attributes.isRegularFile
+    override def isFile: Boolean = attributes.isRegularFile
     def isSymbolicLink: Boolean = attributes.isSymbolicLink
-    override def exists: Boolean = attributes.exists
-
   }
 }
 
@@ -415,7 +412,7 @@ object PathFinder {
       override def absString(): String = Path.makeString(new SingleFile(file).get())
     }
   }
-  private[io] final class GlobPathFinder(val glob: Glob) extends PathFinder {
+  private[sbt] final class GlobPathFinder(val glob: Glob) extends PathFinder {
     override def get(): Seq[File] = {
       if (glob.range._1 == 0 && glob.range._2 == 0) {
         glob.base.toFile :: Nil

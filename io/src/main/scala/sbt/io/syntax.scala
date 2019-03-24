@@ -14,6 +14,7 @@ import java.io.File
 import java.nio.file.{ Path => NioPath }
 
 import sbt.io.PathFinder.Combinator.SingleFilePathFinderCombinator
+import sbt.nio.{ Glob, GlobBuilder, ToGlob }
 
 @deprecated("Alternative is likely to be removed in future versions of sbt", "1.3.0")
 private[sbt] trait Alternative[A, B] {

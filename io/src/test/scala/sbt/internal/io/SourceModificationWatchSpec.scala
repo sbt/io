@@ -5,12 +5,25 @@ import java.nio.file.{ ClosedWatchServiceException, Files, Path, Paths }
 
 import org.scalatest.{ FlatSpec, Matchers }
 import sbt.internal.io.EventMonitorSpec._
-import sbt.internal.io.FileEvent.Deletion
+import sbt.internal.nio.FileEvent.Deletion
+import sbt.internal.nio.{
+  FileEvent,
+  FileEventMonitor,
+  FileTreeRepository,
+  Observable,
+  Observer,
+  Observers,
+  Registerable,
+  WatchLogger,
+  WatchServiceBackedObservable
+}
 import sbt.io.syntax._
 import sbt.io.{ WatchService, _ }
+import sbt.nio.{ FileAttributes, Glob }
 
 import scala.annotation.tailrec
-import scala.concurrent.duration.{ Deadline => _, _ }
+import scala.concurrent.duration._
+import scala.util.{ Success, Try }
 
 private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
   def pollDelay: FiniteDuration
@@ -371,11 +384,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 
     val globs = parentDir.toPath.toRealPath().toFile.scalaSourceGlobs
     var lines: Seq[String] = Nil
-    val logger = new WatchLogger {
-      override def debug(msg: => Any): Unit = lines.synchronized {
-        lines :+= msg.toString
-      }
-    }
+    val logger: WatchLogger = msg => lines.synchronized(lines :+= msg.toString)
     val observable = newObservable(globs, NullLogger)
     val monitor = FileEventMonitor(observable, logger)
     try {
@@ -469,7 +478,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     if (attempt == 0) IO.write(file, content)
     // IO.setModifiedTimeOrFalse sometimes throws an invalid argument exception
     val res = try {
-      IO.setModifiedTimeOrFalse(file, (Deadline.now - 5.seconds).value.toMillis)
+      IO.setModifiedTimeOrFalse(file, (Deadline.now - 5.seconds).time.toMillis)
     } catch { case _: IOException if attempt < 10 => false }
     if (!res) writeNewFile(file, content, attempt + 1)
   }
@@ -477,7 +486,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 }
 
 object EventMonitorSpec {
-  type Event = FileEvent[CustomFileAttributes[Unit]]
+  type Event = FileEvent[(FileAttributes, Try[Unit])]
   val AllPass: Any => Boolean = ((_: Any) => true).label("AllPass")
   val NonEmpty: Seq[FileEvent[_]] => Boolean = ((_: Seq[FileEvent[_]]).nonEmpty).label("NonEmpty")
   private implicit class LabeledFunction[T, R](val f: T => R) extends AnyVal {
@@ -526,7 +535,7 @@ object EventMonitorSpec {
   }
 
   trait Logger extends WatchLogger
-  object NullLogger extends Logger { override def debug(msg: => Any): Unit = {} }
+  object NullLogger extends Logger { override def debug(msg: Any): Unit = {} }
   // This can't be defined in MonitorOps because of a bug in the scala 2.10 compiler
   @tailrec
   private def drain(monitor: FileEventMonitor[Event],
@@ -540,15 +549,15 @@ object EventMonitorSpec {
       EventMonitorSpec.drain(monitor, duration, events)
   }
   implicit class FileOps(val file: File) extends AnyVal {
-    def scalaSourceGlobs: Seq[Glob] =
-      Seq(
-        (file.toPath.toRealPath().toFile ** AllPassFilter)
-          .withFilter(new ExtensionFilter("scala") -- HiddenFileFilter -- new SimpleFilter(
-            _.startsWith("."))))
+    def scalaSourceGlobs: Seq[Glob] = {
+      val filter = new ExtensionFilter("scala") -- HiddenFileFilter -- new SimpleFilter(
+        _.startsWith("."))
+      Seq(file.toPath.toRealPath().toFile ** filter)
+    }
   }
   class CachingWatchLogger extends Logger {
     val lines = new scala.collection.mutable.ArrayBuffer[String]
-    override def debug(msg: => Any): Unit = lines.synchronized { lines += msg.toString; () }
+    override def debug(msg: Any): Unit = lines.synchronized { lines += msg.toString; () }
     def printLines(msg: String): Unit = println(s"$msg. Log lines:\n${lines mkString "\n"}")
   }
   implicit class ObservableOps(val observable: Observable[Event] with Registerable[Event])
@@ -578,10 +587,10 @@ object EventMonitorSpec {
 }
 
 private[sbt] trait RepoEventMonitorSpec extends FlatSpec with Matchers with EventMonitorSpec {
-  val converter: (Path, SimpleFileAttributes) => CustomFileAttributes[Unit] =
-    (path: Path, attrs: SimpleFileAttributes) => CustomFileAttributes.get(path, attrs, ())
-  private[sbt] def factory(f: (Path, SimpleFileAttributes) => CustomFileAttributes[Unit])
-    : FileTreeRepository[CustomFileAttributes[Unit]]
+  val converter: (Path, FileAttributes) => Try[Unit] =
+    (_: Path, _: FileAttributes) => Success(())
+  private[sbt] def factory(
+      f: (Path, FileAttributes) => Try[Unit]): FileTreeRepository[(FileAttributes, Try[Unit])]
   override def newObservable(globs: Seq[Glob], logger: Logger): Observable[Event] = {
     val repository = factory(converter)
     new Observable[Event] {
@@ -598,14 +607,16 @@ private[sbt] trait RepoEventMonitorSpec extends FlatSpec with Matchers with Even
 }
 class FileTreeRepositoryEventMonitorSpec extends RepoEventMonitorSpec {
   override def pollDelay: FiniteDuration = 100.millis
-  override private[sbt] def factory(f: (Path, SimpleFileAttributes) => CustomFileAttributes[Unit])
-    : FileTreeRepository[CustomFileAttributes[Unit]] = FileTreeRepository.default[Unit](f)
+  override private[sbt] def factory(
+      f: (Path, FileAttributes) => Try[Unit]): FileTreeRepository[(FileAttributes, Try[Unit])] =
+    FileTreeRepository.default[Unit](f)
 }
 
 class LegacyFileTreeRepositoryEventMonitorSpec extends RepoEventMonitorSpec {
   override def pollDelay: FiniteDuration = 100.millis
-  override private[sbt] def factory(f: (Path, SimpleFileAttributes) => CustomFileAttributes[Unit])
-    : FileTreeRepository[CustomFileAttributes[Unit]] = FileTreeRepository.legacy[Unit](f)
+  override private[sbt] def factory(
+      f: (Path, FileAttributes) => Try[Unit]): FileTreeRepository[(FileAttributes, Try[Unit])] =
+    FileTreeRepository.legacy[Unit](f)
 }
 
 private[sbt] abstract class SourceModificationWatchSpec(
@@ -639,9 +650,9 @@ private[sbt] abstract class SourceModificationWatchSpec(
     val observable = new WatchServiceBackedObservable[Unit](
       watchState,
       5.millis,
-      (p: Path, attrs: SimpleFileAttributes) => CustomFileAttributes.get(p, attrs, ()),
+      converter = (_: Path, _: FileAttributes) => Success(()),
       closeService = true,
-      logger)
+      logger = logger)
     observable.register(globs)
   }
 }

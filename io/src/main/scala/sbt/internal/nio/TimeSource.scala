@@ -1,4 +1,5 @@
-package sbt.internal.io
+package sbt.internal.nio
+
 import scala.concurrent.duration._
 
 /**
@@ -7,10 +8,10 @@ import scala.concurrent.duration._
  * that the the test author can manually increment to verify certain behaviors. Without this
  * indirection, it is difficult to make the tests deterministic.
  */
-private[io] trait TimeSource {
+private[nio] trait TimeSource {
   def now: Deadline
 }
-private[io] object TimeSource {
+private[nio] object TimeSource {
   implicit object default extends TimeSource {
     override def now: Deadline = new DefaultImpl()
   }
@@ -32,7 +33,7 @@ private[io] object TimeSource {
  * Mirrors a subset of the scala.concurrent.duration.Deadline api. The motivation is to allow for
  * testing where we want to deterministically control the how the test clock evolves over time.
  */
-private[io] trait Deadline extends Comparable[Deadline] {
+private[nio] trait Deadline extends Comparable[Deadline] {
   def isOverdue: Boolean
   def value: Duration
   def +(duration: FiniteDuration): Deadline
@@ -51,9 +52,9 @@ private[io] trait Deadline extends Comparable[Deadline] {
   final def >=(that: Deadline): Boolean = this.compareTo(that) >= 0
   override def compareTo(that: Deadline): Int = this.value compareTo that.value
 }
-private[io] object Deadline {
+private[nio] object Deadline {
   def now(implicit timeSource: TimeSource): Deadline = timeSource.now
-  private[io] object Inf extends Deadline {
+  private[nio] object Inf extends Deadline {
     override val value = Duration.Inf
     override def isOverdue: Boolean = false
     override def compareTo(o: Deadline): Int = this.value compareTo o.value

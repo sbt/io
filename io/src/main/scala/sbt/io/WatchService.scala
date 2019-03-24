@@ -20,6 +20,8 @@ import java.nio.file.{
 }
 import java.util.concurrent.TimeUnit
 
+import sbt.internal.nio
+
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.{ immutable, mutable }
@@ -151,5 +153,4 @@ private[sbt] trait Unregisterable { self: WatchService =>
 }
 
 private[sbt] class MacOSXWatchService extends sbt.internal.io.MacOSXWatchService
-private[sbt] class PollingWatchService(delay: FiniteDuration)
-    extends sbt.internal.io.PollingWatchService(delay)
+private[sbt] class PollingWatchService(delay: FiniteDuration) extends nio.PollingWatchService(delay)

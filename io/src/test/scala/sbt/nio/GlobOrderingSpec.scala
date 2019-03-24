@@ -1,9 +1,10 @@
-package sbt.io
+package sbt.nio
 
 import java.io.File
 
 import org.scalatest.FlatSpec
-import syntax._
+import sbt.io.IO
+import sbt.io.syntax._
 
 class GlobOrderingSpec extends FlatSpec {
   "Globs" should "be ordered" in IO.withTemporaryDirectory { dir =>
@@ -11,8 +12,8 @@ class GlobOrderingSpec extends FlatSpec {
     assert(Seq(subdir.toGlob, dir.toGlob).sorted == Seq(dir.toGlob, subdir.toGlob))
   }
   they should "fall back on depth" in IO.withTemporaryDirectory { dir =>
-    val recursive = dir.toGlob.withMaxDepth(Int.MaxValue)
-    val nonRecursive = dir.toGlob.withMaxDepth(0)
+    val recursive = Glob(dir.toPath, (0, Int.MaxValue), AllPass)
+    val nonRecursive = dir.toGlob
     assert(Seq(nonRecursive, recursive).sorted == Seq(recursive, nonRecursive))
   }
 }

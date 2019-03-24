@@ -8,14 +8,14 @@
  * (http://www.apache.org/licenses/LICENSE-2.0).
  */
 
-package sbt.internal.io
+package sbt.internal.nio
 
 import java.io.IOException
 import java.nio.file.{ Path => NioPath }
 import java.util
 import java.util.concurrent.atomic.AtomicInteger
 
-import sbt.io.Glob
+import sbt.nio.Glob
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -31,7 +31,7 @@ private[sbt] trait Observer[-T] extends AutoCloseable {
 
   /**
    * This is for managed observers that may need to be removed once the caller is done with them.
-   * See [[sbt.internal.io.Observers]].
+   * See [[Observers]].
    */
   override def close(): Unit = {}
 }
@@ -60,16 +60,12 @@ private[sbt] trait ObservablePaths[+T] extends Observable[(NioPath, T)]
 private[sbt] object Observable {
   def map[T, R](observable: Observable[T], f: T => R): Observable[R] = new Observable[R] {
     override def addObserver(observer: Observer[R]): AutoCloseable =
-      observable.addObserver(new Observer[T] {
-        override def onNext(t: T): Unit = observer.onNext(f(t))
-      })
+      observable.addObserver(t => observer.onNext(f(t)))
     override def close(): Unit = observable.close()
   }
   def filter[T](observable: Observable[T], f: T => Boolean): Observable[T] = new Observable[T] {
     override def addObserver(observer: Observer[T]): AutoCloseable =
-      observable.addObserver(new Observer[T] {
-        override def onNext(t: T): Unit = if (f(t)) observer.onNext(t)
-      })
+      observable.addObserver(t => if (f(t)) observer.onNext(t))
     override def close(): Unit = observable.close()
   }
 }
