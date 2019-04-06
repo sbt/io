@@ -554,14 +554,14 @@ object IO {
   /** Deletes `file`, recursively if it is a directory. */
   def delete(file: File): Unit = Retry {
     try {
-      FileTreeView.DEFAULT_NIO.list(Glob(file.toPath, (1, 1), AllPass), _ => true).foreach {
+      FileTreeView.DEFAULT_NIO.list(Glob(file.toPath, (1, 1), AllPass)).foreach {
         case (dir, attrs) if attrs.isDirectory => delete(dir.toFile)
         case (f, _)                            => Files.deleteIfExists(f)
       }
     } catch {
       case _: NotDirectoryException =>
     }
-    file.delete()
+    Files.deleteIfExists(file.toPath)
     ()
   }
 

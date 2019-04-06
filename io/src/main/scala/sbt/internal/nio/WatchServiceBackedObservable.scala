@@ -16,36 +16,33 @@ import java.nio.file.{ Path, WatchKey }
 import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
-import sbt.internal.nio.FileEvent.{ Creation, Deletion }
 import sbt.internal.io._
-import sbt.io._
+import sbt.internal.nio.FileEvent.{ Creation, Deletion }
+import sbt.io.AllPassFilter
 import sbt.io.syntax._
-import sbt.nio.FileTreeView._
+import sbt.nio.FileAttributes.NonExistent
 import sbt.nio.{ AllPass, FileAttributes, FileTreeView, Glob }
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.util.Try
 import scala.util.control.NonFatal
 
 private[sbt] object WatchServiceBackedObservable {
   private val eventThreadId = new AtomicInteger(0)
 }
-private[sbt] class WatchServiceBackedObservable[T](s: NewWatchState,
-                                                   delay: FiniteDuration,
-                                                   converter: (Path, FileAttributes) => Try[T],
-                                                   closeService: Boolean,
-                                                   logger: WatchLogger)
-    extends Registerable[FileEvent[(FileAttributes, Try[T])]]
-    with Observable[FileEvent[(FileAttributes, Try[T])]] {
+private[sbt] class WatchServiceBackedObservable(s: NewWatchState,
+                                                delay: FiniteDuration,
+                                                closeService: Boolean,
+                                                logger: WatchLogger)
+    extends Registerable[FileEvent[FileAttributes]]
+    with Observable[FileEvent[FileAttributes]] {
   import WatchServiceBackedObservable.eventThreadId
-  private[this] type Event[A] = FileEvent[(FileAttributes, Try[T])]
+  private[this] type Event = FileEvent[FileAttributes]
   private[this] val closed = new AtomicBoolean(false)
-  private[this] val observers = new Observers[FileEvent[(FileAttributes, Try[T])]]
-  private[this] val fileCache = new FileCache(converter)
-  private[this] val view: FileTreeView.Nio[(FileAttributes, Try[T])] =
-    FileTreeView.DEFAULT_NIO.map((p: Path, a: FileAttributes) => a -> converter(p, a))
+  private[this] val observers = new Observers[FileEvent[FileAttributes]]
+  private[this] val fileCache = new FileCache(p => FileAttributes(p).getOrElse(NonExistent))
+  private[this] val view: FileTreeView.Nio[FileAttributes] = FileTreeView.DEFAULT_NIO
   private[this] val thread: Thread = {
     val latch = new CountDownLatch(1)
     new Thread(s"watch-state-event-thread-${eventThreadId.incrementAndGet()}") {
@@ -75,7 +72,7 @@ private[sbt] class WatchServiceBackedObservable[T](s: NewWatchState,
         }
       }
 
-      def getFilesForKey(key: WatchKey): Seq[Event[T]] = key match {
+      def getFilesForKey(key: WatchKey): Seq[Event] = key match {
         case null => Vector.empty
         case k =>
           val rawEvents = k.synchronized {
@@ -84,42 +81,38 @@ private[sbt] class WatchServiceBackedObservable[T](s: NewWatchState,
             events
           }
           val keyPath = k.watchable.asInstanceOf[Path]
-          val allEvents: Seq[Event[T]] = rawEvents.flatMap {
+          val allEvents: Seq[Event] = rawEvents.flatMap {
             case e if e.kind.equals(OVERFLOW) =>
-              fileCache.refresh(keyPath ** AllPassFilter)
+              fileCache.refresh(keyPath.toFile ** AllPassFilter)
             case e if !e.kind.equals(OVERFLOW) && e.context != null =>
               val path = keyPath.resolve(e.context.asInstanceOf[Path])
               FileAttributes(path) match {
                 case Right(attrs) => fileCache.update(path, attrs)
                 case _            => Nil
               }
-            case _ => Nil: Seq[Event[T]]
+            case _ => Nil: Seq[Event]
           }
           logger.debug(s"Received events:\n${allEvents.mkString("\n")}")
-          def process(event: Event[T]): Seq[Event[T]] = {
+          def process(event: Event): Seq[Event] = {
             (event match {
-              case Creation(path, (attrs, _)) if attrs.isDirectory =>
+              case Creation(path, attrs) if attrs.isDirectory =>
                 s.register(path)
-                event +: view.list(path * AllPassFilter, _._1 != path).flatMap {
+                event +: view.list(Glob(path, (1, Int.MaxValue), AllPass)).flatMap {
                   case (p, a) =>
                     process(Creation(p, a))
                 }
-              case Deletion(p, (attrs, _)) if attrs.isDirectory =>
-                val events = fileCache.refresh(p ** AllPassFilter)
-                events.view.filter(_.attributes._1.isDirectory).foreach(e => s.unregister(e.path))
+              case Deletion(p, attrs) if attrs.isDirectory =>
+                val events = fileCache.refresh(p.toFile ** AllPassFilter)
+                events.view.filter(_.attributes.isDirectory).foreach(e => s.unregister(e.path))
                 events
               case e => e :: Nil
             }).map {
-              case d @ Deletion(path, (attributes, value)) =>
+              case d @ Deletion(path, attributes) =>
                 val newAttrs = FileAttributes(isDirectory = attributes.isDirectory,
                                               isOther = false,
                                               isRegularFile = attributes.isRegularFile,
                                               isSymbolicLink = attributes.isSymbolicLink)
-                Deletion(
-                  path,
-                  newAttrs -> value,
-                  d.occurredAt
-                )
+                Deletion(path, newAttrs, d.occurredAt)
               case e => e
             }
           }
@@ -128,7 +121,7 @@ private[sbt] class WatchServiceBackedObservable[T](s: NewWatchState,
 
     }
   }
-  override def addObserver(observer: Observer[FileEvent[(FileAttributes, Try[T])]]): AutoCloseable =
+  override def addObserver(observer: Observer[FileEvent[FileAttributes]]): AutoCloseable =
     observers.addObserver(observer)
 
   override def close(): Unit = {
@@ -140,23 +133,21 @@ private[sbt] class WatchServiceBackedObservable[T](s: NewWatchState,
     }
   }
 
-  override def register(
-      glob: Glob): Either[IOException, Observable[FileEvent[(FileAttributes, Try[T])]]] = {
+  override def register(glob: Glob): Either[IOException, Observable[FileEvent[FileAttributes]]] = {
     try {
       fileCache.register(glob)
-      fileCache.list(Glob(glob.base, glob.range, AllPass), (_, _) => true) foreach {
-        case (p: Path, a) if a._1.isDirectory => s.register(p)
-        case _                                =>
+      fileCache.list(Glob(glob.base, glob.range, AllPass)) foreach {
+        case (path, attrs) if attrs.isDirectory => s.register(path)
+        case _                                  =>
       }
-      val observable = new Observers[FileEvent[(FileAttributes, Try[T])]] {
-        override def onNext(t: FileEvent[(FileAttributes, Try[T])]): Unit = {
+      val observable = new Observers[FileEvent[FileAttributes]] {
+        override def onNext(t: FileEvent[FileAttributes]): Unit = {
           if (glob.toFileFilter.accept(t.path.toFile)) super.onNext(t)
         }
       }
       val handle = observers.addObserver(observable)
-      Right(new Observable[FileEvent[(FileAttributes, Try[T])]] {
-        override def addObserver(
-            observer: Observer[FileEvent[(FileAttributes, Try[T])]]): AutoCloseable =
+      Right(new Observable[FileEvent[FileAttributes]] {
+        override def addObserver(observer: Observer[FileEvent[FileAttributes]]): AutoCloseable =
           observable.addObserver(observer)
         override def close(): Unit = handle.close()
         override def toString = s"Observable($glob)"

@@ -15,20 +15,18 @@ import java.nio.file.{ NoSuchFileException, NotDirectoryException, Path => NioPa
 import com.swoval.files.{ FileTreeViews, TypedPath }
 import sbt.internal.io.Retry
 import sbt.internal.nio.SwovalConverters._
-import sbt.nio.{ FileAttributes, Glob }
+import sbt.nio.{ FileAttributes, FileTreeView, Glob }
 
 import scala.collection.JavaConverters._
 
-private[sbt] object DefaultFileTreeView extends NioFileTreeView[FileAttributes] {
+private[sbt] object DefaultFileTreeView extends FileTreeView.Nio[FileAttributes] {
   private[this] val fileTreeView =
     if ("nio" == sys.props.getOrElse("sbt.pathfinder", ""))
       FileTreeViews.getNio(true)
     else
       FileTreeViews.getDefault(true)
 
-  override def list(
-      glob: Glob,
-      filter: ((NioPath, FileAttributes)) => Boolean): Seq[(NioPath, FileAttributes)] =
+  override def list(glob: Glob): Seq[(NioPath, FileAttributes)] =
     Retry {
       try {
         val collector: TypedPath => Seq[(NioPath, FileAttributes)] = typedPath => {
@@ -38,7 +36,7 @@ private[sbt] object DefaultFileTreeView extends NioFileTreeView[FileAttributes] 
                                           isRegularFile = typedPath.isFile,
                                           isSymbolicLink = typedPath.isSymbolicLink)
           val pair = path -> attributes
-          if (glob.filter.accept(path) && filter(pair)) pair :: Nil else Nil
+          if (glob.filter.accept(path)) pair :: Nil else Nil
         }
         (if (glob.range._1 == 0) {
            fileTreeView

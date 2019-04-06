@@ -14,8 +14,6 @@ import java.io.{ File, IOException }
 import java.nio.file.Files
 import java.util.regex.Pattern
 
-import scala.language.implicitConversions
-
 /** A `java.io.FileFilter` with additional methods for combining filters. */
 trait FileFilter extends java.io.FileFilter {
 

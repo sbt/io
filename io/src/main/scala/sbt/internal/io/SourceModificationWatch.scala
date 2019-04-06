@@ -25,7 +25,6 @@ import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.{ immutable, mutable }
 import scala.concurrent.duration._
-import scala.util.{ Success, Try }
 
 private[sbt] object SourceModificationWatch {
 
@@ -40,15 +39,14 @@ private[sbt] object SourceModificationWatch {
     if (state.count == 0) {
       (true, state.withCount(1))
     } else {
-      val observable: Observable[FileEvent[(FileAttributes, Try[Unit])]] =
-        new WatchServiceBackedObservable[Unit](
+      val observable: Observable[FileEvent[FileAttributes]] =
+        new WatchServiceBackedObservable(
           state.toNewWatchState,
           delay,
-          (_: Path, _: FileAttributes) => Success(()),
           closeService = false,
           NullWatchLogger
         )
-      val monitor: FileEventMonitor[FileEvent[(FileAttributes, Try[Unit])]] =
+      val monitor: FileEventMonitor[FileEvent[FileAttributes]] =
         FileEventMonitor.antiEntropy(observable,
                                      200.milliseconds,
                                      NullWatchLogger,
@@ -141,7 +139,7 @@ private[sbt] final class WatchState private (
       s =>
         Glob(s.base.toPath,
              (1, if (s.recursive) Int.MaxValue else 1),
-             (s.includeFilter -- s.excludeFilter)))
+             s.includeFilter -- s.excludeFilter))
     val map = new ConcurrentHashMap[Path, WatchKey]()
     map.putAll(registered.asJava)
     new NewWatchState(globs, service, map.asScala)
@@ -284,13 +282,8 @@ private[sbt] object WatchState {
     globSet ++= globs
     val initFiles = globs.flatMap {
       case glob if glob.range._2 == Int.MaxValue =>
-        DefaultFileTreeView.list(glob.base.toGlob, (_, _) => true).flatMap {
-          case (d, attrs) =>
-            d +: (if (attrs.isDirectory)
-                    DefaultFileTreeView
-                      .list(Glob(glob.base, glob.range, AllPass), _._2.isDirectory)
-                      .map(_._1)
-                  else Nil)
+        DefaultFileTreeView.list(Glob(glob.base, (0, Int.MaxValue), AllPass)).collect {
+          case (p, a) if a.isDirectory => p
         }
       case glob => Seq(glob.base)
     }.sorted

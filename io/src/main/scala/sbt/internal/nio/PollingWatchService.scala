@@ -19,14 +19,12 @@ import java.util.{ List => JList }
 
 import sbt.internal.nio.FileEvent.{ Creation, Deletion, Update }
 import sbt.io._
-import sbt.io.syntax._
-import sbt.nio.FileAttributes
+import sbt.nio.{ AllPass, Glob }
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.concurrent.duration.{ Deadline => _, _ }
-import scala.util.{ Success, Try }
 
 /** A `WatchService` that polls the filesystem every `delay`. */
 private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSource)
@@ -36,8 +34,7 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
   private[this] implicit def ts: TimeSource = timeSource
   private[this] val closed = new AtomicBoolean(false)
   private[this] val registered = new ConcurrentHashMap[Path, PollingWatchKey].asScala
-  private[this] val lastModifiedConverter: (Path, FileAttributes) => Try[Long] = (p, _) =>
-    Success(IO.getModifiedTimeOrZero(p.toFile))
+  private[this] val lastModifiedConverter: Path => Long = p => IO.getModifiedTimeOrZero(p.toFile)
   private[this] val pollQueue: util.Queue[PollingWatchKey] =
     new LinkedBlockingDeque[PollingWatchKey]
   override def close(): Unit = if (closed.compareAndSet(false, true)) {
@@ -116,12 +113,12 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
                                 eventKinds: WatchEvent.Kind[Path]*)
       extends WatchKey {
     private[this] val events =
-      new ArrayBlockingQueue[FileEvent[(FileAttributes, Try[Long])]](256)
+      new ArrayBlockingQueue[FileEvent[Long]](256)
     private[this] val hasOverflow = new AtomicBoolean(false)
     private[this] lazy val acceptCreate = eventKinds.contains(ENTRY_CREATE)
     private[this] lazy val acceptDelete = eventKinds.contains(ENTRY_DELETE)
     private[this] lazy val acceptModify = eventKinds.contains(ENTRY_MODIFY)
-    private[this] val glob = path * AllPassFilter
+    private[this] val glob = Glob(path, (0, 1), AllPass)
     private[this] val fileCache =
       new FileCache[Long](lastModifiedConverter)
     fileCache.register(glob)
@@ -148,7 +145,7 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
       events.synchronized {
         val overflow = hasOverflow.getAndSet(false)
         val size = events.size + (if (overflow) 1 else 0)
-        val rawEvents = new util.ArrayList[FileEvent[(FileAttributes, Try[Long])]](size)
+        val rawEvents = new util.ArrayList[FileEvent[Long]](size)
         events.drainTo(rawEvents)
         val res = new util.ArrayList[WatchEvent[Path]](size)
         res.addAll(rawEvents.asScala.map {
@@ -161,8 +158,8 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
       }
     }
     private[PollingWatchService] def maybeAddEvent(
-        event: FileEvent[(FileAttributes, Try[Long])]): Option[PollingWatchKey] = {
-      def offer(event: FileEvent[(FileAttributes, Try[Long])]): Option[PollingWatchKey] = {
+        event: FileEvent[Long]): Option[PollingWatchKey] = {
+      def offer(event: FileEvent[Long]): Option[PollingWatchKey] = {
         if (!events.synchronized(events.offer(event))) hasOverflow.set(true)
         Some(this)
       }

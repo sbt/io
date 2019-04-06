@@ -316,7 +316,7 @@ object Path extends Mapper {
       val fileTreeView = FileTreeView.DEFAULT_NIO
       (file, filter) =>
         fileTreeView
-          .list(Glob(file.toPath, (1, 1), AllPass), _ => true)
+          .list(Glob(file.toPath, (1, 1), AllPass))
           .flatMap {
             case (path: NioPath, attrs: FileAttributes) =>
               if (filter.accept(new AttributedFile(path, attrs))) Some(path.toFile) else None
