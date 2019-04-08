@@ -77,7 +77,6 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
     files
       .subMap(glob.base, ceiling(glob.base))
       .asScala
-      .filter { case (p, _) => glob.filter.accept(p) }
       .toIndexedSeq
   }
   private[nio] def register(glob: Glob): Unit = {
@@ -112,14 +111,14 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
     }
   }
   private[this] def globInclude: Path => Boolean = {
-    val allGlobs = globs.toIndexedSeq
+    val filters = globs.map(_.filter).toIndexedSeq
     path =>
-      allGlobs.exists(_.filter.accept(path))
+      filters.exists(_.accept(path))
   }
   private[this] def globExcludes: Path => Boolean = {
-    val allGlobs = globs.toIndexedSeq
+    val filters = globs.map(_.filter).toIndexedSeq
     path =>
-      !allGlobs.exists(_.filter.accept(path))
+      !filters.exists(_.accept(path))
   }
   private[this] def maxDepthForPath(path: Path): Int = {
     globs.toIndexedSeq.view

@@ -82,11 +82,11 @@ private[sbt] class FileTreeRepositoryImpl[T] extends FileTreeRepository[FileAttr
     throwIfClosed("addObserver")
     observers.addObserver(observer)
   }
-  override def list(glob: Glob): Seq[(NioPath, FileAttributes)] = {
+  override def list(path: NioPath): Seq[(NioPath, FileAttributes)] = {
     throwIfClosed("list")
     val res = new VectorBuilder[(NioPath, FileAttributes)]
     underlying
-      .listEntries(glob.base, glob.range.toSwovalDepth, Filters.AllPass)
+      .listEntries(path, 0, Filters.AllPass)
       .iterator
       .asScala
       .foreach { e =>

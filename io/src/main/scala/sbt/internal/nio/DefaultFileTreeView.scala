@@ -10,12 +10,11 @@
 
 package sbt.internal.nio
 
-import java.nio.file.{ NoSuchFileException, NotDirectoryException, Path => NioPath }
+import java.io.IOException
+import java.nio.file._
 
-import com.swoval.files.{ FileTreeViews, TypedPath }
-import sbt.internal.io.Retry
-import sbt.internal.nio.SwovalConverters._
-import sbt.nio.{ FileAttributes, FileTreeView, Glob }
+import com.swoval.files.FileTreeViews
+import sbt.nio.{ FileAttributes, FileTreeView }
 
 import scala.collection.JavaConverters._
 
@@ -25,39 +24,22 @@ private[sbt] object DefaultFileTreeView extends FileTreeView.Nio[FileAttributes]
       FileTreeViews.getNio(true)
     else
       FileTreeViews.getDefault(true)
-
-  override def list(glob: Glob): Seq[(NioPath, FileAttributes)] =
-    Retry {
-      try {
-        val collector: TypedPath => Seq[(NioPath, FileAttributes)] = typedPath => {
-          val path = typedPath.getPath
-          val attributes = FileAttributes(isDirectory = typedPath.isDirectory,
-                                          isOther = false,
-                                          isRegularFile = typedPath.isFile,
-                                          isSymbolicLink = typedPath.isSymbolicLink)
-          val pair = path -> attributes
-          if (glob.filter.accept(path)) pair :: Nil else Nil
+  override def list(path: Path): Seq[(Path, FileAttributes)] = {
+    try {
+      fileTreeView
+        .list(path, 0, _ => true)
+        .iterator
+        .asScala
+        .map { typedPath =>
+          typedPath.getPath ->
+            FileAttributes(isDirectory = typedPath.isDirectory,
+                           isOther = false,
+                           isRegularFile = typedPath.isFile,
+                           isSymbolicLink = typedPath.isSymbolicLink)
         }
-        (if (glob.range._1 == 0) {
-           fileTreeView
-             .list(glob.base, -1, (_: TypedPath) => true)
-             .asScala
-             .flatMap(collector)
-             .toIndexedSeq
-         } else Vector.empty[(NioPath, FileAttributes)]) ++ (if (glob.range._2 > 0)
-                                                               fileTreeView
-                                                                 .list(glob.base,
-                                                                       glob.range.toSwovalDepth,
-                                                                       (_: TypedPath) => true)
-                                                                 .asScala
-                                                                 .flatMap(collector)
-                                                                 .toIndexedSeq
-                                                             else
-                                                               Vector
-                                                                 .empty[(NioPath, FileAttributes)])
-      } catch {
-        case _: NoSuchFileException | _: NotDirectoryException =>
-          Nil
-      }
+        .toVector
+    } catch {
+      case _: IOException => Vector.empty
     }
+  }
 }

@@ -60,7 +60,7 @@ private[sbt] class LegacyFileTreeRepository(logger: WatchLogger, watchService: W
     observable.register(glob).right.foreach(_.close())
     new RegisterableObservable(observers).register(glob)
   }
-  override def list(glob: Glob): Seq[(Path, FileAttributes)] = view.list(glob)
+  override def list(path: Path): Seq[(Path, FileAttributes)] = view.list(path)
 
   /**
    * Add callbacks to be invoked on file events.

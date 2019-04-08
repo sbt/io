@@ -102,7 +102,7 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
       c.ls(dir.toFile * AllPassFilter) === Seq(moved)
     }
   }
-  it should "ignore children of subdirectories when recursive flag is false" in withTempDir { dir =>
+  it should "in children of subdirectories when recursive flag is false" in withTempDir { dir =>
     withTempDir(dir) { subdir =>
       val fileLatch = new CountDownLatch(1)
       val subdirLatch = new CountDownLatch(1)

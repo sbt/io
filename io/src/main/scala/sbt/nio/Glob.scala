@@ -123,10 +123,10 @@ object Glob extends LowPriorityGlobOps {
     }
     def \(component: String): Glob = this / component
     def glob(filter: FileFilter): Glob =
-      new GlobImpl(converter(repr), (0, 1), ConvertedFileFilter(filter))
+      new GlobImpl(converter(repr), (1, 1), ConvertedFileFilter(filter))
     def *(filter: FileFilter): Glob = glob(filter)
     def globRecursive(filter: FileFilter): Glob =
-      new GlobImpl(converter(repr), (0, Int.MaxValue), ConvertedFileFilter(filter))
+      new GlobImpl(converter(repr), (1, Int.MaxValue), ConvertedFileFilter(filter))
     def allPaths: Glob = globRecursive(sbt.io.AllPassFilter)
     def **(filter: FileFilter): Glob = globRecursive(filter)
     def toGlob: Glob = {
@@ -209,7 +209,8 @@ object Glob extends LowPriorityGlobOps {
     val sorted = globs.toSeq.sorted
     val needListDirectory: Path => Boolean = (path: Path) => {
       val filters = sorted.map(g => Glob(g.base, (0, g.range._2), AllPass).filter)
-      filters.exists(_.accept(path))
+      val a = path.resolve("a")
+      filters.exists(_.accept(a))
     }
     val visited = new util.HashSet[Path]
     val pathFilter: PathFilter = {
@@ -249,7 +250,7 @@ object Glob extends LowPriorityGlobOps {
                   FileAttributes(path).foreach(a => maybeAdd(path -> a))
             }
             try {
-              view.list(Glob(path, (1, 1), AllPass)) foreach {
+              view.list(path) foreach {
                 case pair @ (p, attributes) if attributes.isDirectory =>
                   if (needListDirectory(p)) remainingPaths.add(p)
                   maybeAdd(pair)
