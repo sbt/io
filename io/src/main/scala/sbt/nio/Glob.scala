@@ -10,10 +10,13 @@
 
 package sbt.nio
 
-import java.io.File
+import java.io.{ File, IOException }
 import java.nio.file._
+import java.util
 
 import sbt.io.{ FileFilter, PathFinder, SimpleFileFilter }
+
+import scala.annotation.tailrec
 
 /**
  * Represents a filtered subtree of the file system.
@@ -92,6 +95,7 @@ object Glob extends LowPriorityGlobOps {
   private implicit class PathOps(val p: Path) extends AnyVal {
     def abs: Path = if (p.isAbsolute) p else p.toAbsolutePath
   }
+  def apply(base: Path): Glob = new GlobImpl(base.abs, (0, 0), AllPass)
   def apply(base: Path, range: (Int, Int), filter: PathNameFilter): Glob =
     new GlobImpl(base.abs, range, filter)
   private[sbt] def apply(base: Path, range: (Int, Int), filter: FileFilter): Glob =
@@ -185,6 +189,90 @@ object Glob extends LowPriorityGlobOps {
       case 0 => pairOrdering.compare(right.range, left.range)
       case i => i
     }
+  }
+  private[sbt] def all(globs: Traversable[Glob],
+                       view: FileTreeView.Nio[FileAttributes]): Seq[(Path, FileAttributes)] =
+    all(globs, view, (_, _) => true)
+  private[sbt] def all(globs: Traversable[Glob],
+                       view: FileTreeView.Nio[FileAttributes],
+                       filter: (Path, FileAttributes) => Boolean): Seq[(Path, FileAttributes)] =
+    iterator(globs, view, filter).toVector
+
+  private[sbt] def iterator(
+      globs: Traversable[Glob],
+      view: FileTreeView.Nio[FileAttributes]): Iterator[(Path, FileAttributes)] =
+    iterator(globs, view, (_, _) => true)
+  private[sbt] def iterator(
+      globs: Traversable[Glob],
+      view: FileTreeView.Nio[FileAttributes],
+      filter: (Path, FileAttributes) => Boolean): Iterator[(Path, FileAttributes)] = {
+    val sorted = globs.toSeq.sorted
+    val needListDirectory: Path => Boolean = (path: Path) => {
+      val filters = sorted.map(g => Glob(g.base, (0, g.range._2), AllPass).filter)
+      filters.exists(_.accept(path))
+    }
+    val visited = new util.HashSet[Path]
+    val pathFilter: PathFilter = {
+      val filters = sorted.map(_.filter)
+      path: Path =>
+        filters.exists(_.accept(path))
+    }
+    val totalFilter: (Path, FileAttributes) => Boolean = { (path, attributes) =>
+      pathFilter.accept(path) && filter(path, attributes)
+    }
+    val remainingGlobs = new util.LinkedList[Glob]()
+    sorted.foreach(remainingGlobs.add)
+    val remainingPaths = new util.LinkedList[Path]()
+    val iterator: Iterator[(Path, FileAttributes)] = new Iterator[(Path, FileAttributes)] {
+      private[this] val buffer = new util.LinkedList[(Path, FileAttributes)]
+      private[this] val maybeAdd: ((Path, FileAttributes)) => Unit = {
+        case pair @ (path, attributes) =>
+          if (totalFilter(path, attributes)) buffer.add(pair)
+          ()
+      }
+      @tailrec
+      private def fillBuffer(): Unit = {
+        remainingPaths.poll match {
+          case null =>
+            remainingGlobs.poll() match {
+              case null =>
+              case g =>
+                remainingPaths.add(g.base)
+                fillBuffer()
+            }
+          case path if !visited.contains(path) =>
+            visited.add(path)
+            path.getParent match {
+              case null =>
+              case p =>
+                if (!visited.contains(p) && pathFilter.accept(path))
+                  FileAttributes(path).foreach(a => maybeAdd(path -> a))
+            }
+            try {
+              view.list(Glob(path, (1, 1), AllPass)) foreach {
+                case pair @ (p, attributes) if attributes.isDirectory =>
+                  if (needListDirectory(p)) remainingPaths.add(p)
+                  maybeAdd(pair)
+                case pair => maybeAdd(pair)
+              }
+            } catch {
+              case _: IOException =>
+            }
+            if (buffer.isEmpty) fillBuffer()
+          case _ =>
+        }
+      }
+      override def hasNext: Boolean = !buffer.isEmpty
+      override def next(): (Path, FileAttributes) = {
+        val res = buffer.poll()
+        if (buffer.isEmpty) {
+          fillBuffer()
+        }
+        res
+      }
+      fillBuffer()
+    }
+    iterator
   }
 }
 private[nio] trait LowPriorityGlobOps {
