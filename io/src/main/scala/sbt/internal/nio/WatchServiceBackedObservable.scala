@@ -18,9 +18,9 @@ import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import sbt.internal.io._
 import sbt.internal.nio.FileEvent.{ Creation, Deletion }
-import sbt.io.AllPassFilter
-import sbt.io.syntax._
 import sbt.nio.FileAttributes.NonExistent
+import sbt.nio.Glob._
+import sbt.nio.Glob.GlobOps._
 import sbt.nio.{ AllPass, FileAttributes, FileTreeView, Glob }
 
 import scala.annotation.tailrec
@@ -83,7 +83,7 @@ private[sbt] class WatchServiceBackedObservable(s: NewWatchState,
           val keyPath = k.watchable.asInstanceOf[Path]
           val allEvents: Seq[Event] = rawEvents.flatMap {
             case e if e.kind.equals(OVERFLOW) =>
-              fileCache.refresh(keyPath.toFile ** AllPassFilter)
+              fileCache.refresh(keyPath / "**")
             case e if !e.kind.equals(OVERFLOW) && e.context != null =>
               val path = keyPath.resolve(e.context.asInstanceOf[Path])
               FileAttributes(path) match {
@@ -102,7 +102,7 @@ private[sbt] class WatchServiceBackedObservable(s: NewWatchState,
                     process(Creation(p, a))
                 }
               case Deletion(p, attrs) if attrs.isDirectory =>
-                val events = fileCache.refresh(p.toFile ** AllPassFilter)
+                val events = fileCache.refresh(p / "**")
                 events.view.filter(_.attributes.isDirectory).foreach(e => s.unregister(e.path))
                 events
               case e => e :: Nil

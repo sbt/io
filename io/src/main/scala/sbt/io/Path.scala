@@ -418,7 +418,7 @@ object PathFinder {
         glob.base.toFile :: Nil
       } else if (glob.range._2 > 1) {
         val files = new java.util.LinkedHashSet[File].asScala
-        if (glob.pathFilter.accept(glob.base)) files += glob.base.toFile
+        if (glob.pathFilter.accept(glob.base)) files.add(glob.base.toFile)
         Path.defaultDescendantHandler(glob.base.toFile, glob.toFileFilter, files, glob.range._2)
         files.toIndexedSeq
       } else {

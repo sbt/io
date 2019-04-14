@@ -6,9 +6,9 @@ import java.util.concurrent.{ ConcurrentHashMap, CountDownLatch, TimeUnit }
 
 import org.scalatest.{ FlatSpec, Matchers }
 import sbt.internal.nio.FileEvent.{ Creation, Deletion }
-import sbt.io.{ AllPassFilter, IO }
-import sbt.io.syntax._
+import sbt.io.IO
 import sbt.nio.{ FileAttributes, Glob }
+import sbt.nio.syntax._
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -60,7 +60,7 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
   import FileTreeRepositorySpec._
   "register" should "see existing files" in withTempFile { file =>
     using(simpleCache((_: Path) => {})) { c =>
-      val glob = file.getParent.toFile ** AllPassFilter
+      val glob = file.getParent / "*"
       c.register(glob)
       c.ls(glob) shouldBe Seq(file)
     }
@@ -69,20 +69,20 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
     val latch = new CountDownLatch(1)
     val file = dir.resolve("file")
     using(simpleCache((p: Path) => if (p == file) latch.countDown())) { c =>
-      c.register(dir.toFile ** AllPassFilter)
+      c.register(dir / "**")
       Files.createFile(file)
       assert(latch.await(DEFAULT_TIMEOUT))
-      c.ls(dir.toFile ** AllPassFilter) shouldBe Seq(file)
+      c.ls(dir / "**") shouldBe Seq(file)
     }
   }
   it should "detect new subdirectories" in withTempDir { dir =>
     val latch = new CountDownLatch(1)
     val subdir = dir.resolve("subdir")
     using(simpleCache((p: Path) => if (p == subdir) latch.countDown())) { c =>
-      c.register(dir.toFile ** AllPassFilter)
+      c.register(dir / "**")
       Files.createDirectories(subdir)
       assert(latch.await(DEFAULT_TIMEOUT))
-      c.ls(dir.toFile * AllPassFilter) shouldBe Seq(subdir)
+      c.ls(dir / "*") shouldBe Seq(subdir)
     }
   }
   it should "detect move events" in withTempDir { dir =>
@@ -95,11 +95,11 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
         case _                 =>
       }
     using(simpleCache(observer)) { c =>
-      c.register(dir.toFile ** AllPassFilter)
-      c.ls(dir.toFile * AllPassFilter) === Seq(initial)
+      c.register(dir / "**")
+      c.ls(dir / "*") === Seq(initial)
       Files.move(initial, moved)
       assert(latch.await(DEFAULT_TIMEOUT))
-      c.ls(dir.toFile * AllPassFilter) === Seq(moved)
+      c.ls(dir / "*") === Seq(moved)
     }
   }
   it should "in children of subdirectories when recursive flag is false" in withTempDir { dir =>
@@ -111,13 +111,13 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
         else if (path == subdir && Files.getLastModifiedTime(path).toMillis == 2000)
           subdirLatch.countDown()
       })) { c =>
-        c.register(dir.toFile * AllPassFilter)
+        c.register(dir / "*")
         withTempFile(subdir) { f =>
           assert(Files.exists(f))
           assert(fileLatch.getCount == 1) // The child creation should not have triggered a callback
           Files.setLastModifiedTime(subdir, FileTime.fromMillis(2000))
           assert(subdirLatch.await(DEFAULT_TIMEOUT))
-          c.ls(dir.toFile ** AllPassFilter) === Seq(subdir)
+          c.ls(dir / "**") === Seq(subdir)
         }
       }
     }
@@ -126,10 +126,10 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
     withTempDir(dir) { subdir =>
       withTempFile(subdir) { f =>
         using(simpleCache((_: Path) => {})) { c =>
-          c.register(dir.toFile * AllPassFilter)
-          c.ls(dir.toFile ** AllPassFilter).toSet shouldBe Set(subdir)
-          c.register(dir.toFile ** AllPassFilter)
-          c.ls(dir.toFile ** AllPassFilter).toSet shouldBe Set(subdir, f)
+          c.register(dir / "*")
+          c.ls(dir / "**").toSet shouldBe Set(subdir)
+          c.register(dir / "**")
+          c.ls(dir / "**").toSet shouldBe Set(subdir, f)
         }
       }
     }
@@ -138,10 +138,10 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
     withTempDir(dir) { subdir =>
       withTempFile(subdir) { f =>
         using(simpleCache((_: Path) => {})) { c =>
-          c.register(dir.toFile ** AllPassFilter)
-          c.ls(dir.toFile ** AllPassFilter).toSet shouldBe Set(subdir, f)
-          c.register(dir.toFile * AllPassFilter)
-          c.ls(dir.toFile ** AllPassFilter).toSet shouldBe Set(subdir, f)
+          c.register(dir / "**")
+          c.ls(dir / "**").toSet shouldBe Set(subdir, f)
+          c.register(dir / "*")
+          c.ls(dir / "**").toSet shouldBe Set(subdir, f)
         }
       }
     }
@@ -170,7 +170,7 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
         case _              =>
       }
     using(simpleCache(observer)) { c =>
-      c.register(dir.toFile ** AllPassFilter)
+      c.register(dir / "**")
 
       withThread("file-creation-thread") {
         subdirs.foreach { dir =>
@@ -181,7 +181,7 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
         }
       } {
         assert(creationLatch.await(DEFAULT_TIMEOUT * 10))
-        c.ls(dir.toFile ** AllPassFilter).toSet shouldBe (files ++ subdirs).toSet
+        c.ls(dir / "**").toSet shouldBe (files ++ subdirs).toSet
       }
 
       withThread("file-deletion-thread") {
@@ -190,7 +190,7 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
         if (!deletionLatch.await(DEFAULT_TIMEOUT * 10)) {
           assert(deletionLatch.getCount == 0)
         }
-        c.ls(dir.toFile * AllPassFilter) shouldBe 'empty
+        c.ls(dir / "*") shouldBe 'empty
       }
     }
   }

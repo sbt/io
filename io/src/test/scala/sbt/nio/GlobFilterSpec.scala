@@ -1,9 +1,11 @@
 package sbt.nio
 
+import java.nio.file.Paths
+
 import org.scalatest.FlatSpec
 import sbt.io.{ GlobFilter, IO, NothingFilter }
 import sbt.io.syntax._
-import Glob._
+import sbt.nio.syntax._
 
 class GlobFilterSpec extends FlatSpec {
   "GlobAsFilter" should "work with simple files" in IO.withTemporaryDirectory { dir =>
@@ -39,5 +41,23 @@ class GlobFilterSpec extends FlatSpec {
     val file = new File(dir, "build.sbt")
     val glob = dir * (GlobFilter("*.sbt") - ".sbt")
     assert(glob.filter.accept(file.toPath))
+  }
+  it should "work with depth" in {
+    val base = Paths.get("/foo/bar").toAbsolutePath
+    assert((base / s"*/*.txt").filter.accept(base.resolve("foo").resolve("bar.txt")))
+    assert(!(base / "*/*/*.txt").filter.accept(base.resolve("foo").resolve("bar.txt")))
+    assert(
+      (base / "*/*/*.txt").filter
+        .accept(base.resolve("foo").resolve("baz").resolve("bar.txt")))
+    assert(
+      !(base / "*/*/*.txt").filter
+        .accept(base.resolve("foo").resolve("baz").resolve("bar.tx")))
+    assert((base / "*/**/*.txt").filter.accept(base.resolve("foo").resolve("bar.txt")))
+    assert(
+      (base / "*/**/*.txt").filter
+        .accept(base.resolve("foo").resolve("bar").resolve("baz").resolve("bar.txt")))
+    assert(
+      !(base / "*/**/*.txt").filter
+        .accept(base.resolve("foo").resolve("bar").resolve("baz").resolve("bar.tx")))
   }
 }

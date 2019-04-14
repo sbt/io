@@ -17,6 +17,7 @@ import java.util
 import sbt.io.{ FileFilter, PathFinder, SimpleFileFilter }
 
 import scala.annotation.tailrec
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * Represents a filtered subtree of the file system.
@@ -60,94 +61,35 @@ private[sbt] sealed trait ToGlob extends Any {
   def toGlob: Glob
 }
 object Glob extends LowPriorityGlobOps {
-  private[sbt] class ConvertedFileFilter(val f: FileFilter) extends PathNameFilter {
-    override def accept(path: Path): Boolean = f.accept(path.toFile)
-    override def accept(name: String): Boolean = false
-    override def equals(o: Any): Boolean = o match {
-      case that: ConvertedFileFilter => this.f == that.f
-      case _                         => false
+
+  /**
+   * Converts a string to a [[Glob]]. The string may contain wild cards. For example, when the
+   * input string is '/foo/bar', the returned glob accepts only the exact path '/foo/bar'. When
+   * the input string is '/foo/bar/src/main/scala/**/*.scala', the returned glob will accept
+   * all files with the '.scala' extension that are children of '/foo/bar/src/main/scala'.
+   * @param path the path to convert to a Glob
+   * @return a Glob
+   */
+  implicit def stringToGlob(path: String): Glob = Glob.parse(path)
+
+  private final val singlePathRange = (0, 0)
+  implicit def pathToGlob(path: Path): Glob = new GlobImpl(path, singlePathRange, AllPass)
+  implicit def fileToGlob(file: File): Glob = new GlobImpl(file.toPath, singlePathRange, AllPass)
+
+  object GlobOps {
+    final implicit class PathOps(path: Path) extends GlobOps {
+      override val glob: Glob = pathToGlob(path)
     }
-    override def hashCode: Int = f.hashCode
-    override def toString: String = s"ConvertedFileFilter($f)"
-  }
-  private[nio] object ConvertedFileFilter {
-    def applyName(nameFilter: sbt.io.NameFilter): PathNameFilter = nameFilter match {
-      case af: sbt.io.AndNameFilter   => new AndNameFilter(applyName(af.left), applyName(af.right))
-      case of: sbt.io.OrNameFilter    => new OrNameFilter(applyName(of.left), applyName(of.right))
-      case ef: sbt.io.ExtensionFilter => new ExtensionFilter(ef.extensions: _*)
-      case ef: sbt.io.ExactFilter     => new ExactNameFilter(ef.matchName)
-      case nn: sbt.io.NotNameFilter   => new NotNameFilter(applyName(nn.fileFilter))
-      case pf: sbt.io.PrefixFilter    => new SplitFilter(pf.prefix, suffix = "")
-      case sf: sbt.io.SuffixFilter    => new SplitFilter(prefix = "", sf.suffix)
-      case nf: sbt.io.NameFilter      => new ConvertedFileFilter(nf)
-    }
-    def apply(fileFilter: FileFilter): PathFilter = fileFilter match {
-      case sbt.io.AllPassFilter       => AllPass
-      case sbt.io.NothingFilter       => NoPass
-      case af: sbt.io.AndFilter       => new AndFilter(apply(af.left), apply(af.right))
-      case of: sbt.io.OrFilter        => new OrFilter(apply(of.left), apply(of.right))
-      case nf: sbt.io.NameFilter      => applyName(nf)
-      case nf: sbt.io.NotFilter       => new NotFilter(apply(nf.fileFilter))
-      case ef: sbt.io.ExactFileFilter => new ExactPathFilter(ef.file.toPath)
-      case filter: sbt.io.FileFilter  => new ConvertedFileFilter(filter)
-    }
-  }
-  private implicit class PathOps(val p: Path) extends AnyVal {
-    def abs: Path = if (p.isAbsolute) p else p.toAbsolutePath
-  }
-  def apply(base: Path): Glob = new GlobImpl(base.abs, (0, 0), AllPass)
-  def apply(base: Path, range: (Int, Int), filter: PathNameFilter): Glob =
-    new GlobImpl(base.abs, range, filter)
-  private[sbt] def apply(base: Path, range: (Int, Int), filter: FileFilter): Glob =
-    new GlobImpl(base.abs, range, ConvertedFileFilter(filter))
-  private[nio] class GlobImpl(override val base: Path,
-                              override val range: (Int, Int),
-                              override val pathFilter: PathFilter)
-      extends Glob {
-    override def toString: String =
-      s"Glob(\n  base = $base,\n  range = $range,\n  filter = $pathFilter\n)"
-    override def equals(o: Any): Boolean = o match {
-      case that: GlobImpl =>
-        this.base == that.base && this.range == that.range && this.pathFilter == that.pathFilter
-      case _ => false
-    }
-    override def hashCode: Int =
-      (((base.hashCode * 31) ^ pathFilter.hashCode) * 31) ^ range.hashCode
-  }
-  private[sbt] trait Builder[T] extends Any with GlobBuilder[Glob] with ToGlob {
-    def repr: T
-    def converter: T => Path
-    def /(component: String): Glob = {
-      val base = converter(repr).resolve(component)
-      Glob(base, (0, 0), (_: String) == component)
-    }
-    def \(component: String): Glob = this / component
-    def glob(filter: FileFilter): Glob =
-      new GlobImpl(converter(repr), (1, 1), ConvertedFileFilter(filter))
-    def *(filter: FileFilter): Glob = glob(filter)
-    def globRecursive(filter: FileFilter): Glob =
-      new GlobImpl(converter(repr), (1, Int.MaxValue), ConvertedFileFilter(filter))
-    def allPaths: Glob = globRecursive(sbt.io.AllPassFilter)
-    def **(filter: FileFilter): Glob = globRecursive(filter)
-    def toGlob: Glob = {
-      val base = converter(repr)
-      new GlobImpl(base, (0, 0), AllPass)
-    }
-  }
-  private[sbt] final class FileBuilder(val file: File) extends AnyVal with Builder[File] {
-    override def repr: File = file
-    override def converter: File => Path = (_: File).toPath
-  }
-  private[sbt] final class PathBuilder(val path: Path) extends AnyVal with Builder[Path] {
-    override def repr: Path = path
-    override def converter: Path => Path = identity
   }
 
   /**
    * Provides extension methods for a [[Glob]]. These allow us to extend the glob from its
    * base path using various `/` methods.
    */
-  implicit class GlobOps(val glob: Glob) extends AnyVal {
+  sealed trait GlobOps extends Any {
+    def glob: Glob
+    private[sbt] def toFileFilter: sbt.io.FileFilter =
+      new SimpleFileFilter(file => filter.accept(file.toPath))
 
     /**
      * Check if a path is included in the range of a glob. For example, if the glob is
@@ -177,9 +119,47 @@ object Glob extends LowPriorityGlobOps {
      * @return the combined [[PathFilter]]
      */
     def filter: PathFilter = (path: Path) => inRange(path) && glob.pathFilter.accept(path)
-    private[sbt] def toFileFilter: sbt.io.FileFilter =
-      new SimpleFileFilter((file: File) => glob.filter.accept(file.toPath))
+    private[this] def incrementRange(recursive: Boolean, strict: Boolean): (Int, Int) = {
+      lazy val msg = s"Couldn't increment range for $glob."
+      if (strict && glob.range._2 == Int.MaxValue) throw new IllegalArgumentException(msg)
+      glob.range match {
+        case (min, _) if recursive && glob.pathFilter == AllPass =>
+          (min + 1, Int.MaxValue)
+        case r @ (min, max) if !recursive && glob.pathFilter == AllPass =>
+          if (max == Int.MaxValue) r else (min + 1, max + 1)
+        case _ => throw new IllegalArgumentException(msg)
+      }
+    }
+
+    /**
+     * Add a path name filter to the glob. This will also implicitly increase the range of the
+     * glob by one. For example, when the current glob is `/foo/bar` and the input filter is
+     * the extension filter "*.txt", then the new glob will accept all immediate globs of
+     * `/foo/bar` with the extension *.txt. When the current glob is `/foo/bar/ * / **` and the
+     * filter is the extension filter "*.txt", then the new glob will accept all files with
+     * the extension ".txt" that are descendants of `/foo/bar` but not directly in `/foo/bar`.
+     *
+     * @param pathNameFilter the name filter to apply to the children of the previous glob
+     * @return the new filtered glob.
+     */
+    def /(pathNameFilter: PathNameFilter): Glob =
+      Glob(glob.base, incrementRange(recursive = false, strict = false), filter = pathNameFilter)
+
+    /**
+     * Extend the glob with an arbitrary string. This can be some arbitrary syntax. For example,
+     * if the current glob is `/foo/bar` and the input is '/baz/**/foo*' then the returned glob
+     * will accept all files that start with the prefix 'foo' that are children of `/foo/bar/baz`.
+     * @param globPath the path (that may contain wildcard '*' characters).
+     * @return the transformed glob
+     */
+    def /(globPath: String): Glob = {
+      if (glob.pathFilter != AllPass)
+        throw new IllegalArgumentException(s"Couldn't append $globPath to $glob")
+      val res = parse(glob = s"$glob/$globPath")
+      res
+    }
   }
+  implicit class GlobOpsImpl(override val glob: Glob) extends AnyVal with GlobOps
   implicit object ordering extends Ordering[Glob] {
     private[this] val pairOrdering: Ordering[(Int, Int)] = Ordering[(Int, Int)]
     override def compare(left: Glob, right: Glob): Int = left.base.compareTo(right.base) match {
@@ -190,6 +170,165 @@ object Glob extends LowPriorityGlobOps {
       case i => i
     }
   }
+
+  private[nio] def parse(glob: String): Glob = {
+    val array = glob.toCharArray
+    val stringBuilder = new StringBuilder
+    val components = new ArrayBuffer[String]
+    var firstStarIndex = -1
+    @tailrec def fillComponents(index: Int): Unit = {
+      if (index < array.length) {
+        array(index) match {
+          case '/' | '\\' =>
+            components += stringBuilder.toString.trim
+            stringBuilder.clear()
+            fillComponents(index + 1)
+          case c =>
+            if (c == '*' && firstStarIndex == -1) firstStarIndex = components.size
+            stringBuilder += c
+            fillComponents(index + 1)
+        }
+      } else if (stringBuilder.nonEmpty) {
+        components += stringBuilder.toString.trim
+      }
+    }
+    fillComponents(index = 0)
+    val pathNameCount = if (firstStarIndex == -1) components.size else firstStarIndex
+    val (pathPart, tail) = components.splitAt(pathNameCount)
+    val pathString = pathPart.mkString(File.separator)
+    val path = Paths.get(pathString)
+    val filterIndex = tail.indexWhere(s => s != "*" && s != "**")
+    val (rangeParts, filterParts) =
+      if (filterIndex == -1) (tail, Nil) else tail.splitAt(filterIndex)
+
+    val range =
+      if (rangeParts.isEmpty && filterParts.nonEmpty) (1, 1)
+      else {
+        val base = rangeParts.foldLeft(if (pathString.isEmpty) (-1, -1) else (0, 0)) {
+          case ((min, max), part) if part == "*" && max != Int.MaxValue  => (min + 1, max + 1)
+          case ((min, max), part) if part == "**" && max != Int.MaxValue => (min + 1, Int.MaxValue)
+          case ((_, max), _) if max == Int.MaxValue =>
+            throw new IllegalArgumentException(
+              s"Range cannot be extended for recursive glob: $glob")
+        }
+        if (filterParts.isEmpty) base
+        else
+          base match {
+            case (min, max) if max != Int.MaxValue => (min + 1, max + 1)
+            case _                                 => base
+          }
+      }
+    val filter =
+      if (filterParts.isEmpty) AllPass
+      else if (filterParts.size > 1)
+        throw new IllegalArgumentException(
+          s"Couldn't construct glob instance for argument $glob with multiple trailing paths after a range parameter ('*' or '**').")
+      else PathNameFilter(filterParts.head)
+
+    Glob(path, range, filter)
+  }
+  private[nio] class ConvertedFileFilter(val f: FileFilter) extends PathNameFilter {
+    override def accept(path: Path): Boolean = f.accept(path.toFile)
+    override def accept(name: String): Boolean = f match {
+      case nf: sbt.io.NameFilter => nf.accept(name)
+      case _                     => false
+    }
+    override def equals(o: Any): Boolean = o match {
+      case that: ConvertedFileFilter => this.f == that.f
+      case _                         => false
+    }
+    override def hashCode: Int = f.hashCode
+    override def toString: String = s"ConvertedFileFilter($f)"
+  }
+  private[sbt] object ConvertedFileFilter {
+    def applyName(nameFilter: sbt.io.NameFilter): PathNameFilter = nameFilter match {
+      case af: sbt.io.AndNameFilter   => new AndNameFilter(applyName(af.left), applyName(af.right))
+      case of: sbt.io.OrNameFilter    => new OrNameFilter(applyName(of.left), applyName(of.right))
+      case ef: sbt.io.ExtensionFilter => new ExtensionFilter(ef.extensions: _*)
+      case ef: sbt.io.ExactFilter     => new ExactNameFilter(ef.matchName)
+      case nn: sbt.io.NotNameFilter   => new NotNameFilter(applyName(nn.fileFilter))
+      case pf: sbt.io.PrefixFilter    => new SplitFilter(pf.prefix, suffix = "")
+      case sf: sbt.io.SuffixFilter    => new SplitFilter(prefix = "", sf.suffix)
+      case nf: sbt.io.NameFilter      => new ConvertedFileFilter(nf)
+    }
+    def apply(fileFilter: FileFilter): PathFilter = fileFilter match {
+      case sbt.io.AllPassFilter       => AllPass
+      case sbt.io.NothingFilter       => NoPass
+      case af: sbt.io.AndFilter       => new AndFilter(apply(af.left), apply(af.right))
+      case of: sbt.io.OrFilter        => new OrFilter(apply(of.left), apply(of.right))
+      case nf: sbt.io.NameFilter      => applyName(nf)
+      case nf: sbt.io.NotFilter       => new NotFilter(apply(nf.fileFilter))
+      case ef: sbt.io.ExactFileFilter => new ExactPathFilter(ef.file.toPath)
+      case filter: sbt.io.FileFilter  => new ConvertedFileFilter(filter)
+    }
+  }
+  private[this] def abs(path: Path): Path = if (path.isAbsolute) path else path.toAbsolutePath
+  private[sbt] def apply(base: Path, range: (Int, Int), filter: PathFilter): Glob =
+    new GlobImpl(abs(base), range, filter)
+  def apply(base: Path): Glob = new GlobImpl(abs(base), singlePathRange, AllPass)
+  def apply(base: Path, range: (Int, Int), filter: PathNameFilter): Glob =
+    new GlobImpl(abs(base), range, filter)
+  private def show(glob: Glob): String = {
+    val stringBuilder = new StringBuilder
+    stringBuilder.append(glob.base)
+    glob.range match {
+      case `singlePathRange` =>
+      case (starCount, max) =>
+        (1 until starCount).foreach(_ => stringBuilder.append(File.separator).append('*'))
+        if (max == Int.MaxValue) stringBuilder.append(File.separator).append("**")
+    }
+    glob.pathFilter match {
+      case AllPass =>
+        glob.range match {
+          case (_, max) if max == Int.MaxValue =>
+          case (min, _)                        => if (min > 0) stringBuilder.append(File.separator).append('*')
+        }
+      case f => stringBuilder.append(File.separator).append(f)
+    }
+    stringBuilder.toString
+  }
+  private[this] class GlobImpl(override val base: Path,
+                               override val range: (Int, Int),
+                               override val pathFilter: PathFilter)
+      extends Glob {
+    override def toString: String = show(glob = this)
+    override def equals(o: Any): Boolean = o match {
+      case that: GlobImpl =>
+        this.base == that.base && this.range == that.range && this.pathFilter == that.pathFilter
+      case _ => false
+    }
+    override def hashCode: Int =
+      (((base.hashCode * 31) ^ pathFilter.hashCode) * 31) ^ range.hashCode
+  }
+  private[sbt] trait Builder[T] extends Any with GlobBuilder[Glob] with ToGlob {
+    def repr: T
+    def converter: T => Path
+    def /(component: String): Glob = {
+      val base = converter(repr).resolve(component)
+      Glob(base.resolve(component), singlePathRange, AllPass)
+    }
+    def \(component: String): Glob = this / component
+    def glob(filter: FileFilter): Glob =
+      new GlobImpl(converter(repr), (1, 1), ConvertedFileFilter(filter))
+    def *(filter: FileFilter): Glob = glob(filter)
+    def globRecursive(filter: FileFilter): Glob =
+      new GlobImpl(converter(repr), (1, Int.MaxValue), ConvertedFileFilter(filter))
+    def allPaths: Glob = globRecursive(sbt.io.AllPassFilter)
+    def **(filter: FileFilter): Glob = globRecursive(filter)
+    def toGlob: Glob = {
+      val base = converter(repr)
+      new GlobImpl(base, singlePathRange, AllPass)
+    }
+  }
+  private[sbt] final class FileBuilder(val file: File) extends AnyVal with Builder[File] {
+    override def repr: File = file
+    override def converter: File => Path = (_: File).toPath
+  }
+  private[sbt] final class PathBuilder(val path: Path) extends AnyVal with Builder[Path] {
+    override def repr: Path = path
+    override def converter: Path => Path = identity
+  }
+
   private[sbt] def all(globs: Traversable[Glob],
                        view: FileTreeView.Nio[FileAttributes]): Seq[(Path, FileAttributes)] =
     all(globs, view, (_, _) => true)
