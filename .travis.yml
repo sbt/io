@@ -31,18 +31,18 @@ matrix:
      language: java
      osx_image: xcode9.3
 
-   - scala: 2.13.0-M5
+   - scala: 2.13.0-RC1
      env:
        CMD="test"
-       TRAVIS_SCALA_VERSION=2.13.0-M5
+       TRAVIS_SCALA_VERSION=2.13.0-RC1
      os: linux
      dist: trusty
 
-   - scala: 2.13.0-M5
+   - scala: 2.13.0-RC1
      os: osx
      env:
        CMD="test"
-       TRAVIS_SCALA_VERSION=2.13.0-M5
+       TRAVIS_SCALA_VERSION=2.13.0-RC1
      language: java
      osx_image: xcode9.3
 
