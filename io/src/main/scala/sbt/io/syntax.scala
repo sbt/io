@@ -13,7 +13,8 @@ package sbt.io
 import java.io.File
 
 import sbt.io.PathFinder.Combinator.SingleFilePathFinderCombinator
-import sbt.nio.{ Glob, GlobBuilder, ToGlob }
+import sbt.nio.Glob
+import sbt.nio.Glob.{ FileGlobBuilder, FileOps }
 
 @deprecated("Alternative is likely to be removed in future versions of sbt", "1.3.0")
 private[sbt] trait Alternative[A, B] {
@@ -32,11 +33,11 @@ sealed trait BaseSyntax extends IOSyntax2 {
       "from File to PathFinder may not be supported in sbt 2"
   )
   def singleFileFinder(file: File): PathFinder = PathFinder(file)
-  implicit def singleFileGlobBuilder(file: File): GlobBuilder[Glob] = new Glob.FileBuilder(file)
+  implicit def singleFileGlobBuilder(file: File): FileGlobBuilder = new Glob.FileGlobBuilder(file)
   implicit def singleFilePathFinderCombinator(file: File): PathFinder.Combinator =
     new SingleFilePathFinderCombinator(file)
   implicit def singleFilePathLister(file: File): PathLister = PathLister(file)
-  implicit def singleFileToGlob(file: File): ToGlob = new Glob.FileBuilder(file)
+  implicit def singleFileToGlob(file: File): FileOps = new FileOps(file)
 }
 sealed abstract class IOSyntax1 extends BaseSyntax
 

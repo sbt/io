@@ -48,18 +48,6 @@ sealed trait Glob {
   def pathFilter: PathFilter
 
 }
-private[sbt] sealed trait GlobBuilder[G] extends Any {
-  def /(component: String): G
-  def \(component: String): G
-  def glob(filter: FileFilter): G
-  def *(filter: FileFilter): G
-  def globRecursive(filter: FileFilter): G
-  def allPaths: G
-  def **(filter: FileFilter): G
-}
-private[sbt] sealed trait ToGlob extends Any {
-  def toGlob: Glob
-}
 object Glob extends LowPriorityGlobOps {
 
   /**
@@ -75,6 +63,9 @@ object Glob extends LowPriorityGlobOps {
   private final val singlePathRange = (0, 0)
   implicit def pathToGlob(path: Path): Glob = new GlobImpl(path, singlePathRange, AllPass)
   implicit def fileToGlob(file: File): Glob = new GlobImpl(file.toPath, singlePathRange, AllPass)
+  final class FileOps(val file: File) extends AnyVal {
+    def toGlob: Glob = new GlobImpl(file.toPath, singlePathRange, AllPass)
+  }
 
   object GlobOps {
     final implicit class PathOps(path: Path) extends GlobOps {
@@ -300,33 +291,16 @@ object Glob extends LowPriorityGlobOps {
     override def hashCode: Int =
       (((base.hashCode * 31) ^ pathFilter.hashCode) * 31) ^ range.hashCode
   }
-  private[sbt] trait Builder[T] extends Any with GlobBuilder[Glob] with ToGlob {
-    def repr: T
-    def converter: T => Path
-    def /(component: String): Glob = {
-      val base = converter(repr).resolve(component)
-      Glob(base.resolve(component), singlePathRange, AllPass)
-    }
+  private[sbt] final class FileGlobBuilder(val file: File) extends AnyVal {
+    def /(component: String): Glob = Glob(file.toPath.resolve(component), singlePathRange, AllPass)
     def \(component: String): Glob = this / component
     def glob(filter: FileFilter): Glob =
-      new GlobImpl(converter(repr), (1, 1), ConvertedFileFilter(filter))
+      new GlobImpl(file.toPath, (1, 1), ConvertedFileFilter(filter))
     def *(filter: FileFilter): Glob = glob(filter)
     def globRecursive(filter: FileFilter): Glob =
-      new GlobImpl(converter(repr), (1, Int.MaxValue), ConvertedFileFilter(filter))
+      new GlobImpl(file.toPath, (1, Int.MaxValue), ConvertedFileFilter(filter))
     def allPaths: Glob = globRecursive(sbt.io.AllPassFilter)
     def **(filter: FileFilter): Glob = globRecursive(filter)
-    def toGlob: Glob = {
-      val base = converter(repr)
-      new GlobImpl(base, singlePathRange, AllPass)
-    }
-  }
-  private[sbt] final class FileBuilder(val file: File) extends AnyVal with Builder[File] {
-    override def repr: File = file
-    override def converter: File => Path = (_: File).toPath
-  }
-  private[sbt] final class PathBuilder(val path: Path) extends AnyVal with Builder[Path] {
-    override def repr: Path = path
-    override def converter: Path => Path = identity
   }
 
   private[sbt] def all(globs: Traversable[Glob],
@@ -346,11 +320,9 @@ object Glob extends LowPriorityGlobOps {
       view: FileTreeView.Nio[FileAttributes],
       filter: (Path, FileAttributes) => Boolean): Iterator[(Path, FileAttributes)] = {
     val sorted = globs.toSeq.sorted
-    val needListDirectory: Path => Boolean = (path: Path) => {
-      val filters = sorted.map(g => Glob(g.base, (0, g.range._2), AllPass).filter)
-      val a = path.resolve("a")
-      filters.exists(_.accept(a))
-    }
+    val needListDirectory: Path => Boolean = (path: Path) =>
+      sorted.exists(g =>
+        path.startsWith(g.base) && g.base.relativize(path).getNameCount < g.range._2)
     val visited = new util.HashSet[Path]
     val pathFilter: PathFilter = {
       val filters = sorted.map(_.filter)

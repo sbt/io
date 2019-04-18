@@ -454,7 +454,7 @@ sealed trait PathLister {
 }
 object PathLister {
   private class SingleFilePathLister(private val file: File) extends PathLister {
-    override def get(): Seq[File] = new Glob.FileBuilder(file).toGlob.get()
+    override def get(): Seq[File] = (file: Glob).get()
     override def toString: String = s"SingleFilePathLister($file)"
     override def equals(o: Any): Boolean = o match {
       case that: SingleFilePathLister => this.file == that.file
