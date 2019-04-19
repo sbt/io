@@ -9,6 +9,8 @@ import sbt.io.syntax._
 import sbt.nio.TestHelpers._
 import sbt.nio.file.Glob.ConvertedFileFilter
 import sbt.nio.file.proposal.Glob._
+import sbt.nio.file.proposal.RelativeGlob.{ *, ** }
+import sbt.nio.file.proposal.syntax._
 import sbt.nio.file.proposal.{ AnyPath, Glob, RecursiveGlob, RelativeGlob }
 import sbt.nio.file.{ Glob => LegacyGlob }
 import sbt.nio.filters.AllPass
@@ -126,5 +128,14 @@ class GlobSyntaxSpec extends FlatSpec {
 
     assert(Glob(basePath, "*.{txt,md}").toString == p"$basePath/*.{txt,md}")
     assert(Glob(basePath.getParent, RelativeGlob("bar") / "baz").toString == p"$basePath/baz")
+  }
+  "syntax" should "work" in {
+    assert(basePath / "foo" == basePath.resolve("foo"))
+    assert(basePath / AnyPath == Glob(basePath, AnyPath))
+    assert(
+      basePath / RecursiveGlob / AnyPath / "*.txt" == Glob(basePath,
+                                                           RecursiveGlob / AnyPath / "*.txt"))
+    assert(basePath / * == Glob(basePath, AnyPath))
+    assert(basePath / ** / * / "*.txt" == Glob(basePath, RecursiveGlob / AnyPath / "*.txt"))
   }
 }
