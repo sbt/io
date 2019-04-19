@@ -1,124 +1,130 @@
 package sbt.nio
 
+import java.io.File
+
 import org.scalatest.FlatSpec
 import sbt.io.AllPassFilter
+import sbt.io.FileFilter._
 import sbt.io.syntax._
 import sbt.nio.TestHelpers._
-import sbt.nio.file.Glob
-import sbt.nio.filters.{ AllPass, ExtensionFilter }
-import sbt.nio.syntax._
+import sbt.nio.file.Glob.ConvertedFileFilter
+import sbt.nio.file.proposal.Glob._
+import sbt.nio.file.proposal.{ AnyPath, Glob, RecursiveGlob, RelativeGlob }
+import sbt.nio.file.{ Glob => LegacyGlob }
+import sbt.nio.filters.AllPass
 
 class GlobSyntaxSpec extends FlatSpec {
   "path builders" should "use `*` and `**` objects" in {
-    assert((basePath / "*").filter.accept(basePath.resolve("foo")))
-    assert(!(basePath / "*").filter.accept(basePath.resolve("foo").resolve("bar")))
-    assert(!(basePath / "*").filter.accept(basePath.getParent))
-    assert(basePath / "*" == Glob(basePath, (1, 1), AllPass))
-    assert(basePath / "**" == Glob(basePath, (1, Int.MaxValue), AllPass))
-    assert(basePath / "*" / "**" == Glob(basePath, (2, Int.MaxValue), AllPass))
-    assert(basePath / p"*/**" == Glob(basePath, (2, Int.MaxValue), AllPass))
+    assert(Glob(basePath, AnyPath).matches(basePath.resolve("foo")))
+    assert(!Glob(basePath, AnyPath).matches(basePath.resolve("foo").resolve("bar")))
+    assert(!Glob(basePath, AnyPath).matches(basePath.getParent))
+    assert(Glob(basePath, AnyPath) == Glob(basePath, AnyPath))
+    assert(Glob(basePath, RecursiveGlob) == Glob(basePath, RecursiveGlob))
+    assert(Glob(basePath, AnyPath / RecursiveGlob) == Glob(basePath, AnyPath / RecursiveGlob))
+    assert(Glob(basePath, p"*/**") == Glob(basePath, AnyPath / RecursiveGlob))
+    assert(!Glob(basePath, AnyPath).matches(basePath))
+    assert(!Glob(basePath, RecursiveGlob).matches(basePath))
   }
   they should "apply question marks" in {
-    assert((basePath / "?foo").filter.accept(basePath.resolve("afoo")))
-    assert(!(basePath / "?foo").filter.accept(basePath.resolve("afoob")))
-    assert((basePath / "?foo?").filter.accept(basePath.resolve("afoob")))
-    assert(!(basePath / "?foo?").filter.accept(basePath.resolve("afoo")))
-    assert(!(basePath / "?foo?").filter.accept(basePath.resolve("afoobc")))
-    assert((basePath / "?foo*").filter.accept(basePath.resolve("afoobc")))
-    assert((basePath / "foo?").filter.accept(basePath.resolve("fooa")))
-    assert((basePath / "foo?a").filter.accept(basePath.resolve("fooaa")))
-  }
-  they should "set range" in {
-    assert((basePath / "?foo" / "*").range == ((2, 2)))
+    assert(Glob(basePath, "?foo").matches(basePath.resolve("afoo")))
+    assert(!Glob(basePath, "?foo").matches(basePath.resolve("afoob")))
+    assert(Glob(basePath, "?foo?").matches(basePath.resolve("afoob")))
+    assert(!Glob(basePath, "?foo?").matches(basePath.resolve("afoo")))
+    assert(!Glob(basePath, "?foo?").matches(basePath.resolve("afoobc")))
+    assert(Glob(basePath, "?foo*").matches(basePath.resolve("afoobc")))
+    assert(Glob(basePath, "foo?").matches(basePath.resolve("fooa")))
+    assert(Glob(basePath, "foo?a").matches(basePath.resolve("fooaa")))
   }
   they should "apply ranges" in {
-    assert((basePath / "foo[a-d]b").filter.accept(basePath.resolve("fooab")))
-    assert(!(basePath / "foo[a-d]b").filter.accept(basePath.resolve("fooeb")))
-    assert((basePath / "*foo[a-d]b").filter.accept(basePath.resolve("fooab")))
-    assert((basePath / "*foo[a-d]b").filter.accept(basePath.resolve("abcdefooab")))
-    assert(!(basePath / "foo[a-d]b").filter.accept(basePath.resolve("abcdefooeb")))
-    assert((basePath / p"**/*foo[a-d]b").filter.accept(basePath.resolve("abcdefooab")))
+    assert(Glob(basePath, "foo[a-d]b").matches(basePath.resolve("fooab")))
+    assert(!Glob(basePath, "foo[a-d]b").matches(basePath.resolve("fooeb")))
+    assert(Glob(basePath, "*foo[a-d]b").matches(basePath.resolve("fooab")))
+    assert(Glob(basePath, "*foo[a-d]b").matches(basePath.resolve("abcdefooab")))
+    assert(!Glob(basePath, "foo[a-d]b").matches(basePath.resolve("abcdefooeb")))
+    assert(Glob(basePath, p"**/*foo[a-d]b").matches(basePath.resolve("abcdefooab")))
     assert(
-      (basePath / p"**/*/*foo[a-d]b").filter.accept(basePath.resolve("bar").resolve("abcdefooab")))
+      Glob(basePath, p"**/*/*foo[a-d]b").matches(basePath.resolve("bar").resolve("abcdefooab")))
     assert(
-      (basePath / p"**/*/*foo[a-d]b").filter
-        .accept(basePath.resolve("bar/baz/buzz").resolve("abcdefooab")))
+      Glob(basePath, p"**/*/*foo[a-d]b")
+        .matches(basePath.resolve("bar").resolve("baz").resolve("buzz").resolve("abcdefooab")))
   }
   they should "apply extension filters" in {
-    assert(basePath / "*.txt" == Glob(basePath, (1, 1), "*.txt"))
-    assert(basePath / "*.txt" == Glob(basePath, (1, 1), "*.txt"))
-    assert(basePath.getParent / p"bar/*.txt" == Glob(basePath, (1, 1), "*.txt"))
-    assert(basePath / "**" / "*.txt" == Glob(basePath, (1, Int.MaxValue), "*.txt"))
-    assert(basePath / p"**/*.txt" == Glob(basePath, (1, Int.MaxValue), "*.txt"))
-    assert(basePath.getParent / p"bar/**/*.txt" == Glob(basePath, (1, Int.MaxValue), "*.txt"))
-    assert(basePath / "*" / "*.txt" == Glob(basePath, (2, 2), "*.txt"))
-    assert(basePath / p"*/*.txt" == Glob(basePath, (2, 2), "*.txt"))
-    assert(basePath.getParent / p"bar/*/*.txt" == Glob(basePath, (2, 2), "*.txt"))
-    assert(basePath / "*" / "**" / "*.txt" == Glob(basePath, (2, Int.MaxValue), "*.txt"))
-    assert(basePath / p"*/**/*.txt" == Glob(basePath, (2, Int.MaxValue), "*.txt"))
-    assert(basePath.getParent / p"bar/*/**/*.txt" == Glob(basePath, (2, Int.MaxValue), "*.txt"))
+    assert(Glob(basePath, "*.txt").matches(basePath.resolve("foo.txt")))
+    assert(!Glob(basePath, "*.txt").matches(basePath.resolve("foo.txt1")))
+    assert(!Glob(basePath, "*.txt").matches(basePath.resolve("bar").resolve("foo.txt")))
+    assert(Glob(basePath, "*.{txt,md}").matches(basePath.resolve("foo.txt")))
+    assert(Glob(basePath, "*.{txt,md}").matches(basePath.resolve("foo.md")))
+    assert(!Glob(basePath, "*.{txt,md}").matches(basePath.resolve("foo.scala")))
+    val complexGlob = Glob(basePath, AnyPath / RecursiveGlob / AnyPath / "*.{txt,md}")
+    assert(
+      complexGlob.matches(
+        basePath.resolve("foo").resolve("bar").resolve("buzz").resolve("foo.txt")))
+    assert(complexGlob.matches(basePath.resolve("foo").resolve("bar").resolve("foo.txt")))
+    assert(!complexGlob.matches(basePath.resolve("bar").resolve("foo.txt")))
   }
   they should "apply prefix filters" in {
-    assert(basePath / "foo*" == Glob(basePath, (1, 1), "foo*"))
-    assert(basePath.getParent / p"bar/foo*" == Glob(basePath, (1, 1), "foo*"))
-    assert(basePath / "**" / "foo*" == Glob(basePath, (1, Int.MaxValue), "foo*"))
-    assert(basePath / p"**/foo*" == Glob(basePath, (1, Int.MaxValue), "foo*"))
-    assert(basePath.getParent / p"bar/**/foo*" == Glob(basePath, (1, Int.MaxValue), "foo*"))
-    assert(basePath / "*" / "foo*" == Glob(basePath, (2, 2), "foo*"))
-    assert(basePath / p"*/foo*" == Glob(basePath, (2, 2), "foo*"))
-    assert(basePath.getParent / p"bar/*/foo*" == Glob(basePath, (2, 2), "foo*"))
-    assert(basePath / "*" / "**" / "foo*" == Glob(basePath, (2, Int.MaxValue), "foo*"))
-    assert(basePath / p"*/**/foo*" == Glob(basePath, (2, Int.MaxValue), "foo*"))
-    assert(basePath.getParent / p"bar/*/**/foo*" == Glob(basePath, (2, Int.MaxValue), "foo*"))
+    assert(Glob(basePath, "foo*").matches(basePath.resolve("foo")))
+    assert(Glob(basePath, "foo*").matches(basePath.resolve("foo.txt")))
+    assert(Glob(basePath, "foo*").matches(basePath.resolve("foo.txt1")))
+    assert(!Glob(basePath, "foo*").matches(basePath.resolve("bar").resolve("foo.txt")))
+    val complexGlob = Glob(basePath, AnyPath / RecursiveGlob / AnyPath / "foo*")
+    assert(
+      complexGlob.matches(
+        basePath.resolve("foo").resolve("bar").resolve("buzz").resolve("foo.txt")))
+    assert(complexGlob.matches(basePath.resolve("foo").resolve("bar").resolve("foo.txt")))
+    assert(!complexGlob.matches(basePath.resolve("bar").resolve("foo.txt")))
   }
   they should "apply suffix filters" in {
-    assert(basePath / "*bar" == Glob(basePath, (1, 1), "*bar"))
-    assert(basePath.getParent / p"bar/*bar" == Glob(basePath, (1, 1), "*bar"))
-    assert(basePath / "**" / "*bar" == Glob(basePath, (1, Int.MaxValue), "*bar"))
-    assert(basePath / p"**/*bar" == Glob(basePath, (1, Int.MaxValue), "*bar"))
-    assert(basePath / "*" / "*bar" == Glob(basePath, (2, 2), "*bar"))
-    assert(basePath / p"*/*bar" == Glob(basePath, (2, 2), "*bar"))
-    assert(basePath.getParent / p"bar/*/*bar" == Glob(basePath, (2, 2), "*bar"))
-    assert(basePath / "*" / "**" / "*bar" == Glob(basePath, (2, Int.MaxValue), "*bar"))
-    assert(basePath / p"*/**/*bar" == Glob(basePath, (2, Int.MaxValue), "*bar"))
-    assert(basePath.getParent / p"bar/*/**/*bar" == Glob(basePath, (2, Int.MaxValue), "*bar"))
+    assert(Glob(basePath, "*foo").matches(basePath.resolve("foo")))
+    assert(Glob(basePath, "*foo").matches(basePath.resolve("barfoo")))
+    assert(!Glob(basePath, "*foo").matches(basePath.resolve("bar").resolve("abcdfoo")))
+    val complexGlob = Glob(basePath, AnyPath / RecursiveGlob / AnyPath / "*foo")
+    assert(
+      complexGlob.matches(
+        basePath.resolve("foo").resolve("bar").resolve("buzz").resolve("abcdfoo")))
+    assert(complexGlob.matches(basePath.resolve("foo").resolve("bar").resolve("abcdfoo")))
+    assert(!complexGlob.matches(basePath.resolve("bar").resolve("abcdfoo")))
   }
   they should "apply split filters" in {
-    assert(basePath / "foo*bar" == Glob(basePath, (1, 1), "foo*bar"))
-    assert(basePath.getParent / p"bar/foo*bar" == Glob(basePath, (1, 1), "foo*bar"))
-    assert(basePath / "**" / "foo*bar" == Glob(basePath, (1, Int.MaxValue), "foo*bar"))
-    assert(basePath / p"**/foo*bar" == Glob(basePath, (1, Int.MaxValue), "foo*bar"))
-    assert(basePath.getParent / p"bar/**/foo*bar" == Glob(basePath, (1, Int.MaxValue), "foo*bar"))
-    assert(basePath / "*" / p"foo*bar" == Glob(basePath, (2, 2), "foo*bar"))
-    assert(basePath / p"*/foo*bar" == Glob(basePath, (2, 2), "foo*bar"))
-    assert(basePath.getParent / p"bar/*/foo*bar" == Glob(basePath, (2, 2), "foo*bar"))
-    assert(basePath / "*" / "**" / "foo*bar" == Glob(basePath, (2, Int.MaxValue), "foo*bar"))
-    assert(basePath / p"*/**/foo*bar" == Glob(basePath, (2, Int.MaxValue), "foo*bar"))
-    assert(basePath.getParent / p"bar/*/**/foo*bar" == Glob(basePath, (2, Int.MaxValue), "foo*bar"))
+    assert(Glob(basePath, "foo*bar").matches(basePath.resolve("foobar")))
+    assert(Glob(basePath, "foo*bar").matches(basePath.resolve("fooabcbar")))
+    assert(Glob(basePath.getParent, p"bar/foo*bar").matches(basePath.resolve("fooabcbar")))
+    assert(Glob(basePath, RecursiveGlob / "foo*bar").matches(basePath.resolve("fooabcbar")))
+    assert(
+      Glob(basePath, RecursiveGlob / "foo*bar")
+        .matches(basePath.resolve("baz").resolve("buzz").resolve("fooabcbar")))
   }
   they should "work with file syntax" in {
     val file = basePath.toFile
-    assert(file * AllPassFilter == Glob(basePath, (1, 1), AllPass))
-    assert(file ** AllPassFilter == Glob(basePath, (1, Int.MaxValue), AllPass))
-    assert(file * "*.txt" == Glob(basePath, (1, 1), "*.txt"))
-    assert(file ** "*.txt" == Glob(basePath, (1, Int.MaxValue), "*.txt"))
+    assert(file * AllPassFilter == LegacyGlob(basePath, (1, 1), AllPass))
+    assert(file ** AllPassFilter == LegacyGlob(basePath, (1, Int.MaxValue), AllPass))
+    assert(file * "*.txt" == LegacyGlob(basePath, (1, 1), "*.txt"))
+    assert(file ** "*.txt" == LegacyGlob(basePath, (1, Int.MaxValue), "*.txt"))
+    assert(
+      file ** ("*.txt" || "*.md") == LegacyGlob(basePath,
+                                                (1, Int.MaxValue),
+                                                ConvertedFileFilter("*.txt" || "*.md")))
   }
   they should "convert strings" in {
-    assert((p"$basePath/*": Glob) == Glob(basePath, (1, 1), AllPass))
-    assert((p"$basePath/**": Glob) == Glob(basePath, (1, Int.MaxValue), AllPass))
-    assert((p"$basePath/*/*.txt": Glob) == Glob(basePath, (2, 2), "*.txt"))
-    assert((p"$basePath/**/*.txt": Glob) == Glob(basePath, (1, Int.MaxValue), "*.txt"))
-    assert((p"$basePath/*/*/*.txt": Glob) == Glob(basePath, (3, 3), "*.txt"))
-    assert((p"$basePath/*/**/*.txt": Glob) == Glob(basePath, (2, Int.MaxValue), "*.txt"))
+    assert((p"$basePath/*": Glob) == Glob(basePath, AnyPath))
+    assert((p"$basePath/**": Glob) == Glob(basePath, RecursiveGlob))
+    assert((p"$basePath/*/*.txt": Glob) == Glob(basePath, AnyPath / "*.txt"))
+    assert((p"$basePath/**/*.txt": Glob) == Glob(basePath, RecursiveGlob / "*.txt"))
+    assert((p"$basePath/*/*/*.txt": Glob) == Glob(basePath, AnyPath / AnyPath / "*.txt"))
+    assert((p"$basePath/*/**/*.txt": Glob) == Glob(basePath, AnyPath / RecursiveGlob / "*.txt"))
+  }
+  they should "handle escaped characters" in {
+    assert((basePath + File.separator + "\\{": Glob).matches(basePath.resolve("{")))
+    assert((basePath + File.separator + "\\(": Glob).matches(basePath.resolve("(")))
   }
   "show" should "represent globs like the shell" in {
-    assert((basePath / "foo.txt").toString == p"$basePath/foo.txt")
-    assert((basePath / "*").toString == p"$basePath/*")
+    assert(Glob(basePath, "foo.txt").toString == p"$basePath/foo.txt")
+    assert(Glob(basePath, "*").toString == p"$basePath/*")
     assert((p"$basePath/*": Glob).toString == p"$basePath/*")
     // extensions
-    assert((basePath / "*.txt").toString == p"$basePath/*.txt")
+    assert(Glob(basePath, "*.txt").toString == p"$basePath/*.txt")
 
-    assert((basePath / new ExtensionFilter("txt", "md")).toString == p"$basePath/(*.txt | *.md)")
-    assert((basePath.getParent / "bar" / "baz": Glob).toString == p"$basePath/baz")
+    assert(Glob(basePath, "*.{txt,md}").toString == p"$basePath/*.{txt,md}")
+    assert(Glob(basePath.getParent, RelativeGlob("bar") / "baz").toString == p"$basePath/baz")
   }
 }

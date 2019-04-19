@@ -71,7 +71,7 @@ object Glob extends LowPriorityGlobOps {
 
   object GlobOps {
     final implicit class PathOps(path: Path) extends GlobOps {
-      override val glob: Glob = pathToGlob(path)
+      override private[sbt] val underlying: Glob = pathToGlob(path)
     }
   }
 
@@ -80,7 +80,7 @@ object Glob extends LowPriorityGlobOps {
    * base path using various `/` methods.
    */
   sealed trait GlobOps extends Any {
-    def glob: Glob
+    private[sbt] def underlying: Glob
     private[sbt] def toFileFilter: sbt.io.FileFilter =
       new SimpleFileFilter(file => filter.accept(file.toPath))
 
@@ -92,9 +92,9 @@ object Glob extends LowPriorityGlobOps {
      * @return true if the path is in range
      */
     def inRange(path: Path): Boolean = {
-      val base = glob.base
+      val base = underlying.base
       if (path.startsWith(base)) {
-        val (min, max) = glob.range
+        val (min, max) = underlying.range
         if (path == base) {
           min <= 0
         } else {
@@ -111,14 +111,14 @@ object Glob extends LowPriorityGlobOps {
      * the glob's [[sbt.nio.filters.PathFilter]].
      * @return the combined [[sbt.nio.filters.PathFilter]]
      */
-    def filter: PathFilter = (path: Path) => inRange(path) && glob.pathFilter.accept(path)
+    def filter: PathFilter = (path: Path) => inRange(path) && underlying.pathFilter.accept(path)
     private[this] def incrementRange(recursive: Boolean, strict: Boolean): (Int, Int) = {
-      lazy val msg = s"Couldn't increment range for $glob."
-      if (strict && glob.range._2 == Int.MaxValue) throw new IllegalArgumentException(msg)
-      glob.range match {
-        case (min, _) if recursive && glob.pathFilter == AllPass =>
+      lazy val msg = s"Couldn't increment range for $underlying."
+      if (strict && underlying.range._2 == Int.MaxValue) throw new IllegalArgumentException(msg)
+      underlying.range match {
+        case (min, _) if recursive && underlying.pathFilter == AllPass =>
           (min + 1, Int.MaxValue)
-        case r @ (min, max) if !recursive && glob.pathFilter == AllPass =>
+        case r @ (min, max) if !recursive && underlying.pathFilter == AllPass =>
           if (max == Int.MaxValue) r else (min + 1, max + 1)
         case _ => throw new IllegalArgumentException(msg)
       }
@@ -136,7 +136,9 @@ object Glob extends LowPriorityGlobOps {
      * @return the new filtered glob.
      */
     def /(pathNameFilter: PathNameFilter): Glob =
-      Glob(glob.base, incrementRange(recursive = false, strict = false), filter = pathNameFilter)
+      Glob(underlying.base,
+           incrementRange(recursive = false, strict = false),
+           filter = pathNameFilter)
 
     /**
      * Extend the glob with an arbitrary string. This can be some arbitrary syntax. For example,
@@ -145,10 +147,10 @@ object Glob extends LowPriorityGlobOps {
      * @param globPath the path (that may contain wildcard '*' characters).
      * @return the transformed glob
      */
-    def /(globPath: String): Glob = parse(glob = s"$glob${File.separator}$globPath")
+    def /(globPath: String): Glob = parse(glob = s"$underlying${File.separator}$globPath")
 
   }
-  implicit class GlobOpsImpl(override val glob: Glob) extends AnyVal with GlobOps
+  implicit class GlobOpsImpl(override val underlying: Glob) extends AnyVal with GlobOps
   implicit object ordering extends Ordering[Glob] {
     private[this] val pairOrdering: Ordering[(Int, Int)] = Ordering[(Int, Int)]
     override def compare(left: Glob, right: Glob): Int = left.base.compareTo(right.base) match {
