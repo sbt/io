@@ -37,21 +37,51 @@ trait PathNameFilter extends PathFilter {
   /** Constructs a filter that accepts a `Path` if it matches both this filter and the given `filter`. */
   def &(filter: PathNameFilter): PathNameFilter = new AndNameFilter(this, filter)
 }
+private[nio] class RelativePathFilter(private val base: Path, private val rest: String)
+    extends PathFilter {
+  private[this] val filter = FileSystems.getDefault.getPathMatcher(s"glob:$rest")
+  override def accept(path: Path): Boolean = {
+    if (path.startsWith(base)) {
+      val relative = base.relativize(path)
+      filter.matches(relative)
+    } else false
+  }
+  override def equals(obj: Any): Boolean = obj match {
+    case that: RelativePathFilter => this.base == that.base && this.rest == that.rest
+    case _                        => false
+  }
+  override def hashCode: Int = (base.hashCode * 31) ^ rest.hashCode
+  override def toString: String = rest
+}
 private[nio] object PathNameFilter {
   implicit def stringToPathNameFilter(string: String): PathNameFilter = apply(string)
   private[nio] def apply(nameFilter: String): PathNameFilter = {
-    val trimmed: String = nameFilter.trim
-    trimmed.indexOf('*') match {
-      case -1 => new ExactNameFilter(trimmed)
-      case i if i == 0 && i < trimmed.length - 2 && trimmed(i + 1) == '.' =>
-        new ExtensionFilter(trimmed.substring(i + 2))
-      case i =>
-        val suffix = if (i < trimmed.length - 2) trimmed.substring(i + 1) else ""
-        new SplitFilter(trimmed.substring(0, i), suffix)
+    nameFilter.indexWhere(Glob.meta.contains(_)) match {
+      case -1 =>
+        nameFilter.indexOf('*') match {
+          case -1 => new ExactNameFilter(nameFilter)
+          case i if i == 0 && i < nameFilter.length - 2 && nameFilter(i + 1) == '.' =>
+            new ExtensionFilter(nameFilter.substring(i + 2))
+          case i =>
+            val suffix = if (i < nameFilter.length - 2) nameFilter.substring(i + 1) else ""
+            if (!suffix.contains('*')) new SplitFilter(nameFilter.substring(0, i), suffix)
+            else new GlobPathNameFilter(nameFilter)
+        }
+      case _ => new GlobPathNameFilter(nameFilter)
     }
   }
 }
 
+private[nio] class GlobPathNameFilter(val nameFilter: String) extends PathNameFilter {
+  private[this] val pathNameFilter = FileSystems.getDefault.getPathMatcher(s"glob:$nameFilter")
+  override def accept(name: String): Boolean = pathNameFilter.matches(Paths.get(name))
+  override def equals(o: Any): Boolean = o match {
+    case that: GlobPathNameFilter => this.nameFilter == that.nameFilter
+    case _                        => false
+  }
+  override def hashCode: Int = nameFilter.hashCode
+  override def toString: String = nameFilter
+}
 private[nio] abstract class AbstractAndFilter[T <: PathFilter](val left: T,
                                                                val right: T,
                                                                private[this] val sep: String) {

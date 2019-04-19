@@ -5,6 +5,7 @@ import java.nio.file.Paths
 import org.scalatest.FlatSpec
 import sbt.io.{ GlobFilter, IO, NothingFilter }
 import sbt.io.syntax._
+import TestHelpers._
 import sbt.nio.syntax._
 
 class GlobFilterSpec extends FlatSpec {
@@ -43,21 +44,21 @@ class GlobFilterSpec extends FlatSpec {
     assert(glob.filter.accept(file.toPath))
   }
   it should "work with depth" in {
-    val base = Paths.get("/foo/bar").toAbsolutePath
-    assert((base / s"*/*.txt").filter.accept(base.resolve("foo").resolve("bar.txt")))
-    assert(!(base / "*/*/*.txt").filter.accept(base.resolve("foo").resolve("bar.txt")))
+    val base = Paths.get("").toAbsolutePath.getRoot.resolve("foo").resolve("bar")
+    assert((base / p"*/*.txt").filter.accept(base.resolve("foo").resolve("bar.txt")))
+    assert(!(base / p"*/*/*.txt").filter.accept(base.resolve("foo").resolve("bar.txt")))
     assert(
-      (base / "*/*/*.txt").filter
+      (base / p"*/*/*.txt").filter
         .accept(base.resolve("foo").resolve("baz").resolve("bar.txt")))
     assert(
-      !(base / "*/*/*.txt").filter
+      !(base / p"*/*/*.txt").filter
         .accept(base.resolve("foo").resolve("baz").resolve("bar.tx")))
-    assert((base / "*/**/*.txt").filter.accept(base.resolve("foo").resolve("bar.txt")))
+    assert((base / p"*/**/*.txt").filter.accept(base.resolve("foo").resolve("bar.txt")))
     assert(
-      (base / "*/**/*.txt").filter
+      (base / p"*/**/*.txt").filter
         .accept(base.resolve("foo").resolve("bar").resolve("baz").resolve("bar.txt")))
     assert(
-      !(base / "*/**/*.txt").filter
+      !(base / p"*/**/*.txt").filter
         .accept(base.resolve("foo").resolve("bar").resolve("baz").resolve("bar.tx")))
   }
 }

@@ -6,6 +6,7 @@ import org.scalatest.FlatSpec
 import sbt.io.IO
 import sbt.nio.syntax._
 
+import TestHelpers._
 class TraversableGlobSpec extends FlatSpec {
   "Traversable globs" should "collect multiple directories" in {
     IO.withTemporaryDirectory { dirFile =>
@@ -17,7 +18,7 @@ class TraversableGlobSpec extends FlatSpec {
       val files = subdirs.map(d => Files.createFile(d.resolve("file")))
       val globs = subdirs.dropRight(1).map(_ / "**")
 
-      val actual = Glob.all(globs, FileTreeView.DEFAULT_NIO, (_, _) => true).map(_._1).toSet
+      val actual = Glob.all(globs, FileTreeView.DEFAULT_NIO).map(_._1).toSet
       val expected = (files :+ nestedSubdir).toSet
       assert(actual == expected)
     }
@@ -27,8 +28,8 @@ class TraversableGlobSpec extends FlatSpec {
       val dir = dirFile.toPath
       val subdir = Files.createDirectories(dir.resolve("subdir"))
       val file = Files.createFile(subdir.resolve("file.txt"))
-      val globs = Seq[Glob](s"$dir/**", s"$dir/**/*.txt", s"$subdir/*/*.txt", Glob(file))
-      val actual = Glob.all(globs, FileTreeView.DEFAULT_NIO, (_, _) => true).map(_._1).sorted
+      val globs = Seq[Glob](p"$dir/**", p"$dir/**/*.txt", p"$subdir/*/*.txt", Glob(file))
+      val actual = Glob.all(globs, FileTreeView.DEFAULT_NIO).map(_._1).sorted
       val expected = Seq(subdir, file)
       assert(actual == expected)
     }
@@ -41,8 +42,8 @@ class TraversableGlobSpec extends FlatSpec {
       val deeply = Files.createDirectories(nested.resolve("deeply"))
       val txtFile = Files.createFile(nested.resolve("file.txt"))
       val mdFile = Files.createFile(deeply.resolve("file.md"))
-      val globs = Seq[Glob](s"$dir/**/*.md", s"$subdir/*.txt", s"$nested/*.md", s"$nested/*.txt")
-      val actual = Glob.all(globs, FileTreeView.DEFAULT_NIO, (_, _) => true).map(_._1).sorted
+      val globs = Seq[Glob](p"$dir/**/*.md", p"$subdir/*.txt", p"$nested/*.md", p"$nested/*.txt")
+      val actual = Glob.all(globs, FileTreeView.DEFAULT_NIO).map(_._1).sorted
       val expected = Seq(mdFile, txtFile)
       assert(actual == expected)
     }

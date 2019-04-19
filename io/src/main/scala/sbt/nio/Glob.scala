@@ -17,7 +17,7 @@ import java.util
 import sbt.io.{ FileFilter, PathFinder, SimpleFileFilter }
 
 import scala.annotation.tailrec
-import scala.collection.mutable.ArrayBuffer
+import scala.util.Properties
 
 /**
  * Represents a filtered subtree of the file system.
@@ -49,6 +49,7 @@ sealed trait Glob {
 
 }
 object Glob extends LowPriorityGlobOps {
+  private[this] val regexSeparator = if (Properties.isWin) File.separator * 2 else File.separator
 
   /**
    * Converts a string to a [[Glob]]. The string may contain wild cards. For example, when the
@@ -143,12 +144,8 @@ object Glob extends LowPriorityGlobOps {
      * @param globPath the path (that may contain wildcard '*' characters).
      * @return the transformed glob
      */
-    def /(globPath: String): Glob = {
-      if (glob.pathFilter != AllPass)
-        throw new IllegalArgumentException(s"Couldn't append $globPath to $glob")
-      val res = parse(glob = s"$glob/$globPath")
-      res
-    }
+    def /(globPath: String): Glob = parse(glob = s"$glob${File.separator}$globPath")
+
   }
   implicit class GlobOpsImpl(override val glob: Glob) extends AnyVal with GlobOps
   implicit object ordering extends Ordering[Glob] {
@@ -162,62 +159,51 @@ object Glob extends LowPriorityGlobOps {
     }
   }
 
+  final class GlobParsingException(msg: String) extends IllegalArgumentException(msg)
+  private[nio] val allMeta = "*{([?"
+  private[nio] val meta = allMeta.drop(1)
   private[nio] def parse(glob: String): Glob = {
-    val array = glob.toCharArray
-    val stringBuilder = new StringBuilder
-    val components = new ArrayBuffer[String]
-    var firstStarIndex = -1
-    @tailrec def fillComponents(index: Int): Unit = {
-      if (index < array.length) {
-        array(index) match {
-          case '/' | '\\' =>
-            components += stringBuilder.toString.trim
-            stringBuilder.clear()
-            fillComponents(index + 1)
-          case c =>
-            if (c == '*' && firstStarIndex == -1) firstStarIndex = components.size
-            stringBuilder += c
-            fillComponents(index + 1)
+    if (glob.isEmpty) throw new GlobParsingException("Can't parse glob from empty string.")
+    val sep = File.separatorChar
+    @tailrec
+    def metaSeparatorIndex(array: Array[Char], i: Int, sepIndex: Int): Int = {
+      if (i < array.length) {
+        array(i) match {
+          case c if allMeta.contains(c) => sepIndex
+          case `sep`                    => metaSeparatorIndex(array, i + 1, sepIndex = i)
+          case _                        => metaSeparatorIndex(array, i + 1, sepIndex)
         }
-      } else if (stringBuilder.nonEmpty) {
-        components += stringBuilder.toString.trim
+      } else {
+        -1
       }
     }
-    fillComponents(index = 0)
-    val pathNameCount = if (firstStarIndex == -1) components.size else firstStarIndex
-    val (pathPart, tail) = components.splitAt(pathNameCount)
-    val pathString = pathPart.mkString(File.separator)
-    val path = Paths.get(pathString)
-    val filterIndex = tail.indexWhere(s => s != "*" && s != "**")
-    val (rangeParts, filterParts) =
-      if (filterIndex == -1) (tail, Nil) else tail.splitAt(filterIndex)
-
-    val range =
-      if (rangeParts.isEmpty && filterParts.nonEmpty) (1, 1)
-      else {
-        val base = rangeParts.foldLeft(if (pathString.isEmpty) (-1, -1) else (0, 0)) {
-          case ((min, max), part) if part == "*" && max != Int.MaxValue  => (min + 1, max + 1)
-          case ((min, max), part) if part == "**" && max != Int.MaxValue => (min + 1, Int.MaxValue)
-          case ((_, max), _) if max == Int.MaxValue =>
-            throw new IllegalArgumentException(
-              s"Range cannot be extended for recursive glob: $glob")
+    metaSeparatorIndex(glob.toCharArray, 0, -1) match {
+      case -1 => Glob(Paths.get(glob), (0, 0), AllPass)
+      case i =>
+        val base = Paths.get(glob.substring(0, i))
+        val rest = glob.substring(i + 1)
+        val relativeParts = rest.split(regexSeparator)
+        val (range: (Int, Int), _) = relativeParts.foldLeft(((0, 0), false)) {
+          case (((min, _), false), "**")     => ((min + 1, Int.MaxValue), true)
+          case (((min, _), true), "**")      => ((min, Int.MaxValue), true)
+          case ((r, true), _)                => r -> false
+          case (((min, Int.MaxValue), _), _) => ((min + 1, Int.MaxValue), false)
+          case (((min, max), _), _)          => ((min + 1, max + 1), false)
         }
-        if (filterParts.isEmpty) base
-        else
-          base match {
-            case (min, max) if max != Int.MaxValue => (min + 1, max + 1)
-            case _                                 => base
+        val isSimple =
+          relativeParts.view.take(relativeParts.size - 1).forall(p => p == "*" || p == "**")
+        if (isSimple) {
+          relativeParts.lastOption match {
+            case Some("*") | Some("**") => Glob(base, range, AllPass)
+            case Some(p)                => Glob(base, range, PathNameFilter(p))
+            case None                   => Glob(base, singlePathRange, AllPass)
           }
-      }
-    val filter =
-      if (filterParts.isEmpty) AllPass
-      else if (filterParts.size > 1)
-        throw new IllegalArgumentException(
-          s"Couldn't construct glob instance for argument $glob with multiple trailing paths after a range parameter ('*' or '**').")
-      else PathNameFilter(filterParts.head)
-
-    Glob(path, range, filter)
+        } else {
+          new GlobImpl(base, range, new RelativePathFilter(base, rest))
+        }
+    }
   }
+
   private[nio] class ConvertedFileFilter(val f: FileFilter) extends PathNameFilter {
     override def accept(path: Path): Boolean = f.accept(path.toFile)
     override def accept(name: String): Boolean = f match {
