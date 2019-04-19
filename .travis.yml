@@ -20,7 +20,7 @@ matrix:
          CMD="mimaReportBinaryIssues test"
          TRAVIS_SCALA_VERSION=2.12.8
      os: linux
-     dist: trusty
+     dist: xenial
      jdk: openjdk11
 
    - scala: 2.12.8
