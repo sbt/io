@@ -13,8 +13,8 @@ package sbt.io
 import java.io.File
 
 import sbt.io.PathFinder.Combinator.SingleFilePathFinderCombinator
-import sbt.nio.Glob
-import sbt.nio.Glob.{ FileGlobBuilder, FileOps }
+import sbt.nio.file.Glob.{ FileGlobBuilder, FileOps }
+import sbt.nio.file.Glob
 
 @deprecated("Alternative is likely to be removed in future versions of sbt", "1.3.0")
 private[sbt] trait Alternative[A, B] {
@@ -43,9 +43,7 @@ sealed abstract class IOSyntax1 extends BaseSyntax
 
 sealed abstract class IOSyntax0 extends IOSyntax1 {
   @deprecated("Alternative is no longer used in sbt io.", "1.3.0")
-  implicit def alternative[A, B](f: A => Option[B]): Alternative[A, B] = new Alternative[A, B] {
-    def |(g: A => Option[B]) = a => f(a) orElse g(a)
-  }
+  implicit def alternative[A, B](f: A => Option[B]): Alternative[A, B] = g => a => f(a) orElse g(a)
 }
 
 private[sbt] trait IOSyntax extends BaseSyntax

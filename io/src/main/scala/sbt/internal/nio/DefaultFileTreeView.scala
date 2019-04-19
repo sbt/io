@@ -14,7 +14,7 @@ import java.io.IOException
 import java.nio.file._
 
 import com.swoval.files.FileTreeViews
-import sbt.nio.{ FileAttributes, FileTreeView }
+import sbt.nio.file.{ FileAttributes, FileTreeView }
 
 import scala.collection.JavaConverters._
 

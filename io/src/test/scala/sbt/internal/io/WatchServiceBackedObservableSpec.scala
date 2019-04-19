@@ -8,7 +8,7 @@ import java.util.concurrent.{ ConcurrentHashMap, CountDownLatch, TimeUnit }
 import org.scalatest.FlatSpec
 import sbt.internal.nio.WatchServiceBackedObservable
 import sbt.io._
-import sbt.nio.Glob
+import sbt.nio.file.Glob
 import sbt.nio.syntax._
 
 import scala.collection.JavaConverters._

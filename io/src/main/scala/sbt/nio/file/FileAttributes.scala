@@ -1,4 +1,4 @@
-package sbt.nio
+package sbt.nio.file
 
 import java.io.IOException
 import java.nio.file.attribute.BasicFileAttributes

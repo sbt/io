@@ -4,6 +4,8 @@ import org.scalatest.FlatSpec
 import sbt.io.AllPassFilter
 import sbt.io.syntax._
 import sbt.nio.TestHelpers._
+import sbt.nio.file.Glob
+import sbt.nio.filters.{ AllPass, ExtensionFilter }
 import sbt.nio.syntax._
 
 class GlobSyntaxSpec extends FlatSpec {

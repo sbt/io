@@ -17,8 +17,8 @@ import java.util.concurrent.ConcurrentHashMap
 import sbt.internal.io._
 import sbt.internal.nio.FileEvent.Deletion
 import sbt.io._
-import sbt.nio.FileAttributes.NonExistent
-import sbt.nio.{ FileAttributes, FileTreeView, Glob }
+import sbt.nio.file.FileAttributes.NonExistent
+import sbt.nio.file.{ FileAttributes, FileTreeView, Glob }
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -30,7 +30,7 @@ import scala.concurrent.duration._
  */
 private[sbt] class LegacyFileTreeRepository(logger: WatchLogger, watchService: WatchService)
     extends FileTreeRepository[FileAttributes] {
-  private[this] val view: FileTreeView.Nio[FileAttributes] = FileTreeView.DEFAULT_NIO
+  private[this] val view: FileTreeView.Nio[FileAttributes] = FileTreeView.default
   private[this] val globs = ConcurrentHashMap.newKeySet[Glob].asScala
   private[this] val fileCache = new FileCache(p => FileAttributes(p).getOrElse(NonExistent), globs)
   private[this] val observable

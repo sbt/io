@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import org.scalatest.{ FlatSpec, Matchers }
 import sbt.internal.nio.FileEvent.{ Creation, Deletion, Update }
-import sbt.nio.FileAttributes
+import sbt.nio.file.FileAttributes
 
 import scala.concurrent.duration.{ Deadline => _, _ }
 

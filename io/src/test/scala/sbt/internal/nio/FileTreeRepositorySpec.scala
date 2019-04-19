@@ -7,7 +7,7 @@ import java.util.concurrent.{ ConcurrentHashMap, CountDownLatch, TimeUnit }
 import org.scalatest.{ FlatSpec, Matchers }
 import sbt.internal.nio.FileEvent.{ Creation, Deletion }
 import sbt.io.IO
-import sbt.nio.{ FileAttributes, Glob }
+import sbt.nio.file.{ FileAttributes, Glob }
 import sbt.nio.syntax._
 
 import scala.collection.JavaConverters._

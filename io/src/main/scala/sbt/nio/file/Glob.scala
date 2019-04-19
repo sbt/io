@@ -8,13 +8,14 @@
  * (http://www.apache.org/licenses/LICENSE-2.0).
  */
 
-package sbt.nio
+package sbt.nio.file
 
 import java.io.{ File, IOException }
 import java.nio.file._
 import java.util
 
 import sbt.io.{ FileFilter, PathFinder, SimpleFileFilter }
+import sbt.nio.filters._
 
 import scala.annotation.tailrec
 import scala.util.Properties
@@ -107,8 +108,8 @@ object Glob extends LowPriorityGlobOps {
 
     /**
      * Returns a filter that checks both that the path is in the glob's range and that it matches
-     * the glob's [[PathFilter]].
-     * @return the combined [[PathFilter]]
+     * the glob's [[sbt.nio.filters.PathFilter]].
+     * @return the combined [[sbt.nio.filters.PathFilter]]
      */
     def filter: PathFilter = (path: Path) => inRange(path) && glob.pathFilter.accept(path)
     private[this] def incrementRange(recursive: Boolean, strict: Boolean): (Int, Int) = {

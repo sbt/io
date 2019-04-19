@@ -5,9 +5,11 @@ import java.nio.file._
 import org.scalatest.FlatSpec
 import sbt.io.syntax._
 import sbt.io.{ AllPassFilter, IO }
+import sbt.nio.file.{ FileTreeView, Glob }
+import sbt.nio.filters.AllPass
 
 class FileTreeViewSpec extends FlatSpec {
-  val view = FileTreeView.DEFAULT_NIO
+  val view = FileTreeView.default
   "FileTreeView" should "return the source root with depth == -1" in IO.withTemporaryDirectory {
     dir =>
       assert(view.list(dir.toGlob).map(_._1) == Seq(dir.toPath))

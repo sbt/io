@@ -1,6 +1,8 @@
-package sbt.nio
+package sbt.nio.filters
 
 import java.nio.file._
+
+import sbt.nio.file.Glob
 
 trait PathFilter {
   def accept(path: Path): Boolean

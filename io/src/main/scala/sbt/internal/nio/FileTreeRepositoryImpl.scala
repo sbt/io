@@ -19,7 +19,7 @@ import com.swoval.files.{ FileTreeDataViews, FileTreeRepositories, TypedPath => 
 import com.swoval.functional.Filters
 import sbt.internal.nio.FileEvent.{ Creation, Deletion, Update }
 import sbt.internal.nio.SwovalConverters._
-import sbt.nio.{ FileAttributes, Glob }
+import sbt.nio.file.{ FileAttributes, Glob }
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.VectorBuilder

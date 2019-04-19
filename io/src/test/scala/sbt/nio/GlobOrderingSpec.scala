@@ -5,6 +5,8 @@ import java.io.File
 import org.scalatest.FlatSpec
 import sbt.io.IO
 import sbt.io.syntax._
+import sbt.nio.file.Glob
+import sbt.nio.filters.AllPass
 
 class GlobOrderingSpec extends FlatSpec {
   "Globs" should "be ordered" in IO.withTemporaryDirectory { dir =>

@@ -19,7 +19,7 @@ import sbt.internal.nio.{
 }
 import sbt.io.syntax._
 import sbt.io.{ WatchService, _ }
-import sbt.nio.{ FileAttributes, Glob }
+import sbt.nio.file.{ FileAttributes, Glob }
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._

@@ -11,7 +11,7 @@
 package sbt.internal.nio
 
 import sbt.io.WatchService
-import sbt.nio.{ FileAttributes, FileTreeView }
+import sbt.nio.file.{ FileAttributes, FileTreeView }
 
 /**
  * Monitors registered directories for file changes. A typical implementation will keep an

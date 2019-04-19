@@ -18,10 +18,11 @@ import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import sbt.internal.io._
 import sbt.internal.nio.FileEvent.{ Creation, Deletion }
-import sbt.nio.FileAttributes.NonExistent
-import sbt.nio.Glob._
-import sbt.nio.Glob.GlobOps._
-import sbt.nio.{ AllPass, FileAttributes, FileTreeView, Glob }
+import sbt.nio.file.FileAttributes.NonExistent
+import sbt.nio.file.{ FileAttributes, FileTreeView, Glob }
+import sbt.nio.file.Glob._
+import sbt.nio.file.Glob.GlobOps._
+import sbt.nio.filters.AllPass
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -42,7 +43,7 @@ private[sbt] class WatchServiceBackedObservable(s: NewWatchState,
   private[this] val closed = new AtomicBoolean(false)
   private[this] val observers = new Observers[FileEvent[FileAttributes]]
   private[this] val fileCache = new FileCache(p => FileAttributes(p).getOrElse(NonExistent))
-  private[this] val view: FileTreeView.Nio[FileAttributes] = FileTreeView.DEFAULT_NIO
+  private[this] val view: FileTreeView.Nio[FileAttributes] = FileTreeView.default
   private[this] val thread: Thread = {
     val latch = new CountDownLatch(1)
     new Thread(s"watch-state-event-thread-${eventThreadId.incrementAndGet()}") {

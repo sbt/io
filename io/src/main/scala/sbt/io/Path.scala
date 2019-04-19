@@ -25,7 +25,9 @@ import java.nio.file.{
 
 import com.swoval.files.FileTreeViews
 import com.swoval.functional.Filter
-import sbt.nio.{ AllPass, FileAttributes, FileTreeView, Glob }
+import sbt.nio
+import sbt.nio.file.{ FileAttributes, FileTreeView, Glob }
+import sbt.nio.filters.AllPass
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -313,10 +315,10 @@ object Path extends Mapper {
     if ("nio" == sys.props.getOrElse("sbt.pathfinder", "")) { (file, filter) =>
       IO.wrapNull(file.listFiles(filter)).toSeq
     } else {
-      val fileTreeView = FileTreeView.DEFAULT_NIO
+      val fileTreeView = FileTreeView.default
       (file, filter) =>
         fileTreeView
-          .list(Glob(file.toPath, (1, 1), AllPass))
+          .list(nio.file.Glob(file.toPath, (1, 1), AllPass))
           .flatMap {
             case (path: NioPath, attrs: FileAttributes) =>
               if (filter.accept(new AttributedFile(path, attrs))) Some(path.toFile) else None

@@ -6,6 +6,9 @@ import org.scalatest.FlatSpec
 import sbt.io.{ GlobFilter, IO, NothingFilter }
 import sbt.io.syntax._
 import TestHelpers._
+import sbt.nio
+import sbt.nio.file.Glob
+import sbt.nio.filters.{ AllPass, NoPass }
 import sbt.nio.syntax._
 
 class GlobFilterSpec extends FlatSpec {
@@ -21,7 +24,7 @@ class GlobFilterSpec extends FlatSpec {
   it should "work with globs" in IO.withTemporaryDirectory { dir =>
     val file = new File(dir, "file")
     val nestedFile = new File(new File(dir, "subdir"), "subdir-file")
-    val glob = Glob(dir.toPath, (0, 1), AllPass)
+    val glob = nio.file.Glob(dir.toPath, (0, 1), AllPass)
     assert(glob.toFileFilter.accept(dir))
     assert(glob.toFileFilter.accept(file))
     assert(!glob.toFileFilter.accept(nestedFile))
@@ -31,7 +34,7 @@ class GlobFilterSpec extends FlatSpec {
   it should "work with recursive globs" in IO.withTemporaryDirectory { dir =>
     val file = new File(dir, "file")
     val nestedFile = new File(new File(dir, "subdir"), "subdir-file")
-    val glob = Glob(dir.toPath, (0, Int.MaxValue), AllPass)
+    val glob = nio.file.Glob(dir.toPath, (0, Int.MaxValue), AllPass)
     assert(glob.toFileFilter.accept(dir))
     assert(glob.toFileFilter.accept(file))
     assert(glob.toFileFilter.accept(nestedFile))

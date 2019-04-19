@@ -19,7 +19,8 @@ import java.util.{ List => JList }
 
 import sbt.internal.nio.FileEvent.{ Creation, Deletion, Update }
 import sbt.io._
-import sbt.nio.{ AllPass, Glob }
+import sbt.nio.filters.AllPass
+import sbt.nio.file.Glob
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._

@@ -4,6 +4,8 @@ import java.nio.file.Paths
 
 import org.scalatest.FlatSpec
 import TestHelpers._
+import sbt.nio.file.Glob
+import sbt.nio.filters.{ AllPass, ExactNameFilter, ExtensionFilter, SplitFilter }
 
 class GlobParserSpec extends FlatSpec {
   it should "parse pure paths" in {

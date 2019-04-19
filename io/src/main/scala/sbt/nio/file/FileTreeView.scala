@@ -1,4 +1,4 @@
-package sbt.nio
+package sbt.nio.file
 
 import java.nio.file.Path
 
@@ -32,7 +32,8 @@ object FileTreeView {
     def list(globs: Traversable[Glob]): Seq[(Path, FileAttributes)] = Glob.all(globs, fileTreeView)
   }
   private[sbt] type Nio[+T] = FileTreeView[(Path, T)]
-  private[sbt] val DEFAULT_NIO: Nio[FileAttributes] = DefaultFileTreeView
+  def default: FileTreeView[(Path, FileAttributes)] = DEFAULT_NIO
+  private[this] val DEFAULT_NIO: Nio[FileAttributes] = DefaultFileTreeView
   private[sbt] implicit class NioFileTreeViewOps[T](val view: FileTreeView.Nio[T]) {
     def map[A >: T, B](f: (Path, A) => B): FileTreeView.Nio[B] = {
       val converter: ((Path, A)) => (Path, B) = {
