@@ -5,8 +5,7 @@ import java.nio.file.Files
 import org.scalatest.FlatSpec
 import sbt.io.syntax._
 import sbt.io.{ AllPassFilter, IO, NothingFilter, PathFinder }
-import sbt.nio.file.Glob
-import sbt.nio.filters.AllPass
+import sbt.nio.file.{ AnyPath, Glob, RecursiveGlob }
 
 object GlobPathFinderSpec {
   implicit class PathFinderOps[P](val p: P)(implicit f: P => PathFinder) {
@@ -16,10 +15,10 @@ object GlobPathFinderSpec {
 
 class GlobPathFinderSpec extends FlatSpec {
   import GlobPathFinderSpec._
-  "GlobPathFinder" should "provide the same results as Pathfinder" in IO.withTemporaryDirectory {
-    dir =>
+  "GlobPathFinder" should "provide the same results as Pathfinder" in IO
+    .withTemporaryDirectory { dir =>
       assert(dir.get() == Seq(dir))
-  }
+    }
   it should "work with globbing" in IO.withTemporaryDirectory { dir =>
     val file = new File(dir, "foo.txt")
     file.createNewFile()
@@ -51,15 +50,16 @@ class GlobPathFinderSpec extends FlatSpec {
     val excluded = dir.allPaths --- file
     assert(excluded.set == Set(dir, subdir))
   }
-  it should "return an empty list for directories that do not exists" in {
-    assert((sbt.io.syntax.file("/tmp/this/is/not/a/file") * AllPassFilter).get == Nil)
+  it should "return an empty list for directories that do not exists" in IO.withTemporaryDirectory {
+    dir =>
+      assert((dir / "this/is/not/a/file" * AllPassFilter).get == Nil)
   }
   it should "implicitly build a glob" in IO.withTemporaryDirectory { dir =>
     // These use the FileBuilder extension class for file.
-    assert(dir.toGlob == Glob(dir.toPath, (0, 0), AllPass))
-    assert(dir * AllPassFilter == Glob(dir.toPath, (1, 1), AllPass))
-    assert((dir glob AllPassFilter) == Glob(dir.toPath, (1, 1), AllPass))
-    assert(dir ** AllPassFilter == Glob(dir.toPath, (1, Int.MaxValue), AllPass))
-    assert((dir globRecursive AllPassFilter) == Glob(dir.toPath, (1, Int.MaxValue), AllPass))
+    assert(dir.glob == Glob(dir))
+    assert(dir * AllPassFilter == Glob(dir, AnyPath))
+    assert((dir glob AllPassFilter) == Glob(dir, AnyPath))
+    assert(dir ** AllPassFilter == Glob(dir, RecursiveGlob))
+    assert((dir globRecursive AllPassFilter) == Glob(dir, RecursiveGlob))
   }
 }

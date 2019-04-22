@@ -25,9 +25,8 @@ import java.nio.file.{
 
 import com.swoval.files.FileTreeViews
 import com.swoval.functional.Filter
-import sbt.nio
-import sbt.nio.file.{ FileAttributes, FileTreeView, Glob }
-import sbt.nio.filters.AllPass
+import sbt.io.PathFinder.GlobPathFinder
+import sbt.nio.file.{ AnyPath, FileAttributes, FileTreeView, Glob }
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -318,7 +317,7 @@ object Path extends Mapper {
       val fileTreeView = FileTreeView.default
       (file, filter) =>
         fileTreeView
-          .list(nio.file.Glob(file.toPath, (1, 1), AllPass))
+          .list(Glob(file.toPath, AnyPath))
           .flatMap {
             case (path: NioPath, attrs: FileAttributes) =>
               if (filter.accept(new AttributedFile(path, attrs))) Some(path.toFile) else None
@@ -416,11 +415,12 @@ object PathFinder {
   }
   private[sbt] final class GlobPathFinder(val glob: Glob) extends PathFinder {
     override def get(): Seq[File] = {
+      val base = glob.base
       if (glob.range._1 == 0 && glob.range._2 == 0) {
-        glob.base.toFile :: Nil
+        if (Files.exists(base)) base.toFile :: Nil else Nil
       } else if (glob.range._2 > 1) {
         val files = new java.util.LinkedHashSet[File].asScala
-        if (glob.pathFilter.accept(glob.base)) files.add(glob.base.toFile)
+        if (glob.descendentMatches(glob.base)) files.add(glob.base.toFile)
         Path.defaultDescendantHandler(glob.base.toFile, glob.toFileFilter, files, glob.range._2)
         files.toIndexedSeq
       } else {
@@ -456,7 +456,7 @@ sealed trait PathLister {
 }
 object PathLister {
   private class SingleFilePathLister(private val file: File) extends PathLister {
-    override def get(): Seq[File] = (file: Glob).get()
+    override def get(): Seq[File] = new GlobPathFinder(Glob(file)).get()
     override def toString: String = s"SingleFilePathLister($file)"
     override def equals(o: Any): Boolean = o match {
       case that: SingleFilePathLister => this.file == that.file
@@ -476,6 +476,7 @@ sealed trait PathFinderDefaults extends PathFinder.Combinator {
    * This is a vestigial implementation detail that shouldn't have made it into the base class
    * definition. It can't be moved into [[PathFinderImpl]] without breaking binary compatibility
    * unfortunately.
+   *
    * @param fileSet the result set to append files to
    */
   private[sbt] def addTo(fileSet: mutable.Set[File]): Unit = ()
@@ -489,6 +490,7 @@ sealed trait PathFinderDefaults extends PathFinder.Combinator {
   /**
    * Constructs a new finder that selects all paths with a name that matches <code>filter</code> and are
    * descendants of paths selected by this finder.
+   *
    * @param filter only include files that this filter accepts
    */
   def globRecursive(filter: FileFilter): PathFinder =
@@ -497,6 +499,7 @@ sealed trait PathFinderDefaults extends PathFinder.Combinator {
   /**
    * Constructs a new finder that selects all paths with a name that matches <code>filter</code> and are
    * descendants of paths selected by this finder.
+   *
    * @param filter only include files that this filter accepts
    * @param walker use this walker to traverse the file system
    */
@@ -512,6 +515,7 @@ sealed trait PathFinderDefaults extends PathFinder.Combinator {
   /**
    * Constructs a new finder that selects all paths with a name that matches <code>filter</code>
    * and are immediate children of paths selected by this finder.
+   *
    * @param filter only include files that this filter accepts
    */
   def glob(filter: FileFilter): PathFinder = new ChildPathFinder(this, filter)

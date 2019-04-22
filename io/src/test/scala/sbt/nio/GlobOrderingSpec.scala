@@ -4,7 +4,7 @@ import java.io.File
 
 import org.scalatest.FlatSpec
 import sbt.io.IO
-import sbt.nio.file.proposal.{ Glob, RecursiveGlob }
+import sbt.nio.file.{ Glob, RecursiveGlob }
 
 class GlobOrderingSpec extends FlatSpec {
   "Globs" should "be ordered" in IO.withTemporaryDirectory { dir =>

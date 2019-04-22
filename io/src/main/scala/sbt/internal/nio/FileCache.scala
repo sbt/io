@@ -7,8 +7,7 @@ import java.util.concurrent.{ ConcurrentHashMap, ConcurrentSkipListMap }
 
 import sbt.internal.nio.FileEvent.{ Creation, Deletion, Update }
 import sbt.nio.file.FileAttributes.NonExistent
-import sbt.nio.file.{ FileAttributes, FileTreeView, Glob }
-import sbt.nio.filters.AllPass
+import sbt.nio.file.{ AnyPath, FileAttributes, FileTreeView, Glob, RecursiveGlob }
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -30,7 +29,7 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
         val exists = attributes != NonExistent
         subMap.get(path) match {
           case null if exists =>
-            add(Glob(path, (0, maxDepthForPath(path)), AllPass), attributes)
+            add(updateGlob(path), attributes)
             subMap.asScala.map { case (p, a) => Creation(p, a) }.toIndexedSeq
           case null => Nil // we weren't monitoring this no longer extant path
           case prev if exists =>
@@ -43,7 +42,7 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
       Nil
     }
   }
-  private[nio] def refresh(glob: Glob): Seq[FileEvent[T]] = {
+  private[nio] def refresh(glob: Glob): Seq[FileEvent[T]] = synchronized {
     val path = glob.base
     if (globInclude(path)) {
       val subMap = files.subMap(path, ceiling(path))
@@ -55,16 +54,15 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
       previous.foreach {
         case (p, prev) =>
           current.get(p) match {
-            case Some(newPair) if prev != newPair => result += Update(p, prev, newPair)
-            case None                             => result += Deletion(p, prev)
-            case _                                =>
+            case Some(newPair) if prev != newPair =>
+              result += Update(p, prev, newPair)
+            case None => result += Deletion(p, prev)
+            case _    =>
           }
       }
       current.foreach {
         case (p, newAttributes) =>
           previous.get(p) match {
-            case Some(prevAttributes) if prevAttributes != newAttributes =>
-              result += Update(p, prevAttributes, newAttributes)
             case None => result += Creation(p, newAttributes)
             case _    =>
           }
@@ -81,9 +79,12 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
       .toIndexedSeq
   }
   private[nio] def register(glob: Glob): Unit = {
-    val withoutFilter = Glob(glob.base, glob.range, AllPass)
-    if (!globs.exists(_ covers withoutFilter) && globs.add(withoutFilter)) {
-      FileAttributes(glob.base).foreach(add(withoutFilter, _))
+    val unfiltered = glob.range._2 match {
+      case Int.MaxValue => Glob(glob.base, RecursiveGlob)
+      case d            => (1 to d).foldLeft(Glob(glob.base)) { case (g, _) => g / AnyPath }
+    }
+    if (!globs.exists(_ covers unfiltered) && globs.add(unfiltered)) {
+      FileAttributes(glob.base).foreach(add(unfiltered, _))
     }
   }
   private[nio] def unregister(glob: Glob): Unit = {
@@ -111,18 +112,14 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
       files.putAll(newFiles)
     }
   }
-  private[this] def globInclude: Path => Boolean = {
-    val filters = globs.map(_.filter).toIndexedSeq
-    path =>
-      filters.exists(_.accept(path))
+  private[this] def globInclude: Path => Boolean = { path =>
+    globs.exists(g => g.matches(path) || g.base == path)
   }
-  private[this] def globExcludes: Path => Boolean = {
-    val filters = globs.map(_.filter).toIndexedSeq
-    path =>
-      !filters.exists(_.accept(path))
+  private[this] def globExcludes: Path => Boolean = { path =>
+    !globs.exists(g => g.matches(path) || g.base == path)
   }
-  private[this] def maxDepthForPath(path: Path): Int = {
-    globs.toIndexedSeq.view
+  private[this] def updateGlob(path: Path): Glob = {
+    val depth = globs.toIndexedSeq.view
       .map(g =>
         if (path.startsWith(g.base)) {
           if (path == g.base) g.range._2
@@ -133,6 +130,10 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
             }
         } else Int.MinValue)
       .min
+    depth match {
+      case Int.MaxValue => Glob(path, RecursiveGlob)
+      case d            => (1 to d).foldLeft(Glob(path)) { case (g, _) => g / AnyPath }
+    }
   }
   // This is a mildly hacky way of specifying an upper bound for children of a path
   private[this] def ceiling(path: Path): Path = Paths.get(path.toString + Char.MaxValue)
@@ -140,12 +141,12 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
 private[nio] object FileCache {
   private implicit class GlobOps(val glob: Glob) extends AnyVal {
     def covers(other: Glob): Boolean = {
-      val left = Glob(glob.base, glob.range, AllPass)
-      val right = Glob(other.base, other.range, AllPass)
-      right.base.startsWith(left.base) && {
-        (left.base == right.base && left.range._2 >= right.range._2) || {
-          val depth = left.base.relativize(right.base).getNameCount
-          left.range._2 >= right.range._2 - depth
+      val (leftBase, rightBase) = (glob.base, other.base)
+      val (leftMaxDepth, rightMaxDepth) = (glob.range._2, other.range._2)
+      rightBase.startsWith(leftBase) && {
+        (leftBase == rightBase && leftMaxDepth >= rightMaxDepth) || {
+          val depth = leftBase.relativize(rightBase).getNameCount
+          leftMaxDepth >= rightMaxDepth - depth
         }
       }
     }

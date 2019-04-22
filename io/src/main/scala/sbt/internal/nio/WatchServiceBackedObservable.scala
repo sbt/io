@@ -19,10 +19,8 @@ import java.util.concurrent.{ CountDownLatch, TimeUnit }
 import sbt.internal.io._
 import sbt.internal.nio.FileEvent.{ Creation, Deletion }
 import sbt.nio.file.FileAttributes.NonExistent
-import sbt.nio.file.{ FileAttributes, FileTreeView, Glob }
 import sbt.nio.file.Glob._
-import sbt.nio.file.Glob.GlobOps._
-import sbt.nio.filters.AllPass
+import sbt.nio.file.{ AnyPath, FileAttributes, FileTreeView, Glob, RecursiveGlob }
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -84,7 +82,7 @@ private[sbt] class WatchServiceBackedObservable(s: NewWatchState,
           val keyPath = k.watchable.asInstanceOf[Path]
           val allEvents: Seq[Event] = rawEvents.flatMap {
             case e if e.kind.equals(OVERFLOW) =>
-              fileCache.refresh(keyPath / "**")
+              fileCache.refresh(Glob(keyPath, RecursiveGlob))
             case e if !e.kind.equals(OVERFLOW) && e.context != null =>
               val path = keyPath.resolve(e.context.asInstanceOf[Path])
               FileAttributes(path) match {
@@ -98,12 +96,12 @@ private[sbt] class WatchServiceBackedObservable(s: NewWatchState,
             (event match {
               case Creation(path, attrs) if attrs.isDirectory =>
                 s.register(path)
-                event +: view.list(Glob(path, (1, Int.MaxValue), AllPass)).flatMap {
+                event +: view.list(Glob(path, RecursiveGlob)).flatMap {
                   case (p, a) =>
                     process(Creation(p, a))
                 }
               case Deletion(p, attrs) if attrs.isDirectory =>
-                val events = fileCache.refresh(p / "**")
+                val events = fileCache.refresh(Glob(p, RecursiveGlob))
                 events.view.filter(_.attributes.isDirectory).foreach(e => s.unregister(e.path))
                 events
               case e => e :: Nil
@@ -137,13 +135,17 @@ private[sbt] class WatchServiceBackedObservable(s: NewWatchState,
   override def register(glob: Glob): Either[IOException, Observable[FileEvent[FileAttributes]]] = {
     try {
       fileCache.register(glob)
-      fileCache.list(Glob(glob.base, glob.range, AllPass)) foreach {
+      val updatedGlob = glob.range._2 match {
+        case Int.MaxValue => Glob(glob.base, RecursiveGlob)
+        case d            => (1 to d).foldLeft(Glob(glob.base)) { case (g, _) => g / AnyPath }
+      }
+      fileCache.list(updatedGlob) foreach {
         case (path, attrs) if attrs.isDirectory => s.register(path)
         case _                                  =>
       }
       val observable = new Observers[FileEvent[FileAttributes]] {
         override def onNext(t: FileEvent[FileAttributes]): Unit = {
-          if (glob.toFileFilter.accept(t.path.toFile)) super.onNext(t)
+          if (glob.matches(t.path)) super.onNext(t)
         }
       }
       val handle = observers.addObserver(observable)

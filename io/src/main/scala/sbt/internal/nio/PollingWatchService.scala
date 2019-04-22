@@ -19,8 +19,7 @@ import java.util.{ List => JList }
 
 import sbt.internal.nio.FileEvent.{ Creation, Deletion, Update }
 import sbt.io._
-import sbt.nio.filters.AllPass
-import sbt.nio.file.Glob
+import sbt.nio.file.{ AnyPath, Glob }
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -121,7 +120,7 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
     private[this] lazy val acceptCreate = eventKinds.contains(ENTRY_CREATE)
     private[this] lazy val acceptDelete = eventKinds.contains(ENTRY_DELETE)
     private[this] lazy val acceptModify = eventKinds.contains(ENTRY_MODIFY)
-    private[this] val glob = Glob(path, (0, 1), AllPass)
+    private[this] val glob = Glob(path, AnyPath)
     private[this] val fileCache =
       new FileCache[Long](lastModifiedConverter)
     fileCache.register(glob)

@@ -5,8 +5,7 @@ import java.nio.file.Files
 import org.scalatest.FlatSpec
 import sbt.io.IO
 import sbt.nio.TestHelpers._
-import sbt.nio.file.proposal.Glob._
-import sbt.nio.file.proposal.{ FileTreeView, Glob, RecursiveGlob }
+import sbt.nio.file.{ FileTreeView, Glob, RecursiveGlob }
 
 class TraversableGlobSpec extends FlatSpec {
   "Traversable globs" should "collect multiple directories" in {

@@ -6,20 +6,10 @@ import java.nio.file.{ ClosedWatchServiceException, Files, Path, Paths }
 import org.scalatest.{ FlatSpec, Matchers }
 import sbt.internal.io.EventMonitorSpec._
 import sbt.internal.nio.FileEvent.Deletion
-import sbt.internal.nio.{
-  FileEvent,
-  FileEventMonitor,
-  FileTreeRepository,
-  Observable,
-  Observer,
-  Observers,
-  Registerable,
-  WatchLogger,
-  WatchServiceBackedObservable
-}
+import sbt.internal.nio.{ Deadline => _, _ }
 import sbt.io.syntax._
 import sbt.io.{ WatchService, _ }
-import sbt.nio.file.{ FileAttributes, Glob }
+import sbt.nio.file.{ FileAttributes, Glob, RecursiveGlob }
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -29,7 +19,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
   def pollDelay: FiniteDuration
   def newObservable(glob: Seq[Glob], logger: Logger): Observable[Event]
   def newObservable(file: File): Observable[Event] =
-    newObservable(Seq(file.toPath.toRealPath().toFile ** AllPassFilter), NullLogger)
+    newObservable(Seq(Glob(file.toPath.toRealPath(), RecursiveGlob)), NullLogger)
   private val maxWait = 2 * pollDelay
   private[this] val random = new scala.util.Random()
   private def randomTouch(file: File, add: Boolean = true): Unit = {
@@ -65,7 +55,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
   it should "ignore creation of directories with no tracked globs" in IO
     .withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
-      val created = parentDir / "ignoreme"
+      val created = parentDir / "inme"
       val subdir = parentDir / "subdir"
       val subFile = subdir / "foo.scala"
 
@@ -81,7 +71,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
   it should "ignore creation of files that do not match inclusion filter" in
     IO.withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
-      val created = parentDir / "ignoreme"
+      val created = parentDir / "inme"
       val scalaCreated = parentDir / "foo.scala"
 
       IO.createDirectory(parentDir)
@@ -108,7 +98,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 
   it should "ignore creation of an empty directory" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
-    val created = parentDir / "ignoreme"
+    val created = parentDir / "inme"
     val source = parentDir / "foo.scala"
 
     IO.createDirectory(parentDir)
@@ -135,7 +125,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     IO.withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "sub"
-      val created = subDir / "ignoreme"
+      val created = subDir / "inme"
       val source = subDir / "foo.scala"
 
       IO.createDirectory(subDir)
@@ -165,7 +155,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     .withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "sub"
-      val created = subDir / "ignoreme"
+      val created = subDir / "inme"
       val source = subDir / "foo.scala"
 
       IO.createDirectory(subDir)
@@ -189,7 +179,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
   it should "ignore deletion of files not included in inclusion filter" in IO
     .withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
-      val file = parentDir / "ignoreme"
+      val file = parentDir / "inme"
       IO.write(file, "foo")
       val source = parentDir / "foo.scala"
 
@@ -213,7 +203,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
 
   it should "ignore deletion of empty directories" in IO.withTemporaryDirectory { dir =>
     val parentDir = dir / "src" / "watchme"
-    val subDir = parentDir / "ignoreme"
+    val subDir = parentDir / "inme"
     IO.createDirectory(subDir)
     val source = parentDir / "foo.scala"
 
@@ -239,7 +229,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     IO.withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "subdir"
-      val willBeDeleted = subDir / "ignoreme"
+      val willBeDeleted = subDir / "inme"
       IO.write(willBeDeleted, "foo")
       val source = subDir / "foo.scala"
 
@@ -267,7 +257,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     .withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "subdir"
-      val willBeDeleted = subDir / "ignoreme"
+      val willBeDeleted = subDir / "inme"
       IO.createDirectory(willBeDeleted)
       val source = parentDir / "foo.scala"
 
@@ -549,11 +539,8 @@ object EventMonitorSpec {
       EventMonitorSpec.drain(monitor, duration, events)
   }
   implicit class FileOps(val file: File) extends AnyVal {
-    def scalaSourceGlobs: Seq[Glob] = {
-      val filter = new ExtensionFilter("scala") -- HiddenFileFilter -- new SimpleFilter(
-        _.startsWith("."))
-      Seq(file.toPath.toRealPath().toFile ** filter)
-    }
+    def scalaSourceGlobs: Seq[Glob] =
+      Glob(file.toPath.toRealPath(), RecursiveGlob / "*.scala") :: Nil
   }
   class CachingWatchLogger extends Logger {
     val lines = new scala.collection.mutable.ArrayBuffer[String]
@@ -622,7 +609,7 @@ private[sbt] abstract class SourceModificationWatchSpec(
 ) extends FlatSpec
     with Matchers
     with EventMonitorSpec {
-  def getService = getServiceWithPollDelay(10.milliseconds)
+  def getService: WatchService = getServiceWithPollDelay(pollDelay)
 
   "WatchService.poll" should "throw a `ClosedWatchServiceException` if used after `close`" in {
     val service = getService

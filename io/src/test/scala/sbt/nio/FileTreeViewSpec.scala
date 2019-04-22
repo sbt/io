@@ -4,7 +4,7 @@ import java.nio.file._
 
 import org.scalatest.FlatSpec
 import sbt.io.IO
-import sbt.nio.file.proposal.{ AnyPath, FileTreeView, Glob, RecursiveGlob }
+import sbt.nio.file.{ AnyPath, FileTreeView, Glob, RecursiveGlob }
 
 class FileTreeViewSpec extends FlatSpec {
   val view = FileTreeView.default

@@ -2,10 +2,9 @@ package sbt.nio
 
 import org.scalatest.FlatSpec
 import sbt.nio.TestHelpers._
-import sbt.nio.file.proposal.{ AnyPath, Glob, RecursiveGlob, RelativeGlob }
+import sbt.nio.file.{ AnyPath, Glob, RecursiveGlob, RelativeGlob }
 
 class GlobParserSpec extends FlatSpec {
-  import Glob._
   it should "parse pure paths" in {
     assert(Glob(p"$basePath/baz") == Glob(basePath.resolve("baz")))
     val absolute = Glob(p"$basePath/baz")

@@ -19,8 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import sbt.internal.nio._
 import sbt.io._
 import sbt.io.syntax._
-import sbt.nio.file.{ FileAttributes, Glob }
-import sbt.nio.filters.AllPass
+import sbt.nio.file.{ AnyPath, FileAttributes, Glob, RecursiveGlob }
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -136,11 +135,11 @@ private[sbt] final class WatchState private (
   }
   private[sbt] def toNewWatchState: NewWatchState = {
     val globs = ConcurrentHashMap.newKeySet[Glob].asScala
-    globs ++= sources.map(
-      s =>
-        Glob(s.base.toPath,
-             (1, if (s.recursive) Int.MaxValue else 1),
-             Glob.ConvertedFileFilter(s.includeFilter -- s.excludeFilter)))
+    globs ++= sources.map { s =>
+      val base = if (s.recursive) Glob(s.base, RecursiveGlob) else Glob(s.base, AnyPath)
+      // TODO fix this
+      base
+    }
     val map = new ConcurrentHashMap[Path, WatchKey]()
     map.putAll(registered.asJava)
     new NewWatchState(globs, service, map.asScala)
@@ -214,7 +213,7 @@ final class Source(
    * @return A sequence of all the paths collected from this source.
    */
   private[sbt] def getUnfilteredPaths(): Seq[Path] = {
-    val pathFinder = if (recursive) base.allPaths else base.glob(AllPassFilter)
+    val pathFinder: Glob = if (recursive) base.allPaths else base.glob(AllPassFilter)
     pathFinder.get().map(_.toPath)
   }
 
@@ -283,7 +282,7 @@ private[sbt] object WatchState {
     globSet ++= globs
     val initFiles = globs.flatMap {
       case glob if glob.range._2 == Int.MaxValue =>
-        DefaultFileTreeView.list(Glob(glob.base, (0, Int.MaxValue), AllPass)).collect {
+        DefaultFileTreeView.list(Glob(glob.base, RecursiveGlob)).collect {
           case (p, a) if a.isDirectory => p
         }
       case glob => Seq(glob.base)
