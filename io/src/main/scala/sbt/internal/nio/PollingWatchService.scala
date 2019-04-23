@@ -14,7 +14,7 @@ import java.nio.file.StandardWatchEventKinds._
 import java.nio.file.{ WatchService => _, _ }
 import java.util
 import java.util.concurrent._
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{ AtomicBoolean, AtomicReference }
 import java.util.{ List => JList }
 
 import sbt.internal.nio.FileEvent.{ Creation, Deletion, Update }
@@ -26,6 +26,7 @@ import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.concurrent.duration.{ Deadline => _, _ }
+import scala.util.Random
 
 /** A `WatchService` that polls the filesystem every `delay`. */
 private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSource)
@@ -38,6 +39,7 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
   private[this] val lastModifiedConverter: Path => Long = p => IO.getModifiedTimeOrZero(p.toFile)
   private[this] val pollQueue: util.Queue[PollingWatchKey] =
     new LinkedBlockingDeque[PollingWatchKey]
+  private[this] val random = new Random()
   override def close(): Unit = if (closed.compareAndSet(false, true)) {
     registered.clear()
   }
@@ -123,6 +125,9 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
     private[this] val fileCache =
       new FileCache[Long](lastModifiedConverter)
     fileCache.register(glob)
+    private[this] def nextPollTime: Deadline =
+      Deadline.now + random.nextInt(2 * delay.toMillis.toInt).millis
+    private[this] val lastPolled = new AtomicReference(nextPollTime)
     override def cancel(): Unit = {
       reset()
       registered.remove(path)
@@ -138,9 +143,14 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
     override def watchable(): Watchable = path
 
     private[PollingWatchService] def poll(): Option[WatchKey] = {
-      val res = fileCache.refresh(glob)
-      res.foreach(maybeAddEvent)
-      if (events.isEmpty) None else Some(this)
+      lastPolled.get match {
+        case d if d < Deadline.now =>
+          val res = fileCache.refresh(glob)
+          lastPolled.set(Deadline.now)
+          res.foreach(maybeAddEvent)
+          if (events.isEmpty) None else Some(this)
+        case _ => None
+      }
     }
     private[PollingWatchService] def pollEventsImpl: JList[WatchEvent[Path]] = {
       events.synchronized {
@@ -180,4 +190,10 @@ private class PollingWatchEvent(
     override val kind: WatchEvent.Kind[Path]
 ) extends WatchEvent[Path] {
   override val count: Int = 1
+  override def toString: String = kind match {
+    case ENTRY_CREATE => s"Creation($context)"
+    case ENTRY_DELETE => s"Deletion($context)"
+    case ENTRY_MODIFY => s"Modify($context)"
+    case _            => "Overflow"
+  }
 }
