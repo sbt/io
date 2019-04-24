@@ -60,6 +60,10 @@ object FileTreeView {
   implicit class Ops(val fileTreeView: FileTreeView.Nio[FileAttributes]) extends AnyVal {
     def list(glob: Glob): Seq[(Path, FileAttributes)] = all(glob :: Nil, fileTreeView)
     def list(globs: Traversable[Glob]): Seq[(Path, FileAttributes)] = all(globs, fileTreeView)
+    def iterator(glob: Glob): Iterator[(Path, FileAttributes)] =
+      FileTreeView.iterator(glob :: Nil, fileTreeView)
+    def iterator(globs: Traversable[Glob]): Iterator[(Path, FileAttributes)] =
+      FileTreeView.iterator(globs, fileTreeView)
   }
   private[sbt] type Nio[+T] = FileTreeView[(Path, T)]
   def default: FileTreeView[(Path, FileAttributes)] = DEFAULT_NIO

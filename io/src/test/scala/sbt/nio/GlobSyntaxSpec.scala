@@ -171,6 +171,6 @@ class GlobSyntaxSpec extends FlatSpec {
     implicit val option: RelativeGlobViewOption = RelativeGlobViewOption.Ignore
     assert(Glob(p"./foo").fileTreeViewListParameters._3.matches(Paths.get("foo").toAbsolutePath))
     assert(
-      Glob(p"./foo/*").fileTreeViewListParameters._3.matches(Paths.get("foo/bar").toAbsolutePath))
+      Glob(p"./foo/*").fileTreeViewListParameters._3.matches(Paths.get(p"foo/bar").toAbsolutePath))
   }
 }
