@@ -591,6 +591,7 @@ object IO {
 
   /**
    * Creates a zip file.
+   *
    * @param sources The files to include in the zip file paired with the entry name in the zip.
    *                Only the pairs explicitly listed are included.
    * @param outputZip The file to write the zip to.
@@ -1122,7 +1123,8 @@ object IO {
   def assertAbsolute(uri: URI) = assert(uri.isAbsolute, "Not absolute: " + uri)
 
   /** Parses a classpath String into File entries according to the current platform's path separator.*/
-  def parseClasspath(s: String): Seq[File] = IO.pathSplit(s).map(new File(_)).toSeq
+  def parseClasspath(s: String): Seq[File] =
+    if (s.isEmpty) Nil else IO.pathSplit(s).map(new File(_)).toSeq
 
   /**
    * Constructs an `ObjectInputStream` on `wrapped` that uses `loader` to load classes.
