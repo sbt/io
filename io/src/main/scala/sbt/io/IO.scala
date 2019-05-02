@@ -551,17 +551,23 @@ object IO {
     deleteEmpty(parents(files.toSet))
   }
 
-  /** Deletes `file`, recursively if it is a directory. */
+  /**
+   * Deletes `file`, recursively if it is a directory. Note that this method may silently fail to
+   * delete the file (or directory) if any errors occur.
+   */
   def delete(file: File): Unit = Retry {
     try {
       FileTreeView.default.list(file.toPath).foreach {
         case (dir, attrs) if attrs.isDirectory => delete(dir.toFile)
-        case (f, _)                            => Files.deleteIfExists(f)
+        case (f, _) =>
+          try Files.deleteIfExists(f)
+          catch { case _: IOException => }
       }
     } catch {
       case _: NotDirectoryException =>
     }
-    Files.deleteIfExists(file.toPath)
+    try Files.deleteIfExists(file.toPath)
+    catch { case _: IOException => }
     ()
   }
 
