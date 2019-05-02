@@ -298,7 +298,7 @@ object IO {
    * Creates a file at the given location if it doesn't exist.
    * If the file already exists and `setModified` is true, this method sets the last modified time to the current time.
    */
-  def touch(file: File, setModified: Boolean = true): Unit = {
+  def touch(file: File, setModified: Boolean = true): Unit = Retry {
     val absFile = file.getAbsoluteFile
     createDirectory(absFile.getParentFile)
     val created = translate("Could not create file " + absFile) { absFile.createNewFile() }
