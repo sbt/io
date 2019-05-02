@@ -60,7 +60,8 @@ val io = (project in file("io"))
     } ++ Vector(swovalFiles),
     libraryDependencies ++= Seq(jna, jnaPlatform),
 
-    Test / fork := true,
+    Test / fork := System.getProperty("sbt.test.fork", "true") == "true",
+    Test / testForkedParallel := true,
 
     sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",
     initialCommands in console += "\nimport sbt.io._, syntax._",
@@ -112,9 +113,13 @@ val io = (project in file("io"))
       exclude[MissingClassProblem]("sbt.io.Event"),
       exclude[MissingClassProblem]("sbt.io.Event$"),
       exclude[MissingClassProblem]("sbt.io.MacOSXWatchKey"),
+      exclude[MissingClassProblem]("sbt.io.PollingWatchEvent"),
+      exclude[MissingClassProblem]("sbt.io.PollingWatchService$PollingWatchKey"),
+      exclude[MissingClassProblem]("sbt.io.PollingWatchService$PollingThread"),
+      exclude[MissingClassProblem]("sbt.io.PollingWatchService$Overflow$"),
 
       // private internal classes whose functionality has been replaced
-      exclude[MissingClassProblem]("sbt.internal.io.EventMonitor$*"),
+      exclude[MissingClassProblem]("sbt.internal.io.EventMonitor*"),
       exclude[DirectMissingMethodProblem]("sbt.internal.io.EventMonitor.legacy"),
       exclude[DirectMissingMethodProblem]("sbt.internal.io.EventMonitor.applyImpl"),
 

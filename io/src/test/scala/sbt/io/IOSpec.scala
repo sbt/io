@@ -46,6 +46,31 @@ class IOSpec extends FunSuite {
     assert(IO.relativize(base, file) == Some("build.sbt"))
   }
 
+  test("it should copy directories") {
+    IO.withTemporaryDirectory { dir =>
+      val subdir1 = new File(dir, "subdir1")
+      val nestedSubdir1 = new File(subdir1, "nested")
+      val subdir1File = new File(nestedSubdir1, "file")
+      IO.createDirectory(nestedSubdir1)
+      IO.write(subdir1File, "foo-1")
+      val subdir2 = new File(dir, "subdir2")
+      val nestedSubdir2 = new File(subdir2, "nested")
+      val subdir2File = new File(nestedSubdir2, "file")
+      IO.createDirectory(nestedSubdir2)
+      IO.write(subdir2File, "foo-2")
+      val copied = new File(dir, "copy")
+      val copiedNested = new File(copied, "nested")
+      val copiedFile = new File(copiedNested, "file")
+      IO.copyDirectory(subdir1, copied)
+      assert(PathFinder(copied).allPaths.get().toSet == Set(copied, copiedNested, copiedFile))
+      assert(IO.read(copiedFile) == "foo-1")
+      IO.delete(copied)
+      IO.copyDirectory(subdir2, copied)
+      assert(PathFinder(copied).allPaths.get().toSet == Set(copied, copiedNested, copiedFile))
+      assert(IO.read(copiedFile) == "foo-2")
+    }
+  }
+
   test("toURI should make URI") {
     val u = IO.toURI(file("/etc/hosts").getAbsoluteFile)
     assert(u.toString.startsWith("file:///") && u.toString.endsWith("etc/hosts"))

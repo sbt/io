@@ -16,8 +16,10 @@ import java.nio.file.{ WatchService => _, _ }
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
+import sbt.internal.nio._
 import sbt.io._
 import sbt.io.syntax._
+import sbt.nio.file.{ AnyPath, FileAttributes, Glob, RecursiveGlob }
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -37,12 +39,14 @@ private[sbt] object SourceModificationWatch {
     if (state.count == 0) {
       (true, state.withCount(1))
     } else {
-      val observable = new WatchServiceBackedObservable[Path](state.toNewWatchState,
-                                                              delay,
-                                                              (_: TypedPath).toPath,
-                                                              closeService = false,
-                                                              NullWatchLogger)
-      val monitor =
+      val observable: Observable[FileEvent[FileAttributes]] =
+        new WatchServiceBackedObservable(
+          state.toNewWatchState,
+          delay,
+          closeService = false,
+          NullWatchLogger
+        )
+      val monitor: FileEventMonitor[FileEvent[FileAttributes]] =
         FileEventMonitor.antiEntropy(observable,
                                      200.milliseconds,
                                      NullWatchLogger,
@@ -131,8 +135,11 @@ private[sbt] final class WatchState private (
   }
   private[sbt] def toNewWatchState: NewWatchState = {
     val globs = ConcurrentHashMap.newKeySet[Glob].asScala
-    globs ++= sources.map(s =>
-      Glob(s.base, s.includeFilter -- s.excludeFilter, if (s.recursive) Int.MaxValue else 0))
+    globs ++= sources.map { s =>
+      val base = if (s.recursive) Glob(s.base, RecursiveGlob) else Glob(s.base, AnyPath)
+      // TODO fix this
+      base
+    }
     val map = new ConcurrentHashMap[Path, WatchKey]()
     map.putAll(registered.asJava)
     new NewWatchState(globs, service, map.asScala)
@@ -206,7 +213,7 @@ final class Source(
    * @return A sequence of all the paths collected from this source.
    */
   private[sbt] def getUnfilteredPaths(): Seq[Path] = {
-    val pathFinder = if (recursive) base.allPaths else base.glob(AllPassFilter)
+    val pathFinder: Glob = if (recursive) base.allPaths else base.glob(AllPassFilter)
     pathFinder.get().map(_.toPath)
   }
 
@@ -268,22 +275,15 @@ private[sbt] object WatchState {
   }
 
   private def toSource(glob: Glob): Source =
-    new Source(glob.base.toFile,
-               glob.toFileFilter,
-               NothingFilter,
-               if (glob.depth > 0) true else false)
+    new Source(glob.base.toFile, glob.toFileFilter, NothingFilter, glob.range._2 == Int.MaxValue)
 
   def empty(globs: Seq[Glob], service: WatchService): NewWatchState = {
     val globSet = ConcurrentHashMap.newKeySet[Glob].asScala
     globSet ++= globs
     val initFiles = globs.flatMap {
-      case glob if glob.depth > 0 =>
-        DefaultFileTreeView.list(glob.base.toGlob).flatMap { d =>
-          d.toPath +: (if (d.isDirectory)
-                         DefaultFileTreeView
-                           .list(glob.withFilter(DirectoryFilter))
-                           .map(_.toPath)
-                       else Nil)
+      case glob if glob.range._2 == Int.MaxValue =>
+        DefaultFileTreeView.list(Glob(glob.base, RecursiveGlob)).collect {
+          case (p, a) if a.isDirectory => p
         }
       case glob => Seq(glob.base)
     }.sorted

@@ -1,6 +1,6 @@
 package sbt.internal.io
 
-import sbt.io.PollingWatchService
+import sbt.internal.nio.PollingWatchService
 
 import scala.concurrent.duration._
 

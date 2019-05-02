@@ -20,10 +20,12 @@ import java.nio.file.{
 }
 import java.util.concurrent.TimeUnit
 
+import sbt.internal.nio
+
 import scala.annotation.tailrec
-import scala.collection.{ immutable, mutable }
 import scala.collection.JavaConverters._
-import scala.concurrent.duration.Duration
+import scala.collection.{ immutable, mutable }
+import scala.concurrent.duration.{ Duration, FiniteDuration }
 import scala.util.Properties
 
 object WatchService {
@@ -95,12 +97,11 @@ object WatchService {
       service.close()
     }
 
-    override def toString(): String =
-      service.toString()
+    override def toString: String = service.toString
   }
   private[sbt] def default: WatchService =
     if (Properties.isMac) new MacOSXWatchService else FileSystems.getDefault.newWatchService
-
+  def polling(delay: FiniteDuration): WatchService = new PollingWatchService(delay)
 }
 
 /**
@@ -142,7 +143,7 @@ trait WatchService {
   def close(): Unit
 }
 
-trait Unregisterable { self: WatchService =>
+private[sbt] trait Unregisterable { self: WatchService =>
 
   /**
    * Unregisters a monitored path.
@@ -150,3 +151,6 @@ trait Unregisterable { self: WatchService =>
    */
   def unregister(path: JPath): Unit
 }
+
+private[sbt] class MacOSXWatchService extends sbt.internal.io.MacOSXWatchService
+private[sbt] class PollingWatchService(delay: FiniteDuration) extends nio.PollingWatchService(delay)

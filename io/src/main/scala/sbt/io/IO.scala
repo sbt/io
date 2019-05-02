@@ -20,8 +20,9 @@ import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
 
 import sbt.internal.io.ErrorHandling.translate
-import sbt.internal.io.Milli
+import sbt.internal.io.{ Milli, Retry }
 import sbt.io.Using._
+import sbt.nio.file.FileTreeView
 
 import scala.Function.tupled
 import scala.annotation.tailrec
@@ -316,7 +317,7 @@ object IO {
     def failBase = "Could not create directory " + dir
     // Need a retry because Files.createDirectories may fail before succeeding on (at least) windows.
     val path = dir.toPath
-    try retry(
+    try Retry(
       try Files.createDirectories(path)
       catch { case _: IOException if Files.isDirectory(path) => },
       excludedExceptions = classOf[FileAlreadyExistsException]
@@ -551,16 +552,16 @@ object IO {
   }
 
   /** Deletes `file`, recursively if it is a directory. */
-  def delete(file: File): Unit = retry {
+  def delete(file: File): Unit = Retry {
     try {
-      FileTreeView.DEFAULT.list(Glob(file, AllPassFilter, 0)).foreach {
-        case dir if dir.isDirectory => delete(dir.toPath.toFile)
-        case f                      => f.toPath.toFile.delete()
+      FileTreeView.default.list(file.toPath).foreach {
+        case (dir, attrs) if attrs.isDirectory => delete(dir.toFile)
+        case (f, _)                            => Files.deleteIfExists(f)
       }
     } catch {
       case _: NotDirectoryException =>
     }
-    file.delete()
+    Files.deleteIfExists(file.toPath)
     ()
   }
 
@@ -1328,7 +1329,7 @@ object IO {
    */
   def getModifiedTimeOrZero(file: File): Long =
     try {
-      retry(Milli.getModifiedTime(file), classOf[FileNotFoundException])
+      Retry(Milli.getModifiedTime(file), classOf[FileNotFoundException])
     } catch {
       case _: FileNotFoundException => 0L
     }
@@ -1350,7 +1351,7 @@ object IO {
    */
   def setModifiedTimeOrFalse(file: File, mtime: Long): Boolean =
     try {
-      retry(Milli.setModifiedTime(file, mtime), classOf[FileNotFoundException])
+      Retry(Milli.setModifiedTime(file, mtime), classOf[FileNotFoundException])
       true
     } catch {
       case _: FileNotFoundException => false
@@ -1378,37 +1379,5 @@ object IO {
     // (which may be used by setModifiedTimeOrFalse) doesn't accept it,
     // see Java bug #6791812
     setModifiedTimeOrFalse(targetFile, math.max(last, 0L))
-  }
-  private lazy val limit = {
-    val defaultLimit = 10
-    try System.getProperty("sbt.io.retry.limit", defaultLimit.toString).toInt
-    catch { case NonFatal(_) => defaultLimit }
-  }
-  private def retry[T](f: => T, excludedExceptions: Class[_ <: IOException]*): T =
-    retry(f, limit, excludedExceptions: _*)
-  private def retry[T](f: => T, limit: Int, excludedExceptions: Class[_ <: IOException]*): T = {
-    lazy val filter: Exception => Boolean = excludedExceptions match {
-      case s if s.nonEmpty =>
-        (e: Exception) =>
-          !excludedExceptions.exists(_.isAssignableFrom(e.getClass))
-      case _ =>
-        (_: Exception) =>
-          true
-    }
-    @tailrec
-    def impl(attempt: Int): T = {
-      val (retry, res) = try false -> Right(f)
-      catch {
-        case e: IOException if filter(e) && (attempt < limit) => (true, Left(e))
-        case e: IOException                                   => (false, Left(e))
-      }
-      if (retry) { Thread.sleep(0); impl(attempt + 1) } else {
-        res match {
-          case Right(r) => r
-          case Left(e)  => throw e
-        }
-      }
-    }
-    impl(1)
   }
 }

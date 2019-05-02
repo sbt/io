@@ -14,6 +14,8 @@ class NameFilterSpec extends FlatSpec with Matchers {
     HiddenFileFilter.toString shouldBe "HiddenFileFilter"
     NothingFilter.toString shouldBe "NothingFilter"
     new ExactFilter("foo.txt").toString shouldBe s"ExactFilter(foo.txt)"
+    new PrefixFilter("foo").toString shouldBe s"PrefixFilter(foo)"
+    new SuffixFilter("foo").toString shouldBe s"SuffixFilter(foo)"
     new PatternFilter(Pattern.compile(".*\\.scala")).toString shouldBe s"PatternFilter(.*\\.scala)"
   }
   it should "correctly override equals/hashCode" in {
@@ -22,6 +24,22 @@ class NameFilterSpec extends FlatSpec with Matchers {
     assert(new ExactFilter(foo).hashCode == new ExactFilter(foo).hashCode)
     assert(new ExactFilter(foo) != new ExactFilter(bar))
     assert(new ExactFilter(foo).hashCode != new ExactFilter(bar).hashCode)
+
+    val (fooPrefix, barPrefix) = ("foo", "bar")
+    assert(new PrefixFilter(fooPrefix) == new PrefixFilter(fooPrefix))
+    assert(new PrefixFilter(barPrefix) == new PrefixFilter(barPrefix))
+    assert(new PrefixFilter(fooPrefix) != new PrefixFilter(barPrefix))
+    assert(new PrefixFilter(fooPrefix).hashCode == fooPrefix.hashCode)
+    assert(new PrefixFilter(barPrefix).hashCode == barPrefix.hashCode)
+    assert(new PrefixFilter(fooPrefix).hashCode != new PrefixFilter(barPrefix).hashCode)
+
+    val (fooSuffix, barSuffix) = ("foo", "bar")
+    assert(new SuffixFilter(fooSuffix) == new SuffixFilter(fooSuffix))
+    assert(new SuffixFilter(barSuffix) == new SuffixFilter(barSuffix))
+    assert(new SuffixFilter(fooSuffix) != new SuffixFilter(barSuffix))
+    assert(new SuffixFilter(fooSuffix).hashCode == fooSuffix.hashCode)
+    assert(new SuffixFilter(barSuffix).hashCode == barSuffix.hashCode)
+    assert(new SuffixFilter(fooSuffix).hashCode != new SuffixFilter(barSuffix).hashCode)
 
     val (java, scala) = (Pattern.compile(".*\\.java"), Pattern.compile(".*\\.scala"))
     assert(new PatternFilter(java) == new PatternFilter(java))
@@ -37,6 +55,8 @@ class NameFilterSpec extends FlatSpec with Matchers {
       HiddenFileFilter,
       NothingFilter,
       new ExactFilter("foo.txt"),
+      new PrefixFilter("foo"),
+      new SuffixFilter("bar"),
       new PatternFilter(Pattern.compile(".*\\.scala"))
     )
     @tailrec
