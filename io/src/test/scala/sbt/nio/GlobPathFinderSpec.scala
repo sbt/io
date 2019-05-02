@@ -6,6 +6,7 @@ import org.scalatest.FlatSpec
 import sbt.io.syntax._
 import sbt.io.{ AllPassFilter, IO, NothingFilter, PathFinder }
 import sbt.nio.file.{ AnyPath, Glob, RecursiveGlob }
+import sbt.nio.file.syntax._
 
 object GlobPathFinderSpec {
   implicit class PathFinderOps[P](val p: P)(implicit f: P => PathFinder) {
@@ -56,7 +57,7 @@ class GlobPathFinderSpec extends FlatSpec {
   }
   it should "implicitly build a glob" in IO.withTemporaryDirectory { dir =>
     // These use the FileBuilder extension class for file.
-    assert(dir.glob == Glob(dir))
+    assert(dir.toGlob == Glob(dir))
     assert(dir * AllPassFilter == Glob(dir, AnyPath))
     assert((dir glob AllPassFilter) == Glob(dir, AnyPath))
     assert(dir ** AllPassFilter == Glob(dir, RecursiveGlob))

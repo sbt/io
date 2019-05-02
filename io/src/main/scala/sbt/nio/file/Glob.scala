@@ -476,7 +476,6 @@ private[sbt] object FileGlobApi {
     }
     def /(component: String): Glob = Glob(file.toPath.resolve(component))
     def \(component: String): Glob = this / component
-    def glob: Glob = Glob(file)
     def glob(filter: FileFilter): Glob = filter match {
       case AllPassFilter => Glob(absolutePath(file), AnyPath)
       case f             => Glob(absolutePath(file)) / convert(f)
