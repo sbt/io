@@ -81,9 +81,11 @@ private abstract class MilliPosixBase[Interface <: PosixBase: ClassTag, Native]
   private val options = scala.collection.Map[String, Object]().asJava
   private final val ENOENT = 2
   protected val libc: Interface =
-    (JNANative.loadLibrary(Platform.C_LIBRARY_NAME,
-                           classTag[Interface].runtimeClass.asInstanceOf[Class[Interface]],
-                           options)): Interface
+    (JNANative.loadLibrary(
+      Platform.C_LIBRARY_NAME,
+      classTag[Interface].runtimeClass.asInstanceOf[Class[Interface]],
+      options
+    )): Interface
   protected def checkedIO[T](filePath: String)(f: => Int) = {
     if (f != 0) {
       val errno = JNANative.getLastError()
@@ -220,16 +222,20 @@ private object Linux32Milli extends PosixMilliIntUtim[Linux32] {
 }
 
 private trait Mac extends Library with Posix[Long] {
-  def getattrlist(path: String,
-                  attrlist: Attrlist,
-                  attrBuf: TimeBuf,
-                  attrBufSize: Int,
-                  options: Int): Int
-  def setattrlist(path: String,
-                  attrlist: Attrlist,
-                  attrBuf: Timespec,
-                  attrBufSize: Int,
-                  options: Int): Int
+  def getattrlist(
+      path: String,
+      attrlist: Attrlist,
+      attrBuf: TimeBuf,
+      attrBufSize: Int,
+      options: Int
+  ): Int
+  def setattrlist(
+      path: String,
+      attrlist: Attrlist,
+      attrBuf: Timespec,
+      attrBufSize: Int,
+      options: Int
+  ): Int
 }
 private object MacMilli extends PosixMilliLong[Mac] {
   private val attr = new Attrlist
@@ -255,13 +261,15 @@ private object WinMilli extends MilliNative[FILETIME] {
   import Kernel32.INSTANCE._
 
   private def getHandle(lpFileName: String, dwDesiredAccess: Int, dwShareMode: Int): HANDLE = {
-    val hFile = CreateFile(lpFileName,
-                           dwDesiredAccess,
-                           dwShareMode,
-                           null,
-                           OPEN_EXISTING,
-                           FILE_FLAG_BACKUP_SEMANTICS,
-                           null)
+    val hFile = CreateFile(
+      lpFileName,
+      dwDesiredAccess,
+      dwShareMode,
+      null,
+      OPEN_EXISTING,
+      FILE_FLAG_BACKUP_SEMANTICS,
+      null
+    )
     if (hFile == INVALID_HANDLE_VALUE) {
       val err = GetLastError()
       if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
@@ -275,35 +283,43 @@ private object WinMilli extends MilliNative[FILETIME] {
   }
 
   protected def getModifiedTimeNative(filePath: String): FILETIME = {
-    val hFile = getHandle(filePath,
-                          FILE_READ_ATTRIBUTES,
-                          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+    val hFile = getHandle(
+      filePath,
+      FILE_READ_ATTRIBUTES,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
+    )
     val mtime = try {
       val modifiedTime = new FILETIME.ByReference()
       if (!GetFileTime(hFile, /*creationTime*/ null, /*accessTime*/ null, modifiedTime))
         throw new IOException(
-          "GetFileTime() failed with error " + GetLastError() + " for file " + filePath)
+          "GetFileTime() failed with error " + GetLastError() + " for file " + filePath
+        )
       modifiedTime
     } finally {
       if (!CloseHandle(hFile))
         throw new IOException(
-          "CloseHandle() after GetFileTime() failed with error " + GetLastError() + " for file " + filePath)
+          "CloseHandle() after GetFileTime() failed with error " + GetLastError() + " for file " + filePath
+        )
     }
     mtime
   }
 
   protected def setModifiedTimeNative(filePath: String, fileTime: FILETIME): Unit = {
-    val hFile = getHandle(filePath,
-                          FILE_WRITE_ATTRIBUTES,
-                          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+    val hFile = getHandle(
+      filePath,
+      FILE_WRITE_ATTRIBUTES,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
+    )
     try {
       if (SetFileTime(hFile, null, null, fileTime) == 0)
         throw new IOException(
-          "SetFileTime() failed with error " + GetLastError() + " for file " + filePath)
+          "SetFileTime() failed with error " + GetLastError() + " for file " + filePath
+        )
     } finally {
       if (!CloseHandle(hFile))
         throw new IOException(
-          "CloseHandle() after SetFileTime() failed with error " + GetLastError() + " for file " + filePath)
+          "CloseHandle() after SetFileTime() failed with error " + GetLastError() + " for file " + filePath
+        )
     }
   }
 
@@ -384,7 +400,8 @@ object Milli {
       } finally {
         if (!file.delete())
           throw new IOException(
-            "Unexpected: could not delete temporary file: " + file.getAbsolutePath)
+            "Unexpected: could not delete temporary file: " + file.getAbsolutePath
+          )
       }
     }
 }

@@ -115,7 +115,8 @@ private[sbt] class Observers[T] extends Observer[T] with Observable[T] {
     observers.values.foreach(
       o =>
         try o.onNext(t)
-        catch { case NonFatal(_) => })
+        catch { case NonFatal(_) => }
+    )
   }
 }
 private[sbt] class RegisterableObservable[T](val delegate: Observers[FileEvent[T]]) extends AnyVal {
@@ -140,8 +141,10 @@ private[sbt] trait Registerable[+T] extends AutoCloseable {
   def register(glob: Glob): Either[IOException, Observable[T]]
 }
 private[sbt] object Registerable {
-  def apply[T](glob: Glob,
-               delegate: Observers[FileEvent[T]]): Either[IOException, Observable[FileEvent[T]]] = {
+  def apply[T](
+      glob: Glob,
+      delegate: Observers[FileEvent[T]]
+  ): Either[IOException, Observable[FileEvent[T]]] = {
     val filter = glob.toFileFilter
     val underlying = new Observers[FileEvent[T]]
     val observers =

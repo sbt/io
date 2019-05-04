@@ -23,9 +23,11 @@ class IOSpec extends FunSuite {
     val relativeRootDir = new File(nestedDir, "..")
     assert(
       IO.relativize(rootDir.toFile, nestedFile)
-        .map(normalizeForWindows) === Option("meh.file"))
+        .map(normalizeForWindows) === Option("meh.file")
+    )
     assert(
-      IO.relativize(relativeRootDir, nestedFile).map(normalizeForWindows) === Option("meh.file"))
+      IO.relativize(relativeRootDir, nestedFile).map(normalizeForWindows) === Option("meh.file")
+    )
     IO.delete(rootDir.toFile)
   }
 
@@ -101,15 +103,18 @@ class IOSpec extends FunSuite {
     val u = IO.classLocation[java.lang.Integer]
     assert(
       (u.toString == "jrt:/java.base") ||
-        (u.toString.startsWith("file:") && u.toString.endsWith("rt.jar") && IO.asFile(u).isFile))
+        (u.toString.startsWith("file:") && u.toString.endsWith("rt.jar") && IO.asFile(u).isFile)
+    )
   }
 
   test(
-    "classLocation[AbstractMap.SimpleEntry] should return a URL pointing to the rt.jar or java.base") {
+    "classLocation[AbstractMap.SimpleEntry] should return a URL pointing to the rt.jar or java.base"
+  ) {
     val u = IO.classLocation[java.util.AbstractMap.SimpleEntry[String, String]]
     assert(
       (u.toString == "jrt:/java.base") ||
-        (u.toString.startsWith("file:") && u.toString.endsWith("rt.jar") && IO.asFile(u).isFile))
+        (u.toString.startsWith("file:") && u.toString.endsWith("rt.jar") && IO.asFile(u).isFile)
+    )
   }
 
   test("classLocation[this.type] should return a URL pointing to a directory or a JAR") {
@@ -128,7 +133,8 @@ class IOSpec extends FunSuite {
   }
 
   test(
-    "classLocationPath[AbstractMap.SimpleEntry] should return NIO path pointing to the rt.jar or java.base") {
+    "classLocationPath[AbstractMap.SimpleEntry] should return NIO path pointing to the rt.jar or java.base"
+  ) {
     val p = IO.classLocationPath[java.util.AbstractMap.SimpleEntry[String, String]]
     assert(
       ((p.toString == "/java.base") && (p.getFileSystem.toString == "jrt:/"))
@@ -154,7 +160,8 @@ class IOSpec extends FunSuite {
   }
 
   test(
-    "classLocationFileOption[AbstractMap.SimpleEntry] should return File pointing to the rt.jar or None") {
+    "classLocationFileOption[AbstractMap.SimpleEntry] should return File pointing to the rt.jar or None"
+  ) {
     val opt = IO.classLocationFileOption[java.util.AbstractMap.SimpleEntry[String, String]]
     assert(
       opt match {
@@ -175,14 +182,16 @@ class IOSpec extends FunSuite {
     val s = IO.classfileLocation[java.lang.Integer].toString
     assert(
       (s == "jrt:/java.base/java/lang/Integer.class") ||
-        (s.startsWith("jar:file:") && s.endsWith("!/java/lang/Integer.class")))
+        (s.startsWith("jar:file:") && s.endsWith("!/java/lang/Integer.class"))
+    )
   }
 
   test("classfileLocation[AbstractMap.SimpleEntry] should return a URL pointing to *.class") {
     val s = IO.classfileLocation[java.util.AbstractMap.SimpleEntry[String, String]].toString
     assert(
       (s == "jrt:/java.base/java/util/AbstractMap$SimpleEntry.class") ||
-        (s.startsWith("jar:file:") && s.endsWith("!/java/util/AbstractMap$SimpleEntry.class")))
+        (s.startsWith("jar:file:") && s.endsWith("!/java/util/AbstractMap$SimpleEntry.class"))
+    )
   }
 
   test("classfileLocation[this.type] should return a URL pointing to *.class") {

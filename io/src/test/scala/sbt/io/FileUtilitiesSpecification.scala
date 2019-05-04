@@ -18,10 +18,12 @@ object WriteContentSpecification extends Properties("Write content") {
   property("Unzip doesn't stack overflow") = largeUnzip()
 
   implicit lazy val validChar: Arbitrary[Char] = Arbitrary(
-    for (i <- Gen.choose(0, 0xd7ff)) yield i.toChar)
+    for (i <- Gen.choose(0, 0xd7ff)) yield i.toChar
+  )
 
   implicit lazy val validString: Arbitrary[String] = Arbitrary(
-    arbitrary[List[Char]] map (_.mkString))
+    arbitrary[List[Char]] map (_.mkString)
+  )
 
   private def largeUnzip() = {
     testUnzip[Product]

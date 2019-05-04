@@ -222,7 +222,8 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
     assert(
       watchTest(parentDir, isDeletion(willBeDeleted.toPath), hasDeletion(willBeDeleted.toPath)) {
         IO.delete(willBeDeleted)
-      })
+      }
+    )
   }
 
   it should "ignore deletion of files not included in inclusion filter in subdirectories" in
@@ -443,16 +444,19 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
       }
     }
 
-  def watchTest(monitor: FileEventMonitor[FileEvent[_]],
-                filter: FileEvent[_] => Boolean,
-                check: Seq[FileEvent[_]] => Boolean)(modifier: => Unit): Boolean = {
+  def watchTest(
+      monitor: FileEventMonitor[FileEvent[_]],
+      filter: FileEvent[_] => Boolean,
+      check: Seq[FileEvent[_]] => Boolean
+  )(modifier: => Unit): Boolean = {
     modifier
     val events = monitor.poll(maxWait * 2, filter)
     check(events)
   }
 
   def watchTest(base: File, filter: FileEvent[_] => Boolean, check: Seq[FileEvent[_]] => Boolean)(
-      modifier: => Unit): Boolean = {
+      modifier: => Unit
+  ): Boolean = {
     val globs = base.toPath.toRealPath().toFile.scalaSourceGlobs
     val logger = new CachingWatchLogger
     val observable: Observable[Event] = newObservable(globs, logger)
@@ -528,9 +532,11 @@ object EventMonitorSpec {
   object NullLogger extends Logger { override def debug(msg: Any): Unit = {} }
   // This can't be defined in MonitorOps because of a bug in the scala 2.10 compiler
   @tailrec
-  private def drain(monitor: FileEventMonitor[Event],
-                    duration: FiniteDuration,
-                    events: Seq[Event]): Seq[Event] = {
+  private def drain(
+      monitor: FileEventMonitor[Event],
+      duration: FiniteDuration,
+      events: Seq[Event]
+  ): Seq[Event] = {
     val newEvents = monitor.poll(duration)
     if (newEvents.isEmpty) events else drain(monitor, duration, events ++ newEvents)
   }

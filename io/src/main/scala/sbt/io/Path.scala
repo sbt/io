@@ -278,8 +278,10 @@ sealed trait RichNioPath extends Any {
    */
   def setGroup(group: String): Unit = {
     val fileSystem: FileSystem = asPath.getFileSystem
-    Files.setOwner(asPath,
-                   fileSystem.getUserPrincipalLookupService.lookupPrincipalByGroupName(group))
+    Files.setOwner(
+      asPath,
+      fileSystem.getUserPrincipalLookupService.lookupPrincipalByGroupName(group)
+    )
     ()
   }
 }
@@ -402,8 +404,10 @@ object PathFinder {
       override def ---(excludePaths: PathFinder): PathFinder = new SingleFile(file) --- excludePaths
       override def pair[T](mapper: File => Option[T], errorIfNone: Boolean): Seq[(File, T)] =
         new SingleFile(file).pair(mapper)
-      override def descendantsExcept(include: FileFilter,
-                                     intermediateExclude: FileFilter): PathFinder =
+      override def descendantsExcept(
+          include: FileFilter,
+          intermediateExclude: FileFilter
+      ): PathFinder =
         new SingleFile(file).descendantsExcept(include, intermediateExclude)
       override def filter(f: File => Boolean): PathFinder = new SingleFile(file).filter(f)
       override def flatMap(f: File => PathFinder): PathFinder = new SingleFile(file).flatMap(f)
@@ -503,8 +507,10 @@ sealed trait PathFinderDefaults extends PathFinder.Combinator {
    * @param filter only include files that this filter accepts
    * @param walker use this walker to traverse the file system
    */
-  def globRecursive(filter: FileFilter,
-                    walker: (File, FileFilter, mutable.Set[File]) => Unit): PathFinder =
+  def globRecursive(
+      filter: FileFilter,
+      walker: (File, FileFilter, mutable.Set[File]) => Unit
+  ): PathFinder =
     new DescendantOrSelfPathFinder(this, filter, walker)
 
   /** Alias of globRecursive. */
@@ -604,7 +610,9 @@ private abstract class PathFinderImpl extends PathFinder {
 
 private class SingleFile(asFile: File) extends PathFinderImpl {
   override private[sbt] def addTo(fileSet: mutable.Set[File]): Unit =
-    if (asFile.exists) { fileSet += asFile; () }
+    if (asFile.exists) {
+      fileSet += asFile; ()
+    }
 
   override def toString: String = s"SingleFile($asFile)"
   override def equals(o: Any): Boolean = o match {
@@ -636,8 +644,8 @@ private abstract class FilterFiles extends PathFinderImpl with FileFilter {
 private class DescendantOrSelfPathFinder(
     val parent: PathFinder,
     val filter: FileFilter,
-    handleFileDescendant: (File, FileFilter, mutable.Set[File]) => Unit)
-    extends FilterFiles {
+    handleFileDescendant: (File, FileFilter, mutable.Set[File]) => Unit
+) extends FilterFiles {
   def this(parent: PathFinder, filter: FileFilter) =
     this(parent, filter, DescendantOrSelfPathFinder.default(_, _, _, Int.MaxValue))
   override private[sbt] def addTo(fileSet: mutable.Set[File]): Unit = {
@@ -683,8 +691,10 @@ private object DescendantOrSelfPathFinder {
       mutable.Set(FileVisitOption.FOLLOW_LINKS).asJava,
       depth - 1,
       new FileVisitor[NioPath] {
-        override def preVisitDirectory(dir: NioPath,
-                                       attrs: BasicFileAttributes): FileVisitResult = {
+        override def preVisitDirectory(
+            dir: NioPath,
+            attrs: BasicFileAttributes
+        ): FileVisitResult = {
           val file = dir.toFile
           if (filter.accept(file)) fileSet += file
           FileVisitResult.CONTINUE

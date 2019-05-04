@@ -30,11 +30,12 @@ import scala.util.control.NonFatal
 private[sbt] object WatchServiceBackedObservable {
   private val eventThreadId = new AtomicInteger(0)
 }
-private[sbt] class WatchServiceBackedObservable(s: NewWatchState,
-                                                delay: FiniteDuration,
-                                                closeService: Boolean,
-                                                logger: WatchLogger)
-    extends Registerable[FileEvent[FileAttributes]]
+private[sbt] class WatchServiceBackedObservable(
+    s: NewWatchState,
+    delay: FiniteDuration,
+    closeService: Boolean,
+    logger: WatchLogger
+) extends Registerable[FileEvent[FileAttributes]]
     with Observable[FileEvent[FileAttributes]] {
   import WatchServiceBackedObservable.eventThreadId
   private[this] type Event = FileEvent[FileAttributes]
@@ -58,7 +59,8 @@ private[sbt] class WatchServiceBackedObservable(s: NewWatchState,
         } catch {
           case NonFatal(e) =>
             logger.debug(
-              s"Error getting files from ${s.service}: $e\n${e.getStackTrace mkString "\n"}")
+              s"Error getting files from ${s.service}: $e\n${e.getStackTrace mkString "\n"}"
+            )
         }
         if (!closed.get) loopImpl()
       }
@@ -107,10 +109,12 @@ private[sbt] class WatchServiceBackedObservable(s: NewWatchState,
               case e => e :: Nil
             }).map {
               case d @ Deletion(path, attributes) =>
-                val newAttrs = FileAttributes(isDirectory = attributes.isDirectory,
-                                              isOther = false,
-                                              isRegularFile = attributes.isRegularFile,
-                                              isSymbolicLink = attributes.isSymbolicLink)
+                val newAttrs = FileAttributes(
+                  isDirectory = attributes.isDirectory,
+                  isOther = false,
+                  isRegularFile = attributes.isRegularFile,
+                  isSymbolicLink = attributes.isSymbolicLink
+                )
                 Deletion(path, newAttrs, d.occurredAt)
               case e => e
             }

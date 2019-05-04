@@ -32,9 +32,10 @@ private[sbt] object FileEvent {
       case Deletion(path, attributes)  => Some((path, attributes))
       case Update(path, _, attributes) => Some((path, attributes))
     }
-  private[sbt] abstract case class Creation[+T] private[FileEvent] (override val path: Path,
-                                                                    attributes: T)
-      extends FileEvent[T] {
+  private[sbt] abstract case class Creation[+T] private[FileEvent] (
+      override val path: Path,
+      attributes: T
+  ) extends FileEvent[T] {
     override def exists: Boolean = true
   }
   private[sbt] object Creation {
@@ -43,15 +44,17 @@ private[sbt] object FileEvent {
     def apply[T](path: Path, attributes: T, deadline: Deadline): Creation[T] =
       new Creation(path, attributes) { override val occurredAt: Deadline = deadline }
   }
-  private[sbt] abstract case class Update[+T] private[FileEvent] (override val path: Path,
-                                                                  previousAttributes: T,
-                                                                  attributes: T)
-      extends FileEvent[T] {
+  private[sbt] abstract case class Update[+T] private[FileEvent] (
+      override val path: Path,
+      previousAttributes: T,
+      attributes: T
+  ) extends FileEvent[T] {
     override def exists: Boolean = true
   }
   private[sbt] object Update {
     def apply[T](path: Path, previousAttributes: T, attributes: T)(
-        implicit timeSource: TimeSource): Update[T] =
+        implicit timeSource: TimeSource
+    ): Update[T] =
       new Update(path, previousAttributes, attributes) {
         override val occurredAt: Deadline = timeSource.now
       }
@@ -60,9 +63,10 @@ private[sbt] object FileEvent {
         override val occurredAt: Deadline = deadline
       }
   }
-  private[sbt] abstract case class Deletion[+T] private[FileEvent] (override val path: Path,
-                                                                    override val attributes: T)
-      extends FileEvent[T] {
+  private[sbt] abstract case class Deletion[+T] private[FileEvent] (
+      override val path: Path,
+      override val attributes: T
+  ) extends FileEvent[T] {
     override def exists: Boolean = false
   }
   private[sbt] object Deletion {

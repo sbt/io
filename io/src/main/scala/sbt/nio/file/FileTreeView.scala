@@ -40,10 +40,12 @@ object FileTreeView {
           .asScala
           .map { typedPath =>
             typedPath.getPath ->
-              FileAttributes(isDirectory = typedPath.isDirectory,
-                             isOther = false,
-                             isRegularFile = typedPath.isFile,
-                             isSymbolicLink = typedPath.isSymbolicLink)
+              FileAttributes(
+                isDirectory = typedPath.isDirectory,
+                isOther = false,
+                isRegularFile = typedPath.isFile,
+                isSymbolicLink = typedPath.isSymbolicLink
+              )
           }
           .toVector
       } catch {
@@ -73,40 +75,44 @@ object FileTreeView {
       val converter: ((Path, A)) => (Path, B) = {
         case (path: Path, attrs) => path -> f(path, attrs)
       }
-      path: Path =>
-        view.list(path).map(converter)
+      path: Path => view.list(path).map(converter)
     }
     def flatMap[B, A >: T](f: (Path, A) => Traversable[B]): FileTreeView.Nio[B] = {
       val converter: ((Path, A)) => Traversable[(Path, B)] = {
         case (path: Path, attrs) => f(path, attrs).map(path -> _)
       }
-      path: Path =>
-        view.list(path).flatMap(converter(_))
+      path: Path => view.list(path).flatMap(converter(_))
     }
   }
 
-  private[sbt] def all(globs: Traversable[Glob],
-                       view: FileTreeView.Nio[FileAttributes]): Seq[(Path, FileAttributes)] =
+  private[sbt] def all(
+      globs: Traversable[Glob],
+      view: FileTreeView.Nio[FileAttributes]
+  ): Seq[(Path, FileAttributes)] =
     all(globs, view, (_, _) => true)
-  private[sbt] def all(globs: Traversable[Glob],
-                       view: FileTreeView.Nio[FileAttributes],
-                       filter: (Path, FileAttributes) => Boolean): Seq[(Path, FileAttributes)] =
+  private[sbt] def all(
+      globs: Traversable[Glob],
+      view: FileTreeView.Nio[FileAttributes],
+      filter: (Path, FileAttributes) => Boolean
+  ): Seq[(Path, FileAttributes)] =
     iterator(globs, view, filter).toVector
 
   private[sbt] def iterator(
       globs: Traversable[Glob],
-      view: FileTreeView.Nio[FileAttributes]): Iterator[(Path, FileAttributes)] =
+      view: FileTreeView.Nio[FileAttributes]
+  ): Iterator[(Path, FileAttributes)] =
     iterator(globs, view, (_, _) => true)
   private[sbt] def iterator(
       globs: Traversable[Glob],
       view: FileTreeView.Nio[FileAttributes],
-      filter: (Path, FileAttributes) => Boolean): Iterator[(Path, FileAttributes)] = {
+      filter: (Path, FileAttributes) => Boolean
+  ): Iterator[(Path, FileAttributes)] = {
     val params = globs.toSeq.sorted.map(_.fileTreeViewListParameters)
     val needListDirectory: Path => Boolean = (path: Path) =>
       params.exists {
         case (base, maxDepth, _) =>
           path.startsWith(base) && base.relativize(path).getNameCount < maxDepth
-    }
+      }
     val visited = new util.HashSet[Path]
     val pathFilter: Path => Boolean = path => params.exists(_._3.matches(path))
     val totalFilter: (Path, FileAttributes) => Boolean = { (path, attributes) =>

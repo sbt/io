@@ -57,8 +57,10 @@ private[sbt] object FileTreeRepository {
    * @tparam T the generic type of the custom file attributes
    * @return a file repository.
    */
-  private[sbt] def legacy[T](logger: WatchLogger,
-                             watchService: WatchService): FileTreeRepository[FileAttributes] =
+  private[sbt] def legacy[T](
+      logger: WatchLogger,
+      watchService: WatchService
+  ): FileTreeRepository[FileAttributes] =
     new LegacyFileTreeRepository(logger, watchService)
 
 }

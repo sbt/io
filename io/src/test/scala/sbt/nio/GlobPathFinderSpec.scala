@@ -40,7 +40,8 @@ class GlobPathFinderSpec extends FlatSpec {
     assert((dir ** "bar.txt").get() == Nil)
     assert(
       dir.descendantsExcept(AllPassFilter, NothingFilter).get().toSet ==
-        PathFinder(dir).descendantsExcept(AllPassFilter, NothingFilter).get().toSet)
+        PathFinder(dir).descendantsExcept(AllPassFilter, NothingFilter).get().toSet
+    )
   }
   it should "work with combiners" in IO.withTemporaryDirectory { dir =>
     val subdir = Files.createDirectories(dir.toPath.resolve("subdir")).toFile

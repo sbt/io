@@ -105,7 +105,8 @@ object IO {
    */
   @deprecated(
     "classLocationFile may not work on JDK 11. Use classfileLocation, classLocationFileOption, or classLocationPath instead.",
-    "1.3.0")
+    "1.3.0"
+  )
   def classLocationFile(cl: Class[_]): File =
     classLocationFileOption(cl).getOrElse(sys.error(s"Unable to create File from $cl"))
 
@@ -116,7 +117,8 @@ object IO {
    */
   @deprecated(
     "classLocationFile may not work on JDK 11. Use classfileLocation, classLocationFileOption, or classLocationPath instead.",
-    "1.3.0")
+    "1.3.0"
+  )
   def classLocationFile[T](implicit mf: SManifest[T]): File = classLocationFile(mf.runtimeClass)
 
   /**
@@ -139,23 +141,28 @@ object IO {
     try {
       localcl
         .orElse(syscl)
-        .map(url =>
-          url.getProtocol match {
-            case "jar" =>
-              val path = url.getPath
-              val end = path.indexOf('!')
-              new URL(
-                if (end == -1) path
-                else path.substring(0, end))
-            case "jrt" =>
-              val path = url.getPath
-              val end = path.indexOf('/', 1)
-              new URL("jrt",
-                      null,
-                      if (end == -1) path
-                      else path.substring(0, end))
-            case _ => url
-        })
+        .map(
+          url =>
+            url.getProtocol match {
+              case "jar" =>
+                val path = url.getPath
+                val end = path.indexOf('!')
+                new URL(
+                  if (end == -1) path
+                  else path.substring(0, end)
+                )
+              case "jrt" =>
+                val path = url.getPath
+                val end = path.indexOf('/', 1)
+                new URL(
+                  "jrt",
+                  null,
+                  if (end == -1) path
+                  else path.substring(0, end)
+                )
+              case _ => url
+            }
+        )
         .getOrElse(sys.error("No class location for " + cl))
     } catch {
       case NonFatal(e) =>
@@ -216,10 +223,14 @@ object IO {
    * `val u4 = new URL("file:////unc/Users/foo/.sbt/preloaded")`.
    */
   def toFile(url: URL): File =
-    try { uriToFile(url.toURI) } catch { case _: URISyntaxException => new File(url.getPath) }
+    try {
+      uriToFile(url.toURI)
+    } catch { case _: URISyntaxException => new File(url.getPath) }
 
   def toFile(uri: URI): File =
-    try { uriToFile(uri) } catch { case _: URISyntaxException => new File(uri.getPath) }
+    try {
+      uriToFile(uri)
+    } catch { case _: URISyntaxException => new File(uri.getPath) }
 
   /** Converts the given URL to a File.  If the URL is for an entry in a jar, the File for the jar is returned. */
   def asFile(url: URL): File = urlAsFile(url) getOrElse sys.error("URL is not a file: " + url)
@@ -463,7 +474,9 @@ object IO {
         }
       }
       read()
-    } finally { if (close) in.close }
+    } finally {
+      if (close) in.close
+    }
   }
 
   /**
@@ -472,7 +485,11 @@ object IO {
    */
   def withTemporaryDirectory[T](action: File => T, keepDirectory: Boolean): T = {
     val dir = createTemporaryDirectory
-    try { action(dir) } finally { if (!keepDirectory) delete(dir) }
+    try {
+      action(dir)
+    } finally {
+      if (!keepDirectory) delete(dir)
+    }
   }
 
   /**
@@ -493,7 +510,9 @@ object IO {
         val randomName = "sbt_" + java.lang.Integer.toHexString(random.nextInt)
         val f = new File(baseDirectory, randomName)
 
-        try { createDirectory(f); f } catch { case NonFatal(_) => create(tries + 1) }
+        try {
+          createDirectory(f); f
+        } catch { case NonFatal(_) => create(tries + 1) }
       }
     }
     create(0)
@@ -510,7 +529,11 @@ object IO {
       action: File => T
   ): T = {
     val file = File.createTempFile(prefix, postfix)
-    try { action(file) } finally { if (!keepFile) file.delete(); () }
+    try {
+      action(file)
+    } finally {
+      if (!keepFile) file.delete(); ()
+    }
   }
 
   /**
@@ -703,7 +726,11 @@ object IO {
             (new JarOutputStream(fileOut, mf), "jar")
           case None => (new ZipOutputStream(fileOut), "zip")
         }
-      try { f(zipOut) } finally { zipOut.close }
+      try {
+        f(zipOut)
+      } finally {
+        zipOut.close
+      }
     }
   }
 
@@ -1021,9 +1048,13 @@ object IO {
       val stashed = stashLocations(dir, files.toArray)
       move(stashed)
 
-      try { f } catch {
+      try {
+        f
+      } catch {
         case e: Exception =>
-          try { move(stashed.map(_.swap)); throw e } catch { case _: Exception => throw e }
+          try {
+            move(stashed.map(_.swap)); throw e
+          } catch { case _: Exception => throw e }
       }
     }
 
@@ -1293,8 +1324,10 @@ object IO {
    * @see getModifiedTime
    * @see copyModifiedTime
    */
-  @deprecated("This method might be removed in the future, also see setModifiedTimeOrFalse()",
-              "1.1.3")
+  @deprecated(
+    "This method might be removed in the future, also see setModifiedTimeOrFalse()",
+    "1.1.3"
+  )
   def setModifiedTime(file: File, mtime: Long): Unit = Milli.setModifiedTime(file, mtime)
 
   /**

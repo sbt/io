@@ -45,10 +45,12 @@ class GlobSyntaxSpec extends FlatSpec {
     assert(!Glob(basePath, "foo[a-d]b").matches(basePath.resolve("abcdefooeb")))
     assert(Glob(basePath, p"**/*foo[a-d]b").matches(basePath.resolve("abcdefooab")))
     assert(
-      Glob(basePath, p"**/*/*foo[a-d]b").matches(basePath.resolve("bar").resolve("abcdefooab")))
+      Glob(basePath, p"**/*/*foo[a-d]b").matches(basePath.resolve("bar").resolve("abcdefooab"))
+    )
     assert(
       Glob(basePath, p"**/*/*foo[a-d]b")
-        .matches(basePath.resolve("bar").resolve("baz").resolve("buzz").resolve("abcdefooab")))
+        .matches(basePath.resolve("bar").resolve("baz").resolve("buzz").resolve("abcdefooab"))
+    )
   }
   they should "apply extension filters" in {
     assert(Glob(basePath, "*.txt").matches(basePath.resolve("foo.txt")))
@@ -59,8 +61,8 @@ class GlobSyntaxSpec extends FlatSpec {
     assert(!Glob(basePath, "*.{txt,md}").matches(basePath.resolve("foo.scala")))
     val complexGlob = Glob(basePath, AnyPath / RecursiveGlob / AnyPath / "*.{txt,md}")
     assert(
-      complexGlob.matches(
-        basePath.resolve("foo").resolve("bar").resolve("buzz").resolve("foo.txt")))
+      complexGlob.matches(basePath.resolve("foo").resolve("bar").resolve("buzz").resolve("foo.txt"))
+    )
     assert(complexGlob.matches(basePath.resolve("foo").resolve("bar").resolve("foo.txt")))
     assert(!complexGlob.matches(basePath.resolve("bar").resolve("foo.txt")))
   }
@@ -71,8 +73,8 @@ class GlobSyntaxSpec extends FlatSpec {
     assert(!Glob(basePath, "foo*").matches(basePath.resolve("bar").resolve("foo.txt")))
     val complexGlob = Glob(basePath, AnyPath / RecursiveGlob / AnyPath / "foo*")
     assert(
-      complexGlob.matches(
-        basePath.resolve("foo").resolve("bar").resolve("buzz").resolve("foo.txt")))
+      complexGlob.matches(basePath.resolve("foo").resolve("bar").resolve("buzz").resolve("foo.txt"))
+    )
     assert(complexGlob.matches(basePath.resolve("foo").resolve("bar").resolve("foo.txt")))
     assert(!complexGlob.matches(basePath.resolve("bar").resolve("foo.txt")))
   }
@@ -82,8 +84,8 @@ class GlobSyntaxSpec extends FlatSpec {
     assert(!Glob(basePath, "*foo").matches(basePath.resolve("bar").resolve("abcdfoo")))
     val complexGlob = Glob(basePath, AnyPath / RecursiveGlob / AnyPath / "*foo")
     assert(
-      complexGlob.matches(
-        basePath.resolve("foo").resolve("bar").resolve("buzz").resolve("abcdfoo")))
+      complexGlob.matches(basePath.resolve("foo").resolve("bar").resolve("buzz").resolve("abcdfoo"))
+    )
     assert(complexGlob.matches(basePath.resolve("foo").resolve("bar").resolve("abcdfoo")))
     assert(!complexGlob.matches(basePath.resolve("bar").resolve("abcdfoo")))
   }
@@ -94,7 +96,8 @@ class GlobSyntaxSpec extends FlatSpec {
     assert(Glob(basePath, RecursiveGlob / "foo*bar").matches(basePath.resolve("fooabcbar")))
     assert(
       Glob(basePath, RecursiveGlob / "foo*bar")
-        .matches(basePath.resolve("baz").resolve("buzz").resolve("fooabcbar")))
+        .matches(basePath.resolve("baz").resolve("buzz").resolve("fooabcbar"))
+    )
   }
   they should "work with file syntax" in IO.withTemporaryDirectory { dir =>
     val file = basePath.toFile
@@ -163,7 +166,9 @@ class GlobSyntaxSpec extends FlatSpec {
     assert(
       basePath.toGlob / RecursiveGlob / AnyPath / "*.txt" == Glob(
         basePath,
-        RecursiveGlob / AnyPath / "*.txt"))
+        RecursiveGlob / AnyPath / "*.txt"
+      )
+    )
     assert(basePath.toGlob / * == Glob(basePath, AnyPath))
     assert(basePath.toGlob / ** / * / "*.txt" == Glob(basePath, RecursiveGlob / AnyPath / "*.txt"))
   }
@@ -171,6 +176,7 @@ class GlobSyntaxSpec extends FlatSpec {
     implicit val option: RelativeGlobViewOption = RelativeGlobViewOption.Ignore
     assert(Glob(p"./foo").fileTreeViewListParameters._3.matches(Paths.get("foo").toAbsolutePath))
     assert(
-      Glob(p"./foo/*").fileTreeViewListParameters._3.matches(Paths.get(p"foo/bar").toAbsolutePath))
+      Glob(p"./foo/*").fileTreeViewListParameters._3.matches(Paths.get(p"foo/bar").toAbsolutePath)
+    )
   }
 }

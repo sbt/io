@@ -32,10 +32,12 @@ private[sbt] object DefaultFileTreeView extends FileTreeView.Nio[FileAttributes]
         .asScala
         .map { typedPath =>
           typedPath.getPath ->
-            FileAttributes(isDirectory = typedPath.isDirectory,
-                           isOther = false,
-                           isRegularFile = typedPath.isFile,
-                           isSymbolicLink = typedPath.isSymbolicLink)
+            FileAttributes(
+              isDirectory = typedPath.isDirectory,
+              isOther = false,
+              isRegularFile = typedPath.isFile,
+              isSymbolicLink = typedPath.isSymbolicLink
+            )
         }
         .toVector
     } catch {

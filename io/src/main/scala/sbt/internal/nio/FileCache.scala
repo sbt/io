@@ -120,15 +120,17 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
   }
   private[this] def updateGlob(path: Path): Glob = {
     val depth = globs.toIndexedSeq.view
-      .map(g =>
-        if (path.startsWith(g.base)) {
-          if (path == g.base) g.range._2
-          else
-            g.range._2 match {
-              case Int.MaxValue => Int.MaxValue
-              case d            => d - g.base.relativize(path).getNameCount
-            }
-        } else Int.MinValue)
+      .map(
+        g =>
+          if (path.startsWith(g.base)) {
+            if (path == g.base) g.range._2
+            else
+              g.range._2 match {
+                case Int.MaxValue => Int.MaxValue
+                case d            => d - g.base.relativize(path).getNameCount
+              }
+          } else Int.MinValue
+      )
       .min
     depth match {
       case Int.MaxValue => Glob(path, RecursiveGlob)
