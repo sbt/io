@@ -8,10 +8,12 @@ object NameFilterSpecification extends Properties("NameFilter") {
   property("All pass accepts everything") = forAll((s: String) => AllPassFilter.accept(s))
 
   property("Exact filter matches provided string") = forAll(
-    (s1: String, s2: String) => (new ExactFilter(s1)).accept(s2) == (s1 == s2))
+    (s1: String, s2: String) => (new ExactFilter(s1)).accept(s2) == (s1 == s2)
+  )
 
   property("Exact filter matches valid string") = forAll(
-    (s: String) => (new ExactFilter(s)).accept(s))
+    (s: String) => (new ExactFilter(s)).accept(s)
+  )
 
   property("Glob filter matches provided string if no *s") = forAll { (s1: String, s2: String) =>
     val stripped = stripAsterisksAndControl(s1)

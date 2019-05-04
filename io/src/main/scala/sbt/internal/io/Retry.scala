@@ -22,16 +22,16 @@ private[sbt] object Retry {
   }
   private[sbt] def apply[T](f: => T, excludedExceptions: Class[_ <: IOException]*): T =
     apply(f, limit, excludedExceptions: _*)
-  private[sbt] def apply[T](f: => T,
-                            limit: Int,
-                            excludedExceptions: Class[_ <: IOException]*): T = {
+  private[sbt] def apply[T](
+      f: => T,
+      limit: Int,
+      excludedExceptions: Class[_ <: IOException]*
+  ): T = {
     lazy val filter: Exception => Boolean = excludedExceptions match {
       case s if s.nonEmpty =>
-        (e: Exception) =>
-          !excludedExceptions.exists(_.isAssignableFrom(e.getClass))
+        (e: Exception) => !excludedExceptions.exists(_.isAssignableFrom(e.getClass))
       case _ =>
-        (_: Exception) =>
-          true
+        (_: Exception) => true
     }
     @tailrec
     def impl(attempt: Int): T = {
@@ -40,7 +40,9 @@ private[sbt] object Retry {
         case e: IOException if filter(e) && (attempt < limit) => (true, Left(e))
         case e: IOException                                   => (false, Left(e))
       }
-      if (retry) { Thread.sleep(0); impl(attempt + 1) } else {
+      if (retry) {
+        Thread.sleep(0); impl(attempt + 1)
+      } else {
         res match {
           case Right(r) => r
           case Left(e)  => throw e

@@ -22,15 +22,17 @@ object CopySpec extends Properties("Copy") {
       1 -> Gen.const(0)
     )
 
-  property("same contents") = forAll(fileSizeGen, arbLong.arbitrary)((size: Long, seed: Long) =>
-    IO.withTemporaryDirectory { dir =>
-      val f1 = new File(dir, "source")
-      val f2 = new File(dir, "dest")
-      generate(seed = seed, size = size, file = f1)
-      IO.copyFile(f1, f2)
-      checkContentsSame(f1, f2)
-      true
-  })
+  property("same contents") = forAll(fileSizeGen, arbLong.arbitrary)(
+    (size: Long, seed: Long) =>
+      IO.withTemporaryDirectory { dir =>
+        val f1 = new File(dir, "source")
+        val f2 = new File(dir, "dest")
+        generate(seed = seed, size = size, file = f1)
+        IO.copyFile(f1, f2)
+        checkContentsSame(f1, f2)
+        true
+      }
+  )
 
   def generate(seed: Long, size: Long, file: File) = {
     val rnd = new java.util.Random(seed)

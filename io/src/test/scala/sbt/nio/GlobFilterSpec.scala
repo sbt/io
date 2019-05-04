@@ -51,9 +51,11 @@ class GlobFilterSpec extends FlatSpec {
     assert(Glob(base, p"*/**/*.txt").matches(base.resolve("foo").resolve("bar.txt")))
     assert(
       Glob(base, p"*/**/*.txt")
-        .matches(base.resolve("foo").resolve("bar").resolve("baz").resolve("bar.txt")))
+        .matches(base.resolve("foo").resolve("bar").resolve("baz").resolve("bar.txt"))
+    )
     assert(
       !Glob(base, p"*/**/*.txt")
-        .matches(base.resolve("foo").resolve("bar").resolve("baz").resolve("bar.tx")))
+        .matches(base.resolve("foo").resolve("bar").resolve("baz").resolve("bar.tx"))
+    )
   }
 }

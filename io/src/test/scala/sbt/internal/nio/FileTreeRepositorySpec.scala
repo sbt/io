@@ -49,7 +49,8 @@ object FileTreeRepositorySpec {
       override def onNext(t: FileEvent[FileAttributes]): Unit = f(t.path)
     })
   def simpleCache(
-      observer: Observer[FileEvent[FileAttributes]]): FileTreeRepository[FileAttributes] = {
+      observer: Observer[FileEvent[FileAttributes]]
+  ): FileTreeRepository[FileAttributes] = {
     val underlying = new FileTreeRepositoryImpl()
     underlying.addObserver(observer)
     underlying

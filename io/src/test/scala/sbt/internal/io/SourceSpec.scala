@@ -17,18 +17,22 @@ class SourceSpec extends FlatSpec with Matchers {
     source.accept(Paths.get("/foo/bar/baz")) shouldBe false
   }
   it should "apply include filter" in {
-    val source = new Source(new File("/foo"),
-                            new SimpleFileFilter(_.toString.endsWith(".scala")),
-                            NothingFilter,
-                            true)
+    val source = new Source(
+      new File("/foo"),
+      new SimpleFileFilter(_.toString.endsWith(".scala")),
+      NothingFilter,
+      true
+    )
     source.accept(Paths.get("/foo/bar/baz.scala")) shouldBe true
     source.accept(Paths.get("/foo/bar/baz.java")) shouldBe false
   }
   it should "apply exclude filter" in {
-    val source = new Source(new File("/foo"),
-                            new SimpleFileFilter(_.toString.endsWith(".scala")),
-                            new SimpleFileFilter(_ == sbt.io.syntax.file("/foo/bar/buzz.scala")),
-                            true)
+    val source = new Source(
+      new File("/foo"),
+      new SimpleFileFilter(_.toString.endsWith(".scala")),
+      new SimpleFileFilter(_ == sbt.io.syntax.file("/foo/bar/buzz.scala")),
+      true
+    )
     source.accept(Paths.get("/foo/bar/baz.scala")) shouldBe true
     source.accept(Paths.get("/foo/bar/buzz.scala")) shouldBe false
   }

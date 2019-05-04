@@ -44,9 +44,10 @@ private[sbt] trait FileEventMonitor[+T] extends AutoCloseable {
 }
 private[sbt] object FileEventMonitor {
 
-  private[sbt] def apply[T](observable: Observable[FileEvent[T]],
-                            logger: WatchLogger = NullWatchLogger)(
-      implicit timeSource: TimeSource): FileEventMonitor[FileEvent[T]] =
+  private[sbt] def apply[T](
+      observable: Observable[FileEvent[T]],
+      logger: WatchLogger = NullWatchLogger
+  )(implicit timeSource: TimeSource): FileEventMonitor[FileEvent[T]] =
     new FileEventMonitorImpl[T](observable, logger)
 
   /**
@@ -72,17 +73,20 @@ private[sbt] object FileEventMonitor {
    * @tparam T the generic type for the [[Observable]] that we're monitoring
    * @return the [[FileEventMonitor]] instance.
    */
-  private[sbt] def antiEntropy[T](observable: Observable[FileEvent[T]],
-                                  period: FiniteDuration,
-                                  logger: WatchLogger,
-                                  quarantinePeriod: FiniteDuration,
-                                  retentionPeriod: FiniteDuration)(
-      implicit timeSource: TimeSource): FileEventMonitor[FileEvent[T]] = {
-    new AntiEntropyFileEventMonitor(period,
-                                    new FileEventMonitorImpl[T](observable, logger),
-                                    logger,
-                                    quarantinePeriod,
-                                    retentionPeriod)
+  private[sbt] def antiEntropy[T](
+      observable: Observable[FileEvent[T]],
+      period: FiniteDuration,
+      logger: WatchLogger,
+      quarantinePeriod: FiniteDuration,
+      retentionPeriod: FiniteDuration
+  )(implicit timeSource: TimeSource): FileEventMonitor[FileEvent[T]] = {
+    new AntiEntropyFileEventMonitor(
+      period,
+      new FileEventMonitorImpl[T](observable, logger),
+      logger,
+      quarantinePeriod,
+      retentionPeriod
+    )
   }
 
   /**
@@ -108,22 +112,25 @@ private[sbt] object FileEventMonitor {
    * @tparam T the generic type for the [[Observable]] that we're monitoring
    * @return the [[FileEventMonitor]] instance.
    */
-  private[sbt] def antiEntropy[T](fileEventMonitor: FileEventMonitor[FileEvent[T]],
-                                  period: FiniteDuration,
-                                  logger: WatchLogger,
-                                  quarantinePeriod: FiniteDuration,
-                                  retentionPeriod: FiniteDuration)(
-      implicit timeSource: TimeSource): FileEventMonitor[FileEvent[T]] = {
-    new AntiEntropyFileEventMonitor(period,
-                                    fileEventMonitor,
-                                    logger,
-                                    quarantinePeriod,
-                                    retentionPeriod)
+  private[sbt] def antiEntropy[T](
+      fileEventMonitor: FileEventMonitor[FileEvent[T]],
+      period: FiniteDuration,
+      logger: WatchLogger,
+      quarantinePeriod: FiniteDuration,
+      retentionPeriod: FiniteDuration
+  )(implicit timeSource: TimeSource): FileEventMonitor[FileEvent[T]] = {
+    new AntiEntropyFileEventMonitor(
+      period,
+      fileEventMonitor,
+      logger,
+      quarantinePeriod,
+      retentionPeriod
+    )
   }
 
   private class FileEventMonitorImpl[T](observable: Observable[FileEvent[T]], logger: WatchLogger)(
-      implicit timeSource: TimeSource)
-      extends FileEventMonitor[FileEvent[T]] {
+      implicit timeSource: TimeSource
+  ) extends FileEventMonitor[FileEvent[T]] {
     private case object Trigger
     private val events =
       new ConcurrentHashMap[JPath, FileEvent[T]]().asScala
@@ -169,8 +176,10 @@ private[sbt] object FileEventMonitor {
     }
     private val handle = observable.addObserver(add)
 
-    final override def poll(duration: Duration,
-                            filter: FileEvent[T] => Boolean): Seq[FileEvent[T]] = {
+    final override def poll(
+        duration: Duration,
+        filter: FileEvent[T] => Boolean
+    ): Seq[FileEvent[T]] = {
       val limit = duration match {
         case d: FiniteDuration => Deadline.now + d
         case _                 => Deadline.now + 1.day
@@ -210,7 +219,8 @@ private[sbt] object FileEventMonitor {
       fileEventMonitor: FileEventMonitor[FileEvent[T]],
       logger: WatchLogger,
       quarantinePeriod: FiniteDuration,
-      retentionPeriod: FiniteDuration)(implicit timeSource: TimeSource)
+      retentionPeriod: FiniteDuration
+  )(implicit timeSource: TimeSource)
       extends FileEventMonitor[FileEvent[T]] {
     private[this] val antiEntropyDeadlines = new ConcurrentHashMap[JPath, Deadline].asScala
     /*
@@ -225,8 +235,10 @@ private[sbt] object FileEventMonitor {
      */
     private[this] val quarantinedEvents = new ConcurrentHashMap[JPath, FileEvent[T]].asScala
     @tailrec
-    override final def poll(duration: Duration,
-                            filter: FileEvent[T] => Boolean): Seq[FileEvent[T]] = {
+    override final def poll(
+        duration: Duration,
+        filter: FileEvent[T] => Boolean
+    ): Seq[FileEvent[T]] = {
       val start = Deadline.now
       /*
        * The impl is tail recursive to handle the case when we quarantine a deleted file or find
@@ -247,7 +259,8 @@ private[sbt] object FileEventMonitor {
             case Some(d @ Deletion(_, oldAttributes)) =>
               antiEntropyDeadlines.put(path, d.occurredAt + period)
               logger.debug(
-                s"Triggering event for newly created path $path that was previously quarantined.")
+                s"Triggering event for newly created path $path that was previously quarantined."
+              )
               Some(Update(path, oldAttributes, attributes, d.occurredAt))
             case _ =>
               antiEntropyDeadlines.get(path) match {

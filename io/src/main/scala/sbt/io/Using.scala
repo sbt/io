@@ -23,7 +23,11 @@ abstract class Using[Source, T] {
   protected def open(src: Source): T
   def apply[R](src: Source)(f: T => R): R = {
     val resource = open(src)
-    try { f(resource) } finally { close(resource) }
+    try {
+      f(resource)
+    } finally {
+      close(resource)
+    }
   }
   protected def close(out: T): Unit
 }
@@ -94,7 +98,8 @@ object Using {
   val fileInputStream = file(f => new BufferedInputStream(new FileInputStream(f)))
 
   val urlInputStream = resource(
-    (u: URL) => translate("Error opening " + u + ": ")(new BufferedInputStream(u.openStream)))
+    (u: URL) => translate("Error opening " + u + ": ")(new BufferedInputStream(u.openStream))
+  )
 
   val fileOutputChannel = file(f => new FileOutputStream(f).getChannel)
   val fileInputChannel = file(f => new FileInputStream(f).getChannel)
@@ -126,8 +131,10 @@ object Using {
   val jarInputStream = wrap((in: InputStream) => new JarInputStream(in))
 
   def zipEntry(zip: ZipFile) =
-    resource((entry: ZipEntry) =>
-      translate("Error opening " + entry.getName + " in " + zip + ": ") {
-        zip.getInputStream(entry)
-    })
+    resource(
+      (entry: ZipEntry) =>
+        translate("Error opening " + entry.getName + " in " + zip + ": ") {
+          zip.getInputStream(entry)
+        }
+    )
 }

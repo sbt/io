@@ -48,11 +48,12 @@ object FileAttributes {
     override def isSymbolicLink: Boolean = false
     override def isOther: Boolean = false
   }
-  private final class FileAttributesImpl(override val isDirectory: Boolean,
-                                         override val isOther: Boolean,
-                                         override val isRegularFile: Boolean,
-                                         override val isSymbolicLink: Boolean)
-      extends FileAttributes {
+  private final class FileAttributesImpl(
+      override val isDirectory: Boolean,
+      override val isOther: Boolean,
+      override val isRegularFile: Boolean,
+      override val isSymbolicLink: Boolean
+  ) extends FileAttributes {
     override def hashCode: Int =
       (((isRegularFile.hashCode * 31) ^ isDirectory.hashCode) * 31) ^ isSymbolicLink.hashCode
     override def equals(o: Any): Boolean = o match {
@@ -77,17 +78,23 @@ object FileAttributes {
         try {
           val linkAttrs = Files.readAttributes(path, classOf[BasicFileAttributes])
           Right(
-            apply(linkAttrs.isDirectory,
-                  linkAttrs.isOther,
-                  linkAttrs.isRegularFile,
-                  isSymbolicLink = true))
+            apply(
+              linkAttrs.isDirectory,
+              linkAttrs.isOther,
+              linkAttrs.isRegularFile,
+              isSymbolicLink = true
+            )
+          )
         } catch {
           case _: NoSuchFieldException =>
             Right(
-              apply(isDirectory = false,
-                    isOther = false,
-                    isRegularFile = false,
-                    isSymbolicLink = true))
+              apply(
+                isDirectory = false,
+                isOther = false,
+                isRegularFile = false,
+                isSymbolicLink = true
+              )
+            )
         }
       } else
         Right(apply(attrs.isDirectory, attrs.isOther, attrs.isRegularFile, isSymbolicLink = false))
@@ -95,9 +102,11 @@ object FileAttributes {
       case _: NoSuchFileException => Right(NonExistent)
       case e: IOException         => Left(e)
     }
-  def apply(isDirectory: Boolean,
-            isOther: Boolean,
-            isRegularFile: Boolean,
-            isSymbolicLink: Boolean): FileAttributes =
+  def apply(
+      isDirectory: Boolean,
+      isOther: Boolean,
+      isRegularFile: Boolean,
+      isSymbolicLink: Boolean
+  ): FileAttributes =
     new FileAttributesImpl(isDirectory, isOther, isRegularFile, isSymbolicLink)
 }

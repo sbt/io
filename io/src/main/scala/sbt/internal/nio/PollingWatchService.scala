@@ -63,9 +63,11 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
   }
 
   @tailrec
-  private def pollImpl(batchSize: Int,
-                       duration: FiniteDuration,
-                       deadline: Deadline): Option[WatchKey] = {
+  private def pollImpl(
+      batchSize: Int,
+      duration: FiniteDuration,
+      deadline: Deadline
+  ): Option[WatchKey] = {
     pollQueue.poll() match {
       case null => None
       case key =>
@@ -73,7 +75,9 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
         key.poll() match {
           case r if r.isDefined => r
           case _ =>
-            if (batchSize > 1) { pollImpl(batchSize - 1, duration, deadline) } else if (!deadline.isOverdue) {
+            if (batchSize > 1) {
+              pollImpl(batchSize - 1, duration, deadline)
+            } else if (!deadline.isOverdue) {
               Thread.sleep(duration.toMillis)
               pollImpl(batchSize, duration, deadline)
             } else {
@@ -111,9 +115,10 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
 
   private object Overflow
       extends PollingWatchEvent(null, OVERFLOW.asInstanceOf[WatchEvent.Kind[Path]])
-  private class PollingWatchKey(private[PollingWatchService] val path: Path,
-                                eventKinds: WatchEvent.Kind[Path]*)
-      extends WatchKey {
+  private class PollingWatchKey(
+      private[PollingWatchService] val path: Path,
+      eventKinds: WatchEvent.Kind[Path]*
+  ) extends WatchKey {
     private[this] val events =
       new ArrayBlockingQueue[FileEvent[Long]](256)
     private[this] val hasOverflow = new AtomicBoolean(false)
@@ -168,7 +173,8 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
       }
     }
     private[PollingWatchService] def maybeAddEvent(
-        event: FileEvent[Long]): Option[PollingWatchKey] = {
+        event: FileEvent[Long]
+    ): Option[PollingWatchKey] = {
       def offer(event: FileEvent[Long]): Option[PollingWatchKey] = {
         if (!events.synchronized(events.offer(event))) hasOverflow.set(true)
         Some(this)

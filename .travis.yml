@@ -11,7 +11,7 @@ matrix:
   include:
    - scala: 2.12.8
      env:
-         CMD="mimaReportBinaryIssues scalafmtCheck test whitesourceCheckPolicies doc"
+         CMD="mimaReportBinaryIssues scalafmtCheckAll test whitesourceCheckPolicies doc"
          TRAVIS_SCALA_VERSION=2.12.8
          TRAVIS_JDK=adopt@1.8.192-12
      os: linux

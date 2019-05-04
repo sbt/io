@@ -22,7 +22,9 @@ class FileTreeViewSpec extends FlatSpec {
     val file = Files.createFile(nestedSubdir.resolve("file"))
     assert(
       view.list(Glob(dir, RecursiveGlob)).collect { case (p, a) if !a.isDirectory => p } == Seq(
-        file))
+        file
+      )
+    )
   }
   "iterator" should "be lazy" in IO.withTemporaryDirectory { dir =>
     val firstSubdir = Files.createDirectory(dir.toPath.resolve("first"))

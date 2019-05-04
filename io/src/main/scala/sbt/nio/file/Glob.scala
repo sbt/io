@@ -173,7 +173,8 @@ object Glob extends LowPriorityGlobOps {
       } else path
     }
     private[sbt] def fileTreeViewListParameters(
-        implicit option: RelativeGlobViewOption): (Path, Int, Glob) = {
+        implicit option: RelativeGlobViewOption
+    ): (Path, Int, Glob) = {
       val b = base
       val r = range._2
       val g = glob match {
@@ -419,9 +420,10 @@ object RelativeGlob {
     override def hashCode: Int = f.hashCode
     override def toString: String = f.toString
   }
-  private[file] final class SingleFileFunctionMatcher(private val base: Path,
-                                                      private val fileFilter: FileFilter)
-      extends Matcher {
+  private[file] final class SingleFileFunctionMatcher(
+      private val base: Path,
+      private val fileFilter: FileFilter
+  ) extends Matcher {
     override def matches(path: Path): Boolean = fileFilter.accept(base.resolve(path).toFile)
     override private[sbt] def matchers: List[Matcher] = this :: Nil
     override def equals(o: Any): Boolean = o match {

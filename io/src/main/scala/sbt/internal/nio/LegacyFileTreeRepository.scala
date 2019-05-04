@@ -34,7 +34,7 @@ private[sbt] class LegacyFileTreeRepository(logger: WatchLogger, watchService: W
   private[this] val globs = ConcurrentHashMap.newKeySet[Glob].asScala
   private[this] val fileCache = new FileCache(p => FileAttributes(p).getOrElse(NonExistent), globs)
   private[this] val observable
-    : Observable[FileEvent[FileAttributes]] with Registerable[FileEvent[FileAttributes]] =
+      : Observable[FileEvent[FileAttributes]] with Registerable[FileEvent[FileAttributes]] =
     new WatchServiceBackedObservable(
       new NewWatchState(globs, watchService, new ConcurrentHashMap[Path, WatchKey].asScala),
       100.millis,

@@ -14,12 +14,15 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
   private[nio] def antiEntropyMonitor[T <: FileAttributes](
       observable: Observable[FileEvent[T]],
       period: FiniteDuration,
-      logger: WatchLogger)(implicit timeSource: TimeSource): FileEventMonitor[FileEvent[T]] =
+      logger: WatchLogger
+  )(implicit timeSource: TimeSource): FileEventMonitor[FileEvent[T]] =
     FileEventMonitor.antiEntropy(observable, period, logger, 50.millis, 10.minutes)
   object TestAttributes {
-    def apply(isDirectory: Boolean = false,
-              isRegularFile: Boolean = false,
-              isSymbolicLink: Boolean = false): FileAttributes =
+    def apply(
+        isDirectory: Boolean = false,
+        isRegularFile: Boolean = false,
+        isSymbolicLink: Boolean = false
+    ): FileAttributes =
       FileAttributes(isDirectory, isOther = false, isRegularFile, isSymbolicLink)
   }
   class DeterminsticTimeSource extends TimeSource with AutoCloseable {
@@ -124,11 +127,13 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
     val antiEntropyPeriod = 40.millis
     val quarantinePeriod = antiEntropyPeriod / 2
     val monitor =
-      FileEventMonitor.antiEntropy(observers,
-                                   antiEntropyPeriod,
-                                   NullWatchLogger,
-                                   quarantinePeriod,
-                                   10.minutes)
+      FileEventMonitor.antiEntropy(
+        observers,
+        antiEntropyPeriod,
+        NullWatchLogger,
+        quarantinePeriod,
+        10.minutes
+      )
     val foo = Paths.get("foo")
     val fooAttributes = FileAttributes.NonExistent
     val fooDeletion = Deletion(foo, fooAttributes, Deadline.now)
@@ -142,11 +147,13 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
     val antiEntropyPeriod = 40.millis
     val quarantinePeriod = antiEntropyPeriod / 2
     val monitor =
-      FileEventMonitor.antiEntropy(observers,
-                                   antiEntropyPeriod,
-                                   NullWatchLogger,
-                                   quarantinePeriod,
-                                   10.minutes)
+      FileEventMonitor.antiEntropy(
+        observers,
+        antiEntropyPeriod,
+        NullWatchLogger,
+        quarantinePeriod,
+        10.minutes
+      )
     val foo = Paths.get("foo")
     val deletionAttributes = FileAttributes.NonExistent
     val fooDeletion = Deletion(foo, deletionAttributes)

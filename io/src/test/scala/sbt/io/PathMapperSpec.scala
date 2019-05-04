@@ -20,8 +20,9 @@ class PathMapperSpec extends fixture.FlatSpec with Matchers {
     )
     val target = base / "target" / "scala-2.11" / "classes"
 
-    val mappings = (files --- dirs) pair (file =>
-      rebase(dirs, target)(file) orElse (flat(target): File => Option[File])(file))
+    val mappings = (files --- dirs) pair (
+        file => rebase(dirs, target)(file) orElse (flat(target): File => Option[File])(file)
+    )
 
     mappings shouldBe Seq(
       base / "src" / "main" / "resources" / "scalac-plugin.xml" ->

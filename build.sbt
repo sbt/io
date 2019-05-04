@@ -1,8 +1,6 @@
 import Dependencies._
 import com.typesafe.tools.mima.core._, ProblemFilters._
 
-
-ThisBuild / scalafmtOnCompile := true
 ThisBuild / git.baseVersion := "1.3.0"
 ThisBuild / bintrayPackage := "io"
 ThisBuild / homepage := Some(url("https://github.com/sbt/io"))
@@ -25,6 +23,8 @@ def commonSettings: Seq[Setting[_]] = Seq(
   javacOptions in compile ++= Seq("-Xlint", "-Xlint:-serial"),
   crossScalaVersions := Seq(scala212, scala213),
   headerLicense := (ThisBuild / headerLicense).value,
+  scalafmtOnCompile := true,
+  Test / scalafmtOnCompile := true,
 )
 
 lazy val ioRoot = (project in file("."))

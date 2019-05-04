@@ -35,7 +35,8 @@ private[sbt] object SourceModificationWatch {
    */
   @deprecated("This is superseded by FileEventMonitor.poll", "1.1.7")
   def watch(delay: FiniteDuration, state: WatchState)(
-      terminationCondition: => Boolean): (Boolean, WatchState) = {
+      terminationCondition: => Boolean
+  ): (Boolean, WatchState) = {
     if (state.count == 0) {
       (true, state.withCount(1))
     } else {
@@ -47,11 +48,13 @@ private[sbt] object SourceModificationWatch {
           NullWatchLogger
         )
       val monitor: FileEventMonitor[FileEvent[FileAttributes]] =
-        FileEventMonitor.antiEntropy(observable,
-                                     200.milliseconds,
-                                     NullWatchLogger,
-                                     50.milliseconds,
-                                     10.minutes)
+        FileEventMonitor.antiEntropy(
+          observable,
+          200.milliseconds,
+          NullWatchLogger,
+          50.milliseconds,
+          10.minutes
+        )
       @tailrec
       def poll(): Boolean = {
         monitor.poll(10.millis) match {
@@ -146,10 +149,11 @@ private[sbt] final class WatchState private (
   }
 }
 
-private[sbt] class NewWatchState(private[sbt] val globs: mutable.Set[Glob],
-                                 private[sbt] val service: WatchService,
-                                 private[sbt] val registered: mutable.Map[Path, WatchKey])
-    extends AutoCloseable {
+private[sbt] class NewWatchState(
+    private[sbt] val globs: mutable.Set[Glob],
+    private[sbt] val service: WatchService,
+    private[sbt] val registered: mutable.Map[Path, WatchKey]
+) extends AutoCloseable {
   private[sbt] def register(path: Path): WatchKey =
     try {
       registered.get(path) match {
@@ -205,7 +209,8 @@ final class Source(
       else includeFilter
 
     (if (!recursive) p.getParent == base.toPath else p.startsWith(base.toPath)) && inc.accept(
-      p.toFile) && !excludeFilter.accept(p.toFile)
+      p.toFile
+    ) && !excludeFilter.accept(p.toFile)
   }
 
   /**

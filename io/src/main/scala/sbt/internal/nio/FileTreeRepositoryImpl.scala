@@ -34,10 +34,12 @@ private[sbt] class FileTreeRepositoryImpl[T] extends FileTreeRepository[FileAttr
   private[this] val closed = new AtomicBoolean(false)
   private[this] val underlying = FileTreeRepositories.get[FileAttributes](
     (typedPath: STypedPath) => {
-      FileAttributes(isDirectory = typedPath.isDirectory,
-                     isOther = false,
-                     isRegularFile = typedPath.isFile,
-                     isSymbolicLink = typedPath.isSymbolicLink)
+      FileAttributes(
+        isDirectory = typedPath.isDirectory,
+        isOther = false,
+        isRegularFile = typedPath.isFile,
+        isSymbolicLink = typedPath.isSymbolicLink
+      )
     },
     true
   )
@@ -58,8 +60,10 @@ private[sbt] class FileTreeRepositoryImpl[T] extends FileTreeRepository[FileAttr
       }
       ()
     }
-    override def onUpdate(oldEntry: FileTreeDataViews.Entry[FileAttributes],
-                          newEntry: FileTreeDataViews.Entry[FileAttributes]): Unit = {
+    override def onUpdate(
+        oldEntry: FileTreeDataViews.Entry[FileAttributes],
+        newEntry: FileTreeDataViews.Entry[FileAttributes]
+    ): Unit = {
       val path = newEntry.getTypedPath.getPath
       val oldEither = oldEntry.getValue.asScala
       val newEither = newEntry.getValue.asScala
