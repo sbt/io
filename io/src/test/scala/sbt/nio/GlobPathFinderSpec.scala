@@ -5,8 +5,6 @@ import java.nio.file.Files
 import org.scalatest.FlatSpec
 import sbt.io.syntax._
 import sbt.io.{ AllPassFilter, IO, NothingFilter, PathFinder }
-import sbt.nio.file.{ AnyPath, Glob, RecursiveGlob }
-import sbt.nio.file.syntax._
 
 object GlobPathFinderSpec {
   implicit class PathFinderOps[P](val p: P)(implicit f: P => PathFinder) {
@@ -55,13 +53,5 @@ class GlobPathFinderSpec extends FlatSpec {
   it should "return an empty list for directories that do not exists" in IO.withTemporaryDirectory {
     dir =>
       assert((dir / "this/is/not/a/file" * AllPassFilter).get == Nil)
-  }
-  it should "implicitly build a glob" in IO.withTemporaryDirectory { dir =>
-    // These use the FileBuilder extension class for file.
-    assert(dir.toGlob == Glob(dir))
-    assert(dir * AllPassFilter == Glob(dir, AnyPath))
-    assert((dir glob AllPassFilter) == Glob(dir, AnyPath))
-    assert(dir ** AllPassFilter == Glob(dir, RecursiveGlob))
-    assert((dir globRecursive AllPassFilter) == Glob(dir, RecursiveGlob))
   }
 }

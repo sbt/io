@@ -1,12 +1,9 @@
 package sbt.nio
 
 import java.io.File
-import java.nio.file.{ Files, Paths }
+import java.nio.file.Paths
 
 import org.scalatest.FlatSpec
-import sbt.io.FileFilter._
-import sbt.io.syntax._
-import sbt.io.{ AllPassFilter, DirectoryFilter, IO, SimpleFileFilter }
 import sbt.nio.TestHelpers._
 import sbt.nio.file.Glob.RelativeGlobViewOption
 import sbt.nio.file.RelativeGlob.{ *, ** }
@@ -98,31 +95,6 @@ class GlobSyntaxSpec extends FlatSpec {
       Glob(basePath, RecursiveGlob / "foo*bar")
         .matches(basePath.resolve("baz").resolve("buzz").resolve("fooabcbar"))
     )
-  }
-  they should "work with file syntax" in IO.withTemporaryDirectory { dir =>
-    val file = basePath.toFile
-    assert(file * AllPassFilter == Glob(basePath, AnyPath))
-    assert(file ** AllPassFilter == Glob(basePath, RecursiveGlob))
-    assert(file * "*.txt" == Glob(basePath, "*.txt"))
-    assert(file ** "*.txt" == Glob(basePath, RecursiveGlob / "*.txt"))
-    val simple = file ** new SimpleFileFilter(f => f == basePath.resolve("foo").toFile)
-    assert(simple.matches(basePath.resolve("foo")))
-    assert(!simple.matches(basePath.resolve("foox")))
-    assert(file * "*.txt" == Glob(basePath, "*.txt"))
-    assert(file * ("*.txt" || "*.md") == Glob(basePath, "*.{txt,md}"))
-    assert(file * "foo.txt" == Glob(basePath, "foo.txt"))
-    val subdir = Files.createDirectory(dir.toPath.resolve("base"))
-    val nestedSubdir = dir / "base" / "subdir" / "nested-subdir"
-    Files.createDirectories(nestedSubdir.toPath)
-    assert((dir * DirectoryFilter).matches(subdir))
-    assert(!(dir * -DirectoryFilter).matches(subdir))
-    assert((dir ** DirectoryFilter).matches(subdir))
-    assert(!(dir ** -DirectoryFilter).matches(subdir))
-    assert(((dir / "base" / "subdir").toGlob / AnyPath).matches(nestedSubdir.toPath))
-    assert(!(dir / "base" / "subdir" * -DirectoryFilter).matches(nestedSubdir.toPath))
-    assert((dir / "base" / "subdir" * DirectoryFilter).matches(nestedSubdir.toPath))
-    assert(!(dir / "base" ** -DirectoryFilter).matches(nestedSubdir.toPath))
-    assert((dir / "base" ** DirectoryFilter).matches(nestedSubdir.toPath))
   }
   they should "convert strings" in {
     assert((p"$basePath/*": Glob) == Glob(basePath, AnyPath))

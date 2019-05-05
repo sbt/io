@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import sbt.internal.nio._
 import sbt.io._
 import sbt.io.syntax._
-import sbt.nio.file.{ AnyPath, FileAttributes, Glob, RecursiveGlob }
+import sbt.nio.file.{ AnyPath, FileAttributes, FileTreeView, Glob, RecursiveGlob }
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -217,10 +217,8 @@ final class Source(
    * Gathers all the paths from this source without applying filters.
    * @return A sequence of all the paths collected from this source.
    */
-  private[sbt] def getUnfilteredPaths(): Seq[Path] = {
-    val pathFinder: Glob = if (recursive) base.allPaths else base.glob(AllPassFilter)
-    pathFinder.get().map(_.toPath)
-  }
+  private[sbt] def getUnfilteredPaths(): Seq[Path] =
+    FileTreeView.default.list(Glob(base, if (recursive) RecursiveGlob else AnyPath)).map(_._1)
 
   def withRecursive(recursive: Boolean): Source =
     new Source(base, includeFilter, excludeFilter, recursive)

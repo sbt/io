@@ -5,13 +5,7 @@ import java.nio.file.{ FileSystems, Path, Paths }
 import java.util
 
 import sbt.io._
-import sbt.nio.file.RelativeGlob.{
-  NoPath,
-  PathComponent,
-  SingleComponentMatcher,
-  SingleFileFunctionMatcher,
-  SingleNameFunctionMatcher
-}
+import sbt.nio.file.RelativeGlob.{ PathComponent, SingleComponentMatcher }
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -28,7 +22,7 @@ sealed trait Glob {
   def matches(path: Path): Boolean
 }
 
-object Glob extends LowPriorityGlobOps {
+object Glob {
   private[this] def comp[T](left: T, right: T)(implicit ordering: Ordering[T]): Int =
     ordering.compare(left, right)
   def apply(file: File): Glob = if (file.isAbsolute) Root(file.toPath) else apply(file.toString)
@@ -264,9 +258,6 @@ object Glob extends LowPriorityGlobOps {
     }
   }
 }
-private[sbt] trait LowPriorityGlobOps {
-  implicit def globToPathFinder(glob: Glob): PathFinder = new PathFinder.GlobPathFinder(glob)
-}
 
 sealed trait RelativeGlob extends Glob {
   private[file] def matchers: List[RelativeGlob.Matcher]
@@ -467,40 +458,5 @@ object RelativeGlob {
       case _                 => false
     }
     override def hashCode(): Int = glob.hashCode
-  }
-}
-
-private[sbt] object FileGlobApi {
-  private[sbt] final class FileGlobBuilder(val file: File) extends AnyVal {
-    private[this] def absolutePath(file: File): Path = file.toPath match {
-      case a if a.isAbsolute => a
-      case p                 => p.toAbsolutePath
-    }
-    def /(component: String): Glob = Glob(file.toPath.resolve(component))
-    def \(component: String): Glob = this / component
-    def glob(filter: FileFilter): Glob = filter match {
-      case AllPassFilter => Glob(absolutePath(file), AnyPath)
-      case f             => Glob(absolutePath(file)) / convert(f)
-    }
-    def *(filter: FileFilter): Glob = glob(filter)
-    def globRecursive(filter: FileFilter): Glob = filter match {
-      case AllPassFilter => Glob(absolutePath(file), RecursiveGlob)
-      case f             => Glob(absolutePath(file), RecursiveGlob / convert(f))
-    }
-
-    def allPaths: Glob = globRecursive(sbt.io.AllPassFilter)
-    def **(filter: FileFilter): Glob = globRecursive(filter)
-    private def convert(filter: FileFilter): RelativeGlob = filter match {
-      case AllPassFilter => AnyPath
-      case NothingFilter => NoPath
-      case ef: ExtensionFilter =>
-        ef.extensions match {
-          case Seq(extension) => RelativeGlob(s"*.$extension")
-          case extensions     => RelativeGlob(s"*.${extensions.mkString("{", ",", "}")}")
-        }
-      case exactFilter: ExactFilter => RelativeGlob(exactFilter.matchName)
-      case nf: NameFilter           => new SingleNameFunctionMatcher(nf.accept(_: String))
-      case f: FileFilter            => new SingleFileFunctionMatcher(file.toPath, f)
-    }
   }
 }

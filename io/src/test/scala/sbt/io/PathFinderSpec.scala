@@ -2,9 +2,10 @@ package sbt.io
 
 import java.io.File
 import java.nio.file.Files
-import scala.collection.mutable
 
 import org.scalatest.{ FlatSpec, Matchers }
+
+import scala.collection.mutable
 
 object PathFinderSpec {
   implicit class FileOps(val file: File) extends AnyVal {
