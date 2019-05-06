@@ -43,9 +43,8 @@ class FileTreeViewSpec extends FlatSpec {
         List(
           jvmGlob / "src" / "main" / "scala-2.12" / RecursiveGlob / "*.{scala,java}",
           jvmGlob / "src" / "main" / "scala" / RecursiveGlob / "*.{scala,java}",
-          // duplicate globs are added here intentionally
           jvmGlob / "src" / "main" / "java" / RecursiveGlob / "*.{scala,java}",
-          jvmGlob / "src" / "main" / "java" / RecursiveGlob / "*.{scala,java}",
+          jvmGlob / "src" / "main" / "java" / RecursiveGlob / "*.txt",
           srcGlob / "main" / "scala-2.12" / RecursiveGlob / "*.{scala,java}",
           srcGlob / "main" / "scala" / RecursiveGlob / "*.{scala,java}",
           srcGlob / "main" / "scala_2.11+" / RecursiveGlob / "*.{scala,java}",
