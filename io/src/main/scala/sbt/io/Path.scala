@@ -24,7 +24,6 @@ import java.nio.file.{
 }
 
 import com.swoval.files.FileTreeViews
-import com.swoval.functional.Filter
 import sbt.io.PathFinder.GlobPathFinder
 import sbt.nio.file.{ AnyPath, FileAttributes, FileTreeView, Glob }
 
@@ -664,14 +663,11 @@ private object DescendantOrSelfPathFinder {
         .list(
           file.toPath,
           depth - 1,
-          new Filter[com.swoval.files.TypedPath] {
-            override def accept(t: com.swoval.files.TypedPath): Boolean = {
-              filter.accept(new File(t.getPath.toString) {
-                override def isDirectory: Boolean = t.isDirectory
-                override def isFile: Boolean = t.isFile
-              })
-            }
-          }
+          t =>
+            filter.accept(new File(t.getPath.toString) {
+              override def isDirectory: Boolean = t.isDirectory
+              override def isFile: Boolean = t.isFile
+            })
         )
         .asScala
         .foreach(tp => fileSet += tp.getPath.toFile)
@@ -679,6 +675,7 @@ private object DescendantOrSelfPathFinder {
         override def isDirectory: Boolean = true
         override def isFile: Boolean = false
       }
+
       if (filter.accept(typedFile)) fileSet += file
       ()
     } catch {

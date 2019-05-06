@@ -31,6 +31,13 @@ trait PathFinderSpec extends FlatSpec with Matchers {
     val include = new SimpleFilter(_.startsWith("foo"))
     PathFinder(dir).descendantsExcept(include, NothingFilter).get shouldBe Seq(foo)
   }
+  it should "apply nothing filter" in IO.withTemporaryDirectory { dir =>
+    val dirPath = dir.toPath
+    val subdir = Files.createDirectories(dirPath.resolve("subdir")).toFile
+    val file = Files.createFile(dirPath.resolve("file")).toFile
+    PathFinder(dir).descendantsExcept("*", "*sub*").get.toSet shouldBe Set(dir, file)
+    PathFinder(dir).descendantsExcept("*", NothingFilter).get.toSet shouldBe Set(dir, file, subdir)
+  }
   it should "follow links" in IO.withTemporaryDirectory { dir =>
     IO.withTemporaryDirectory { otherDir =>
       val foo = Files.createTempFile(otherDir.toPath, "foo", "")
