@@ -107,7 +107,7 @@ object FileTreeView {
       view: FileTreeView.Nio[FileAttributes],
       filter: (Path, FileAttributes) => Boolean
   ): Iterator[(Path, FileAttributes)] = {
-    val params = globs.toSeq.sorted.map(_.fileTreeViewListParameters)
+    val params = globs.toSeq.sorted.distinct.map(_.fileTreeViewListParameters)
     val needListDirectory: Path => Boolean = (path: Path) =>
       params.exists {
         case (base, maxDepth, _) =>
@@ -157,7 +157,9 @@ object FileTreeView {
               case _: IOException =>
             }
             if (buffer.isEmpty) fillBuffer()
+          // if we've already visited the path, go to next
           case _ =>
+            if (buffer.isEmpty) fillBuffer()
         }
       }
       override def hasNext: Boolean = !buffer.isEmpty
