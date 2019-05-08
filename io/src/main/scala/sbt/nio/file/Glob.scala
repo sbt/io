@@ -70,11 +70,11 @@ object Glob {
             }
           case _: RelativeGlob => -1
         }
-      case RelativeGlob(leftMatchers) =>
+      case l: RelativeGlob =>
         right match {
-          case RelativeGlob(rightMatchers) => comp(leftMatchers, rightMatchers)
-          case _: Pattern                  => 1
-          case _: Root                     => 1
+          case r: RelativeGlob => comp(l.matchers, r.matchers)
+          case _: Pattern      => 1
+          case _: Root         => 1
         }
       case Root(leftRoot) =>
         right match {
@@ -85,10 +85,8 @@ object Glob {
   }
   private object Root {
     implicit val ordering: Ordering[Root] = Ordering.by(_.root)
-    def apply(value: Path): Root = new Root(value)
-    def unapply(root: Root): Option[Path] = Some(root.root)
   }
-  private final class Root(val root: Path) extends Glob {
+  private final case class Root(root: Path) extends Glob {
     require(root.isAbsolute, s"Tried to construct absolute glob from relative path $root")
     override def matches(path: Path): Boolean = root == path
     override def toString: String = root.toString
@@ -98,18 +96,11 @@ object Glob {
     }
     override def hashCode: Int = root.hashCode
   }
-  private[nio] sealed trait Pattern extends Glob {
-    def root: Path
-    def relative: RelativeGlob
-  }
+
   private[nio] object Pattern {
     implicit val ordering: Ordering[Pattern] = Ordering.by(p => (p.root, p.relative))
-    def apply(root: Path, relative: RelativeGlob): Pattern = new PatternImpl(root, relative)
-    def unapply(pattern: Pattern): Option[(Path, RelativeGlob)] =
-      Some((pattern.root, pattern.relative))
   }
-  private final class PatternImpl(override val root: Path, override val relative: RelativeGlob)
-      extends Pattern {
+  private[nio] final case class Pattern(root: Path, relative: RelativeGlob) extends Glob {
     override def matches(path: Path): Boolean =
       path.startsWith(root) && ((path != root) && relative.matches(root.relativize(path)))
     override def equals(o: Any): Boolean = o match {
@@ -291,8 +282,6 @@ object RelativeGlob {
   def apply(matchers: String*): RelativeGlob =
     new RelativeGlobImpl(matchers.view.filterNot(_ == ".").map(Matcher.apply).toList)
   private[sbt] def apply(matchers: List[Matcher]): RelativeGlob = new RelativeGlobImpl(matchers)
-  private[sbt] def unapply(relativeGlob: RelativeGlob): Option[List[Matcher]] =
-    Some(relativeGlob.matchers)
   implicit val ordering: Ordering[RelativeGlob] = Ordering.by(_.matchers)
   private[file] def range(relative: RelativeGlob) = {
     val res = relative.matchers.foldLeft((0, 0)) {
