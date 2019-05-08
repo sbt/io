@@ -112,6 +112,7 @@ final class OrNameFilter(override val left: NameFilter, override val right: Name
 
 /**
  * Represents a filter for files that end in a given list of extensions.
+ *
  * @param extensions the extensions to accept
  */
 final class ExtensionFilter(val extensions: String*) extends NameFilter {
@@ -263,7 +264,8 @@ sealed class SimpleFilter(val acceptFunction: String => Boolean) extends NameFil
 }
 
 /** A [[NameFilter]] that accepts a name if it matches the regular expression defined by `pattern`. */
-final class PatternFilter(val pattern: Pattern) extends NameFilter {
+final class PatternFilter(val parts: Seq[String], val pattern: Pattern) extends NameFilter {
+  def this(pattern: Pattern) = this(Nil: Seq[String], pattern)
   private[this] val lock = new Object
   def accept(name: String): Boolean = lock.synchronized(pattern.matcher(name).matches)
   override def toString = s"PatternFilter($pattern)"
@@ -277,11 +279,13 @@ final class PatternFilter(val pattern: Pattern) extends NameFilter {
 /** A [[NameFilter]] that accepts all names. That is, `accept` always returns `true`. */
 case object AllPassFilter extends NameFilter {
   def accept(name: String) = true
+  override def unary_- : NameFilter = NothingFilter
 }
 
 /** A [[NameFilter]] that accepts nothing.  That is, `accept` always returns `false`. */
 case object NothingFilter extends NameFilter {
   def accept(name: String) = false
+  override def unary_- : NameFilter = AllPassFilter
 }
 
 object NameFilter {
@@ -327,7 +331,7 @@ object GlobFilter {
         case Array("", ext) if ext.startsWith(".") => new ExtensionFilter(ext.drop(1))
         case Array(prefix, "")                     => new PrefixFilter(prefix)
         case Array("", suffix)                     => new SuffixFilter(suffix)
-        case _                                     => new PatternFilter(Pattern.compile(parts.map(quote).mkString(".*")))
+        case _                                     => new PatternFilter(parts, Pattern.compile(parts.map(quote).mkString(".*")))
       }
     }
   }
