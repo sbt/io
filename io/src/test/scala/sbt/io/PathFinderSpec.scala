@@ -32,6 +32,17 @@ trait PathFinderSpec extends FlatSpec with Matchers {
     val include = new SimpleFilter(_.startsWith("foo"))
     PathFinder(dir).descendantsExcept(include, NothingFilter).get shouldBe Seq(foo)
   }
+  it should "apply exclude filter" in IO.withTemporaryDirectory { dir =>
+    val excludeDir = Files.createDirectories(dir.toPath.resolve("sbt-0.13"))
+    val includeDir = Files.createDirectories(dir.toPath.resolve("sbt-1.0"))
+    val Seq(excludeFile, includeFile) = Seq(excludeDir, includeDir).map { d =>
+      val src = Files.createDirectories(d.resolve("src").resolve("main").resolve("scala"))
+      Files.createFile(src.resolve("foo.scala")).toFile
+    }
+    val files = PathFinder(dir).descendantsExcept("*.scala", s"sbt-0.13").get()
+    assert(files == Seq(includeFile))
+    assert((PathFinder(dir) ** "*.scala").get().toSet == Set(excludeFile, includeFile))
+  }
   it should "apply nothing filter" in IO.withTemporaryDirectory { dir =>
     val dirPath = dir.toPath
     val subdir = Files.createDirectories(dirPath.resolve("subdir")).toFile

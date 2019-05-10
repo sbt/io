@@ -558,7 +558,7 @@ sealed trait PathFinderDefaults extends PathFinder.Combinator {
    * Typical usage is <code>descendantsExcept("*.jar", ".svn")</code>
    */
   override def descendantsExcept(include: FileFilter, intermediateExclude: FileFilter): PathFinder =
-    this ** (include -- intermediateExclude)
+    (this ** include) --- (this ** intermediateExclude ** include)
 
   /**
    * Only keeps paths for which `f` returns true.
