@@ -12,6 +12,7 @@ package sbt.internal.nio
 
 import java.io.IOException
 import java.nio.file.{ Path => NioPath }
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 import com.swoval.files.FileTreeDataViews.CacheObserver
@@ -23,6 +24,7 @@ import sbt.nio.file.{ FileAttributes, Glob }
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.VectorBuilder
+import scala.util.Properties
 
 /**
  * The default implemenation of [[FileTreeRepository]]. It delegates all of its methods to the
@@ -44,6 +46,8 @@ private[sbt] class FileTreeRepositoryImpl[T] extends FileTreeRepository[FileAttr
     true
   )
   private[this] val observers = new Observers[FileEvent[FileAttributes]]
+  private[this] val registered = ConcurrentHashMap.newKeySet[NioPath].asScala
+  private[this] val isMac = Properties.isMac
 
   underlying.addCacheObserver(new CacheObserver[FileAttributes] {
     override def onCreate(newEntry: FileTreeDataViews.Entry[FileAttributes]): Unit = {
@@ -105,8 +109,28 @@ private[sbt] class FileTreeRepositoryImpl[T] extends FileTreeRepository[FileAttr
   }
   override def register(glob: Glob): Either[IOException, Observable[FileEvent[FileAttributes]]] = {
     throwIfClosed("register")
-    underlying.register(glob.base, glob.range.toSwovalDepth).asScala match {
-      case Right(_) => new RegisterableObservable(observers).register(glob)
+    val base = glob.base
+    if (isMac) {
+      // workaround for https://github.com/sbt/sbt/issues/4603
+      val parent = glob.base.getParent
+      if (!registered.contains(parent)) {
+        if (registered.exists(
+              path =>
+                path.getParent == parent && {
+                  val leftFileName = path.getFileName.toString
+                  val rightFileName = base.getFileName.toString
+                  leftFileName != rightFileName && (leftFileName
+                    .startsWith(rightFileName) || rightFileName.startsWith(leftFileName))
+                }
+            )) {
+          register(Glob(parent))
+        }
+      }
+    }
+    underlying.register(base, glob.range.toSwovalDepth).asScala match {
+      case Right(_) =>
+        registered.add(base)
+        new RegisterableObservable(observers).register(glob)
       case Left(ex) => Left(ex)
     }
   }

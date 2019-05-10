@@ -147,6 +147,20 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
       }
     }
   }
+  it should "work with directory file name overlap" in withTempDir { dir =>
+    val foo = Files.createDirectories(dir.resolve("foo"))
+    val foobar = Files.createDirectories(dir.resolve("foobar"))
+    val seenFiles = new java.util.HashSet[Path]
+    val latch = new CountDownLatch(2)
+    val observer: Observer[FileEvent[FileAttributes]] =
+      (fe: FileEvent[FileAttributes]) =>
+        if (fe.path.getFileName == Paths.get("file") && seenFiles.add(fe.path)) latch.countDown()
+    using(simpleCache(observer)) { c =>
+      Seq(foo, foobar).foreach(dir => c.register(Glob(dir, RecursiveGlob)))
+      Seq(foo, foobar).foreach(dir => Files.createFile(dir.resolve("file")))
+      assert(latch.await(1, TimeUnit.SECONDS))
+    }
+  }
 
   it should "detect many creations and deletions" in withTempDir { dir =>
     val base = dir.toRealPath()
