@@ -4,7 +4,6 @@ import java.nio.file.Files
 
 import org.scalatest.FlatSpec
 import sbt.io.IO
-import sbt.nio.TestHelpers._
 import sbt.nio.file.{ FileTreeView, Glob, RecursiveGlob }
 
 class TraversableGlobSpec extends FlatSpec {
@@ -28,7 +27,7 @@ class TraversableGlobSpec extends FlatSpec {
       val dir = dirFile.toPath
       val subdir = Files.createDirectories(dir.resolve("subdir"))
       val file = Files.createFile(subdir.resolve("file.txt"))
-      val globs = Seq[Glob](p"$dir/**", p"$dir/**/*.txt", p"$subdir/*/*.txt", Glob(file))
+      val globs = Seq[Glob](s"$dir/**", s"$dir/**/*.txt", s"$subdir/*/*.txt", Glob(file))
       val actual = FileTreeView.default.list(globs).map(_._1).sorted
       val expected = Seq(subdir, file)
       assert(actual == expected)
@@ -42,7 +41,7 @@ class TraversableGlobSpec extends FlatSpec {
       val deeply = Files.createDirectories(nested.resolve("deeply"))
       val txtFile = Files.createFile(nested.resolve("file.txt"))
       val mdFile = Files.createFile(deeply.resolve("file.md"))
-      val globs = Seq[Glob](p"$dir/**/*.md", p"$subdir/*.txt", p"$nested/*.md", p"$nested/*.txt")
+      val globs = Seq[Glob](s"$dir/**/*.md", s"$subdir/*.txt", s"$nested/*.md", s"$nested/*.txt")
       val actual = FileTreeView.default.list(globs).map(_._1).sorted
       val expected = Seq(mdFile, txtFile)
       assert(actual == expected)

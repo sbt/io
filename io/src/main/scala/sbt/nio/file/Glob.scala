@@ -258,6 +258,10 @@ object Glob {
                   components.add(stringBuilder.toString)
                   ()
                 }
+              case '/' =>
+                components.add(stringBuilder.toString)
+                stringBuilder.clear
+                fillComponents(i + 1)
               case c =>
                 stringBuilder.append(c)
                 fillComponents(i + 1)

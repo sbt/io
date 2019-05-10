@@ -5,7 +5,6 @@ import java.nio.file.Paths
 import org.scalatest.FlatSpec
 import sbt.io.IO
 import sbt.io.syntax._
-import sbt.nio.TestHelpers._
 import sbt.nio.file.{ AnyPath, Glob, RecursiveGlob }
 
 class GlobFilterSpec extends FlatSpec {
@@ -35,17 +34,17 @@ class GlobFilterSpec extends FlatSpec {
   }
   it should "work with depth" in {
     val base = Paths.get("").toAbsolutePath.getRoot.resolve("foo").resolve("bar")
-    assert(Glob(base, p"*/*.txt").matches(base.resolve("foo").resolve("bar.txt")))
-    assert(!Glob(base, p"*/*/*.txt").matches(base.resolve("foo").resolve("bar.txt")))
-    assert(Glob(base, p"*/*/*.txt").matches(base.resolve("foo").resolve("baz").resolve("bar.txt")))
-    assert(!Glob(base, p"*/*/*.txt").matches(base.resolve("foo").resolve("baz").resolve("bar.tx")))
-    assert(Glob(base, p"*/**/*.txt").matches(base.resolve("foo").resolve("bar.txt")))
+    assert(Glob(base, s"*/*.txt").matches(base.resolve("foo").resolve("bar.txt")))
+    assert(!Glob(base, s"*/*/*.txt").matches(base.resolve("foo").resolve("bar.txt")))
+    assert(Glob(base, s"*/*/*.txt").matches(base.resolve("foo").resolve("baz").resolve("bar.txt")))
+    assert(!Glob(base, s"*/*/*.txt").matches(base.resolve("foo").resolve("baz").resolve("bar.tx")))
+    assert(Glob(base, s"*/**/*.txt").matches(base.resolve("foo").resolve("bar.txt")))
     assert(
-      Glob(base, p"*/**/*.txt")
+      Glob(base, s"*/**/*.txt")
         .matches(base.resolve("foo").resolve("bar").resolve("baz").resolve("bar.txt"))
     )
     assert(
-      !Glob(base, p"*/**/*.txt")
+      !Glob(base, s"*/**/*.txt")
         .matches(base.resolve("foo").resolve("bar").resolve("baz").resolve("bar.tx"))
     )
   }
