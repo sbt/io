@@ -1,12 +1,19 @@
+/*
+ * sbt IO
+ *
+ * Copyright 2011 - 2019, Lightbend, Inc.
+ * Copyright 2008 - 2010, Mark Harrah
+ *
+ * Licensed under Apache License 2.0
+ * (http://www.apache.org/licenses/LICENSE-2.0).
+ */
+
 package sbt.nio
 
 import java.io.File
-import java.nio.file.{ Files, Paths }
+import java.nio.file.Paths
 
 import org.scalatest.FlatSpec
-import sbt.io.FileFilter._
-import sbt.io.syntax._
-import sbt.io.{ AllPassFilter, DirectoryFilter, IO, SimpleFileFilter }
 import sbt.nio.TestHelpers._
 import sbt.nio.file.Glob.RelativeGlobViewOption
 import sbt.nio.file.RelativeGlob.{ *, ** }
@@ -23,7 +30,7 @@ class GlobSyntaxSpec extends FlatSpec {
     assert(Glob(basePath, AnyPath) == Glob(basePath, AnyPath))
     assert(Glob(basePath, RecursiveGlob) == Glob(basePath, RecursiveGlob))
     assert(Glob(basePath, AnyPath / RecursiveGlob) == Glob(basePath, AnyPath / RecursiveGlob))
-    assert(Glob(basePath, p"*/**") == Glob(basePath, AnyPath / RecursiveGlob))
+    assert(Glob(basePath, s"*/**") == Glob(basePath, AnyPath / RecursiveGlob))
     assert(!Glob(basePath, AnyPath).matches(basePath))
     assert(!Glob(basePath, RecursiveGlob).matches(basePath))
   }
@@ -43,12 +50,12 @@ class GlobSyntaxSpec extends FlatSpec {
     assert(Glob(basePath, "*foo[a-d]b").matches(basePath.resolve("fooab")))
     assert(Glob(basePath, "*foo[a-d]b").matches(basePath.resolve("abcdefooab")))
     assert(!Glob(basePath, "foo[a-d]b").matches(basePath.resolve("abcdefooeb")))
-    assert(Glob(basePath, p"**/*foo[a-d]b").matches(basePath.resolve("abcdefooab")))
+    assert(Glob(basePath, s"**/*foo[a-d]b").matches(basePath.resolve("abcdefooab")))
     assert(
-      Glob(basePath, p"**/*/*foo[a-d]b").matches(basePath.resolve("bar").resolve("abcdefooab"))
+      Glob(basePath, s"**/*/*foo[a-d]b").matches(basePath.resolve("bar").resolve("abcdefooab"))
     )
     assert(
-      Glob(basePath, p"**/*/*foo[a-d]b")
+      Glob(basePath, s"**/*/*foo[a-d]b")
         .matches(basePath.resolve("bar").resolve("baz").resolve("buzz").resolve("abcdefooab"))
     )
   }
@@ -92,45 +99,21 @@ class GlobSyntaxSpec extends FlatSpec {
   they should "apply split filters" in {
     assert(Glob(basePath, "foo*bar").matches(basePath.resolve("foobar")))
     assert(Glob(basePath, "foo*bar").matches(basePath.resolve("fooabcbar")))
-    assert(Glob(basePath.getParent, p"bar/foo*bar").matches(basePath.resolve("fooabcbar")))
+    assert(Glob(basePath.getParent, s"bar/foo*bar").matches(basePath.resolve("fooabcbar")))
     assert(Glob(basePath, RecursiveGlob / "foo*bar").matches(basePath.resolve("fooabcbar")))
     assert(
       Glob(basePath, RecursiveGlob / "foo*bar")
         .matches(basePath.resolve("baz").resolve("buzz").resolve("fooabcbar"))
     )
   }
-  they should "work with file syntax" in IO.withTemporaryDirectory { dir =>
-    val file = basePath.toFile
-    assert(file * AllPassFilter == Glob(basePath, AnyPath))
-    assert(file ** AllPassFilter == Glob(basePath, RecursiveGlob))
-    assert(file * "*.txt" == Glob(basePath, "*.txt"))
-    assert(file ** "*.txt" == Glob(basePath, RecursiveGlob / "*.txt"))
-    val simple = file ** new SimpleFileFilter(f => f == basePath.resolve("foo").toFile)
-    assert(simple.matches(basePath.resolve("foo")))
-    assert(!simple.matches(basePath.resolve("foox")))
-    assert(file * "*.txt" == Glob(basePath, "*.txt"))
-    assert(file * ("*.txt" || "*.md") == Glob(basePath, "*.{txt,md}"))
-    assert(file * "foo.txt" == Glob(basePath, "foo.txt"))
-    val subdir = Files.createDirectory(dir.toPath.resolve("base"))
-    val nestedSubdir = dir / "base" / "subdir" / "nested-subdir"
-    Files.createDirectories(nestedSubdir.toPath)
-    assert((dir * DirectoryFilter).matches(subdir))
-    assert(!(dir * -DirectoryFilter).matches(subdir))
-    assert((dir ** DirectoryFilter).matches(subdir))
-    assert(!(dir ** -DirectoryFilter).matches(subdir))
-    assert(((dir / "base" / "subdir").toGlob / AnyPath).matches(nestedSubdir.toPath))
-    assert(!(dir / "base" / "subdir" * -DirectoryFilter).matches(nestedSubdir.toPath))
-    assert((dir / "base" / "subdir" * DirectoryFilter).matches(nestedSubdir.toPath))
-    assert(!(dir / "base" ** -DirectoryFilter).matches(nestedSubdir.toPath))
-    assert((dir / "base" ** DirectoryFilter).matches(nestedSubdir.toPath))
-  }
   they should "convert strings" in {
-    assert((p"$basePath/*": Glob) == Glob(basePath, AnyPath))
-    assert((p"$basePath/**": Glob) == Glob(basePath, RecursiveGlob))
-    assert((p"$basePath/*/*.txt": Glob) == Glob(basePath, AnyPath / "*.txt"))
-    assert((p"$basePath/**/*.txt": Glob) == Glob(basePath, RecursiveGlob / "*.txt"))
-    assert((p"$basePath/*/*/*.txt": Glob) == Glob(basePath, AnyPath / AnyPath / "*.txt"))
-    assert((p"$basePath/*/**/*.txt": Glob) == Glob(basePath, AnyPath / RecursiveGlob / "*.txt"))
+    assert((s"$basePath/*": Glob) == Glob(basePath, AnyPath))
+    assert((s"$basePath/**": Glob) == Glob(basePath, RecursiveGlob))
+    assert((s"$basePath/*/*.txt": Glob) == Glob(basePath, AnyPath / "*.txt"))
+    assert((s"$basePath/**/*.txt": Glob) == Glob(basePath, RecursiveGlob / "*.txt"))
+    assert((s"$basePath/*/*/*.txt": Glob) == Glob(basePath, AnyPath / AnyPath / "*.txt"))
+    assert((s"$basePath/*/**/*.txt": Glob) == Glob(basePath, AnyPath / RecursiveGlob / "*.txt"))
+    assert(Glob(basePath, "foo/bar/*.txt") == Glob(basePath, RelativeGlob("foo") / "bar" / "*.txt"))
   }
   they should "handle escaped characters" in {
     assert((basePath + File.separator + "\\{": Glob).matches(basePath.resolve("{")))
@@ -151,14 +134,15 @@ class GlobSyntaxSpec extends FlatSpec {
     assert((basePath.toGlob / "baz" / "buzz" / AnyPath).base == basePath / "baz" / "buzz")
   }
   "show" should "represent globs like the shell" in {
-    assert(Glob(basePath, "foo.txt").toString == p"$basePath/foo.txt")
-    assert(Glob(basePath, "*").toString == p"$basePath/*")
-    assert((p"$basePath/*": Glob).toString == p"$basePath/*")
+    val sep = File.separatorChar
+    assert(Glob(basePath, "foo.txt").toString == s"$basePath${sep}foo.txt")
+    assert(Glob(basePath, "*").toString == s"$basePath${sep}*")
+    assert((s"$basePath/*": Glob).toString == s"$basePath${sep}*")
     // extensions
-    assert(Glob(basePath, "*.txt").toString == p"$basePath/*.txt")
+    assert(Glob(basePath, "*.txt").toString == s"$basePath${sep}*.txt")
 
-    assert(Glob(basePath, "*.{txt,md}").toString == p"$basePath/*.{txt,md}")
-    assert(Glob(basePath.getParent, RelativeGlob("bar") / "baz").toString == p"$basePath/baz")
+    assert(Glob(basePath, "*.{txt,md}").toString == s"$basePath${sep}*.{txt,md}")
+    assert(Glob(basePath.getParent, RelativeGlob("bar") / "baz").toString == s"$basePath${sep}baz")
   }
   "syntax" should "work" in {
     assert(basePath / "foo" == basePath.resolve("foo"))
@@ -174,9 +158,9 @@ class GlobSyntaxSpec extends FlatSpec {
   }
   "file tree view params" should "work with relative paths" in {
     implicit val option: RelativeGlobViewOption = RelativeGlobViewOption.Ignore
-    assert(Glob(p"./foo").fileTreeViewListParameters._3.matches(Paths.get("foo").toAbsolutePath))
+    assert(Glob(s"./foo").fileTreeViewListParameters._3.matches(Paths.get("foo").toAbsolutePath))
     assert(
-      Glob(p"./foo/*").fileTreeViewListParameters._3.matches(Paths.get(p"foo/bar").toAbsolutePath)
+      Glob(s"./foo/*").fileTreeViewListParameters._3.matches(Paths.get(s"foo/bar").toAbsolutePath)
     )
   }
 }

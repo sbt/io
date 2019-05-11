@@ -17,14 +17,13 @@ ThisBuild / headerLicense  := Some(HeaderLicense.Custom(
      |(http://www.apache.org/licenses/LICENSE-2.0).
      |""".stripMargin
 ))
+ThisBuild / scalafmtOnCompile := true
 
 def commonSettings: Seq[Setting[_]] = Seq(
   scalaVersion := scala212,
   javacOptions in compile ++= Seq("-Xlint", "-Xlint:-serial"),
   crossScalaVersions := Seq(scala212, scala213),
   headerLicense := (ThisBuild / headerLicense).value,
-  scalafmtOnCompile := true,
-  Test / scalafmtOnCompile := true,
 )
 
 lazy val ioRoot = (project in file("."))

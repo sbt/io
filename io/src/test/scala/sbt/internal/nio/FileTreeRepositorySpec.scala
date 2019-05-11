@@ -1,3 +1,13 @@
+/*
+ * sbt IO
+ *
+ * Copyright 2011 - 2019, Lightbend, Inc.
+ * Copyright 2008 - 2010, Mark Harrah
+ *
+ * Licensed under Apache License 2.0
+ * (http://www.apache.org/licenses/LICENSE-2.0).
+ */
+
 package sbt.internal.nio
 
 import java.nio.file._
@@ -145,6 +155,20 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
           c.ls(dir.toGlob / RecursiveGlob).toSet shouldBe Set(subdir, f)
         }
       }
+    }
+  }
+  it should "work with directory file name overlap" in withTempDir { dir =>
+    val foo = Files.createDirectories(dir.resolve("foo"))
+    val foobar = Files.createDirectories(dir.resolve("foobar"))
+    val seenFiles = new java.util.HashSet[Path]
+    val latch = new CountDownLatch(2)
+    val observer: Observer[FileEvent[FileAttributes]] =
+      (fe: FileEvent[FileAttributes]) =>
+        if (fe.path.getFileName == Paths.get("file") && seenFiles.add(fe.path)) latch.countDown()
+    using(simpleCache(observer)) { c =>
+      Seq(foo, foobar).foreach(dir => c.register(Glob(dir, RecursiveGlob)))
+      Seq(foo, foobar).foreach(dir => Files.createFile(dir.resolve("file")))
+      assert(latch.await(1, TimeUnit.SECONDS))
     }
   }
 

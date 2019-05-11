@@ -1,3 +1,13 @@
+/*
+ * sbt IO
+ *
+ * Copyright 2011 - 2019, Lightbend, Inc.
+ * Copyright 2008 - 2010, Mark Harrah
+ *
+ * Licensed under Apache License 2.0
+ * (http://www.apache.org/licenses/LICENSE-2.0).
+ */
+
 package sbt.internal.nio
 
 import java.nio.file.{ Path, Paths }
@@ -137,8 +147,9 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
       case d            => (1 to d).foldLeft(Glob(path)) { case (g, _) => g / AnyPath }
     }
   }
+  private[this] val ceilingChar = (java.io.File.separatorChar.toInt + 1).toChar
   // This is a mildly hacky way of specifying an upper bound for children of a path
-  private[this] def ceiling(path: Path): Path = Paths.get(path.toString + Char.MaxValue)
+  private[this] def ceiling(path: Path): Path = Paths.get(path.toString + ceilingChar)
 }
 private[nio] object FileCache {
   private implicit class GlobOps(val glob: Glob) extends AnyVal {

@@ -1,3 +1,13 @@
+/*
+ * sbt IO
+ *
+ * Copyright 2011 - 2019, Lightbend, Inc.
+ * Copyright 2008 - 2010, Mark Harrah
+ *
+ * Licensed under Apache License 2.0
+ * (http://www.apache.org/licenses/LICENSE-2.0).
+ */
+
 package sbt.internal.io
 
 import java.io.IOException
@@ -9,6 +19,7 @@ import sbt.internal.nio.FileEvent.Deletion
 import sbt.internal.nio.{ Deadline => _, _ }
 import sbt.io.syntax._
 import sbt.io.{ WatchService, _ }
+import sbt.nio.file.syntax._
 import sbt.nio.file.{ FileAttributes, Glob, RecursiveGlob }
 
 import scala.annotation.tailrec
@@ -352,7 +363,7 @@ private[sbt] trait EventMonitorSpec { self: FlatSpec with Matchers =>
   it should "ignore valid files in non-recursive subdirectories" in IO.withTemporaryDirectory {
     dir =>
       val file = dir / "src" / "Foo.scala"
-      val globs = dir.toPath.toRealPath().toFile * "*.scala" :: Nil
+      val globs = dir.toPath.toRealPath().toGlob / "*.scala" :: Nil
       val observable = newObservable(globs, NullLogger)
       val monitor = FileEventMonitor(observable)
       val valid = dir / "foo.scala"

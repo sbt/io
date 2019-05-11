@@ -1,11 +1,20 @@
+/*
+ * sbt IO
+ *
+ * Copyright 2011 - 2019, Lightbend, Inc.
+ * Copyright 2008 - 2010, Mark Harrah
+ *
+ * Licensed under Apache License 2.0
+ * (http://www.apache.org/licenses/LICENSE-2.0).
+ */
+
 package sbt.nio
 
 import java.nio.file.Paths
 
 import org.scalatest.FlatSpec
+import sbt.io.IO
 import sbt.io.syntax._
-import sbt.io.{ GlobFilter, IO, NothingFilter }
-import sbt.nio.TestHelpers._
 import sbt.nio.file.{ AnyPath, Glob, RecursiveGlob }
 
 class GlobFilterSpec extends FlatSpec {
@@ -24,8 +33,6 @@ class GlobFilterSpec extends FlatSpec {
     assert(!glob.matches(dir.toPath))
     assert(glob.matches(file.toPath))
     assert(!glob.matches(nestedFile.toPath))
-    val nothingGlob = dir * NothingFilter
-    Seq(dir, file, nestedFile).foreach(f => assert(!nothingGlob.toFileFilter.accept(f)))
   }
   it should "work with recursive globs" in IO.withTemporaryDirectory { dir =>
     val file = new File(dir, "file")
@@ -34,27 +41,20 @@ class GlobFilterSpec extends FlatSpec {
     assert(!glob.matches(dir.toPath))
     assert(glob.matches(file.toPath))
     assert(glob.matches(nestedFile.toPath))
-    val nothingGlob = dir ** NothingFilter
-    Seq(dir, file, nestedFile).foreach(f => assert(!nothingGlob.toFileFilter.accept(f)))
-  }
-  it should "work with complex name filters" in IO.withTemporaryDirectory { dir =>
-    val file = new File(dir, "build.sbt")
-    val glob = dir * (GlobFilter("*.sbt") - ".sbt")
-    assert(glob.matches(file.toPath))
   }
   it should "work with depth" in {
     val base = Paths.get("").toAbsolutePath.getRoot.resolve("foo").resolve("bar")
-    assert(Glob(base, p"*/*.txt").matches(base.resolve("foo").resolve("bar.txt")))
-    assert(!Glob(base, p"*/*/*.txt").matches(base.resolve("foo").resolve("bar.txt")))
-    assert(Glob(base, p"*/*/*.txt").matches(base.resolve("foo").resolve("baz").resolve("bar.txt")))
-    assert(!Glob(base, p"*/*/*.txt").matches(base.resolve("foo").resolve("baz").resolve("bar.tx")))
-    assert(Glob(base, p"*/**/*.txt").matches(base.resolve("foo").resolve("bar.txt")))
+    assert(Glob(base, s"*/*.txt").matches(base.resolve("foo").resolve("bar.txt")))
+    assert(!Glob(base, s"*/*/*.txt").matches(base.resolve("foo").resolve("bar.txt")))
+    assert(Glob(base, s"*/*/*.txt").matches(base.resolve("foo").resolve("baz").resolve("bar.txt")))
+    assert(!Glob(base, s"*/*/*.txt").matches(base.resolve("foo").resolve("baz").resolve("bar.tx")))
+    assert(Glob(base, s"*/**/*.txt").matches(base.resolve("foo").resolve("bar.txt")))
     assert(
-      Glob(base, p"*/**/*.txt")
+      Glob(base, s"*/**/*.txt")
         .matches(base.resolve("foo").resolve("bar").resolve("baz").resolve("bar.txt"))
     )
     assert(
-      !Glob(base, p"*/**/*.txt")
+      !Glob(base, s"*/**/*.txt")
         .matches(base.resolve("foo").resolve("bar").resolve("baz").resolve("bar.tx"))
     )
   }

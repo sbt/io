@@ -12,30 +12,13 @@ package sbt.io
 
 import java.io.File
 
-import sbt.nio.file.FileGlobApi.FileGlobBuilder
-import sbt.io.PathFinder.Combinator.SingleFilePathFinderCombinator
-
 @deprecated("Alternative is likely to be removed in future versions of sbt", "1.3.0")
 private[sbt] trait Alternative[A, B] {
   def |(g: A => Option[B]): A => Option[B]
 }
 
-sealed trait IOSyntax2 {
-  implicit def lowPriorityFileFinder(file: File): PathFinder = PathFinder(file)
-}
-sealed trait BaseSyntax extends IOSyntax2 {
-  @deprecated(
-    "1.3.0",
-    "The api of singleFileFinder is now implemented by two implicit defs: " +
-      "singleFileGlobBuilder and singleFilePathFinderCombinator. Prefer these two imports, but " +
-      "if a PathFinder is explicitly required, then import lowPriorityFileFinder (this conversion " +
-      "from File to PathFinder may not be supported in sbt 2"
-  )
-  def singleFileFinder(file: File): PathFinder = PathFinder(file)
-  implicit def singleFileGlobBuilder(file: File): FileGlobBuilder = new FileGlobBuilder(file)
-  implicit def singleFilePathFinderCombinator(file: File): PathFinder.Combinator =
-    new SingleFilePathFinderCombinator(file)
-  implicit def singleFilePathLister(file: File): PathLister = PathLister(file)
+sealed trait BaseSyntax {
+  implicit def singleFileFinder(file: File): PathFinder = PathFinder(file)
 }
 sealed abstract class IOSyntax1 extends BaseSyntax
 

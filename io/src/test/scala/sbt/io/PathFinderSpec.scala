@@ -1,10 +1,21 @@
+/*
+ * sbt IO
+ *
+ * Copyright 2011 - 2019, Lightbend, Inc.
+ * Copyright 2008 - 2010, Mark Harrah
+ *
+ * Licensed under Apache License 2.0
+ * (http://www.apache.org/licenses/LICENSE-2.0).
+ */
+
 package sbt.io
 
 import java.io.File
 import java.nio.file.Files
-import scala.collection.mutable
 
 import org.scalatest.{ FlatSpec, Matchers }
+
+import scala.collection.mutable
 
 object PathFinderSpec {
   implicit class FileOps(val file: File) extends AnyVal {
@@ -30,6 +41,24 @@ trait PathFinderSpec extends FlatSpec with Matchers {
     Files.createTempFile(dir.toPath, "bar", "").toFile
     val include = new SimpleFilter(_.startsWith("foo"))
     PathFinder(dir).descendantsExcept(include, NothingFilter).get shouldBe Seq(foo)
+  }
+  it should "apply exclude filter" in IO.withTemporaryDirectory { dir =>
+    val excludeDir = Files.createDirectories(dir.toPath.resolve("sbt-0.13"))
+    val includeDir = Files.createDirectories(dir.toPath.resolve("sbt-1.0"))
+    val Seq(excludeFile, includeFile) = Seq(excludeDir, includeDir).map { d =>
+      val src = Files.createDirectories(d.resolve("src").resolve("main").resolve("scala"))
+      Files.createFile(src.resolve("foo.scala")).toFile
+    }
+    val files = PathFinder(dir).descendantsExcept("*.scala", s"sbt-0.13").get()
+    assert(files == Seq(includeFile))
+    assert((PathFinder(dir) ** "*.scala").get().toSet == Set(excludeFile, includeFile))
+  }
+  it should "apply nothing filter" in IO.withTemporaryDirectory { dir =>
+    val dirPath = dir.toPath
+    val subdir = Files.createDirectories(dirPath.resolve("subdir")).toFile
+    val file = Files.createFile(dirPath.resolve("file")).toFile
+    PathFinder(dir).descendantsExcept("*", "*sub*").get.toSet shouldBe Set(dir, file)
+    PathFinder(dir).descendantsExcept("*", NothingFilter).get.toSet shouldBe Set(dir, file, subdir)
   }
   it should "follow links" in IO.withTemporaryDirectory { dir =>
     IO.withTemporaryDirectory { otherDir =>

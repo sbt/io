@@ -1,3 +1,13 @@
+/*
+ * sbt IO
+ *
+ * Copyright 2011 - 2019, Lightbend, Inc.
+ * Copyright 2008 - 2010, Mark Harrah
+ *
+ * Licensed under Apache License 2.0
+ * (http://www.apache.org/licenses/LICENSE-2.0).
+ */
+
 package sbt.nio
 
 import java.nio.file._
@@ -25,6 +35,35 @@ class FileTreeViewSpec extends FlatSpec {
         file
       )
     )
+  }
+  it should "handle multiple globs" in IO.withTemporaryDirectory { dir =>
+    val srcSubdir = Files.createDirectory(dir.toPath.resolve("src"))
+    val mainSubdir = Files.createDirectory(srcSubdir.resolve("main"))
+    val scalaSubdir = Files.createDirectory(mainSubdir.resolve("scala"))
+    val exampleSubdir = Files.createDirectory(scalaSubdir.resolve("example"))
+    val fooFile = Files.createFile(exampleSubdir.resolve("foo.scala"))
+    val elevenSubdir = Files.createDirectory(mainSubdir.resolve("scala_2.11+"))
+    val barFile = Files.createFile(elevenSubdir.resolve("bar.scala"))
+    val jvmGlob = Glob(dir, "jvm")
+    val srcGlob = Glob(dir, "src")
+
+    val xs = FileTreeView
+      .Ops(FileTreeView.DefaultFileTreeView)
+      .list(
+        List(
+          jvmGlob / "src" / "main" / "scala-2.12" / RecursiveGlob / "*.{scala,java}",
+          jvmGlob / "src" / "main" / "scala" / RecursiveGlob / "*.{scala,java}",
+          jvmGlob / "src" / "main" / "java" / RecursiveGlob / "*.{scala,java}",
+          jvmGlob / "src" / "main" / "java" / RecursiveGlob / "*.txt",
+          srcGlob / "main" / "scala-2.12" / RecursiveGlob / "*.{scala,java}",
+          srcGlob / "main" / "scala" / RecursiveGlob / "*.{scala,java}",
+          srcGlob / "main" / "scala_2.11+" / RecursiveGlob / "*.{scala,java}",
+          srcGlob / "main" / "scala_2.13-" / RecursiveGlob / "*.{scala,java}",
+          jvmGlob / AnyPath / "*.{scala,java}"
+        )
+      )
+      .map { case (p, _) => p }
+    assert(xs.contains(fooFile) && xs.contains(barFile))
   }
   "iterator" should "be lazy" in IO.withTemporaryDirectory { dir =>
     val firstSubdir = Files.createDirectory(dir.toPath.resolve("first"))
