@@ -2,6 +2,13 @@ import Dependencies._
 import com.typesafe.tools.mima.core._, ProblemFilters._
 
 ThisBuild / git.baseVersion := "1.3.0"
+ThisBuild / version := {
+  val old = (ThisBuild / version).value
+  nightlyVersion match {
+    case Some(v) => v
+    case _       => old
+  }
+}
 ThisBuild / bintrayPackage := "io"
 ThisBuild / homepage := Some(url("https://github.com/sbt/io"))
 ThisBuild / description := "IO module for sbt"
