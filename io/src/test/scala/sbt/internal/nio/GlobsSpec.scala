@@ -119,4 +119,15 @@ class GlobsSpec extends FlatSpec {
     assert(!Globs(dirPath, recursive = true, -DirectoryFilter).matches(subdir))
     assert(Globs(dirPath, recursive = true, -DirectoryFilter).matches(subFile))
   }
+  it should "apply and filter with not hidden file filter" in {
+    val filter = new ExtensionFilter("java", "scala") && -HiddenFileFilter
+    val glob = Globs(basePath, recursive = true, filter)
+    assert(glob.matches(basePath.resolve("foo").resolve("bar.scala")))
+  }
+  it should "apply and filter with not filter" in {
+    val filter = new ExtensionFilter("java", "scala") && -new PrefixFilter("bar")
+    val glob = Globs(basePath, recursive = true, filter)
+    assert(!glob.matches(basePath.resolve("foo").resolve("bar.scala")))
+    assert(glob.matches(basePath.resolve("foo").resolve("baz.java")))
+  }
 }

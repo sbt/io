@@ -200,6 +200,11 @@ case object HiddenFileFilter extends FileFilter {
   def accept(file: File): Boolean =
     try Files.isHidden(file.toPath) && file.getName != "."
     catch { case _: IOException => false }
+  override def unary_- : FileFilter = NotHiddenFileFilter
+}
+private[sbt] case object NotHiddenFileFilter extends FileFilter {
+  def accept(file: File): Boolean = !HiddenFileFilter.accept(file)
+  override def unary_- : FileFilter = HiddenFileFilter
 }
 
 /** A [[FileFilter]] that selects files that exist according to `java.io.File.exists`. */
