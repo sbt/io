@@ -66,9 +66,9 @@ private[sbt] object Globs {
             case _                                           => None
           }
         }
-      case AllPassFilter | HiddenFileFilter => Some(AnyPath)
-      case NothingFilter                    => Some(NoPath)
-      case _                                => None
+      case AllPassFilter | NotHiddenFileFilter => Some(AnyPath)
+      case NothingFilter | HiddenFileFilter    => Some(NoPath)
+      case _                                   => None
     }
   private[sbt] def nameFilterToRelativeGlob(nameFilter: NameFilter): Option[Matcher] =
     nameFilter match {
