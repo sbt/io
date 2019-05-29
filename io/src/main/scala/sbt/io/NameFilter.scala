@@ -333,10 +333,11 @@ object GlobFilter {
     else {
       val parts = expression.split("\\*", -1)
       parts match {
-        case Array("", ext) if ext.startsWith(".") => new ExtensionFilter(ext.drop(1))
-        case Array(prefix, "")                     => new PrefixFilter(prefix)
-        case Array("", suffix)                     => new SuffixFilter(suffix)
-        case _                                     => new PatternFilter(parts, Pattern.compile(parts.map(quote).mkString(".*")))
+        case Array("", ext) if ext.startsWith(".") && !ext.drop(1).contains(".") =>
+          new ExtensionFilter(ext.drop(1))
+        case Array(prefix, "") => new PrefixFilter(prefix)
+        case Array("", suffix) => new SuffixFilter(suffix)
+        case _                 => new PatternFilter(parts, Pattern.compile(parts.map(quote).mkString(".*")))
       }
     }
   }
