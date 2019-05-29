@@ -60,6 +60,11 @@ trait PathFinderSpec extends FlatSpec with Matchers {
     PathFinder(dir).descendantsExcept("*", "*sub*").get.toSet shouldBe Set(dir, file)
     PathFinder(dir).descendantsExcept("*", NothingFilter).get.toSet shouldBe Set(dir, file, subdir)
   }
+  it should "work for complex extension filters" in IO.withTemporaryDirectory { dir =>
+    val subdir = Files.createDirectories(dir.toPath.resolve("subdir"))
+    val file = Files.createFile(subdir.resolve("foo.template.scala")).toFile
+    assert(PathFinder(dir).globRecursive("*.template.scala").get() == Seq(file))
+  }
   it should "follow links" in IO.withTemporaryDirectory { dir =>
     IO.withTemporaryDirectory { otherDir =>
       val foo = Files.createTempFile(otherDir.toPath, "foo", "")
