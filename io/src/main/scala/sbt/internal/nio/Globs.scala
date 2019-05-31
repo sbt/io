@@ -113,5 +113,6 @@ private[sbt] object Globs {
       case pf: PrefixFilter  => Some(Matcher(s"${pf.prefix}*"))
       case sf: SimpleFilter  => Some(Matcher(sf.acceptFunction))
       case sf: SuffixFilter  => Some(Matcher(s"*${sf.suffix}"))
+      case _                 => None
     }
 }
