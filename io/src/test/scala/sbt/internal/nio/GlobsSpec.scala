@@ -119,6 +119,15 @@ class GlobsSpec extends FlatSpec {
     assert(!Globs(dirPath, recursive = true, -DirectoryFilter).matches(subdir))
     assert(Globs(dirPath, recursive = true, -DirectoryFilter).matches(subFile))
   }
+  it should "apply anonymous filters" in IO.withTemporaryDirectory { dir =>
+    val dirPath = dir.toPath
+    val file = Files.createFile(dirPath.resolve("file.template"))
+    val regex = ".*\\.template".r
+    val filter = new NameFilter {
+      override def accept(name: String): Boolean = regex.pattern.matcher(name).matches()
+    }
+    assert(Globs(dirPath, recursive = false, filter).matches(file))
+  }
   it should "apply and filter with not hidden file filter" in {
     val filter = new ExtensionFilter("java", "scala") && -HiddenFileFilter
     val glob = Globs(basePath, recursive = true, filter)
