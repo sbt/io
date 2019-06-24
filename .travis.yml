@@ -37,11 +37,11 @@ matrix:
      language: java
      osx_image: xcode9.3
 
-   - scala: 2.13.0-RC1
+   - scala: 2.13.0
      env:
        TEST_FORK=false
        CMD="test"
-       TRAVIS_SCALA_VERSION=2.13.0-RC1
+       TRAVIS_SCALA_VERSION=2.13.0
        TRAVIS_JDK=adopt@1.8.192-12
      os: linux
      dist: trusty
@@ -50,12 +50,12 @@ matrix:
          - unset _JAVA_OPTIONS
          - export JAVA_HOME="$JABBA_HOME/jdk/$TRAVIS_JDK" && export PATH="$JAVA_HOME/bin:$PATH" && java -Xmx32m -version
 
-   - scala: 2.13.0-RC1
+   - scala: 2.13.0
      os: osx
      env:
        TEST_FORK=false
        CMD="test"
-       TRAVIS_SCALA_VERSION=2.13.0-RC1
+       TRAVIS_SCALA_VERSION=2.13.0
      language: java
      osx_image: xcode9.3
 
