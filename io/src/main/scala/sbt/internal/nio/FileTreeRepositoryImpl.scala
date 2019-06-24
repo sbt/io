@@ -52,14 +52,14 @@ private[sbt] class FileTreeRepositoryImpl[T] extends FileTreeRepository[FileAttr
   underlying.addCacheObserver(new CacheObserver[FileAttributes] {
     override def onCreate(newEntry: FileTreeDataViews.Entry[FileAttributes]): Unit = {
       val path = newEntry.getTypedPath.getPath
-      newEntry.getValue.asScala.right.foreach { v =>
+      newEntry.getValue.asScala.foreach { v =>
         observers.onNext(Creation(path, v))
       }
       ()
     }
     override def onDelete(oldEntry: FileTreeDataViews.Entry[FileAttributes]): Unit = {
       val path = oldEntry.getTypedPath.getPath
-      oldEntry.getValue.asScala.right.foreach { v =>
+      oldEntry.getValue.asScala.foreach { v =>
         observers.onNext(Deletion(path, v))
       }
       ()

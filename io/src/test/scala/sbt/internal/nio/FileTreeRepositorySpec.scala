@@ -215,7 +215,7 @@ class FileTreeRepositorySpec extends FlatSpec with Matchers {
         if (!deletionLatch.await(DEFAULT_TIMEOUT * 10)) {
           assert(deletionLatch.getCount == 0)
         }
-        c.ls(dir.toGlob / AnyPath) shouldBe 'empty
+        c.ls(dir.toGlob / AnyPath) shouldBe Symbol("empty")
       }
     }
   }

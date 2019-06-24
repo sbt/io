@@ -116,8 +116,8 @@ class GlobSyntaxSpec extends FlatSpec {
     assert(Glob(basePath, "foo/bar/*.txt") == Glob(basePath, RelativeGlob("foo") / "bar" / "*.txt"))
   }
   they should "handle escaped characters" in {
-    assert((basePath + File.separator + "\\{": Glob).matches(basePath.resolve("{")))
-    assert((basePath + File.separator + "\\(": Glob).matches(basePath.resolve("(")))
+    assert((basePath.toString + File.separator + "\\{": Glob).matches(basePath.resolve("{")))
+    assert((basePath.toString + File.separator + "\\(": Glob).matches(basePath.resolve("(")))
   }
   "base" should "warn on relative paths" in {
     {
