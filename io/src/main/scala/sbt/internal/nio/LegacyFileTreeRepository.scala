@@ -57,7 +57,7 @@ private[sbt] class LegacyFileTreeRepository(logger: WatchLogger, watchService: W
   }
   override def register(glob: Glob): Either[IOException, Observable[FileEvent[FileAttributes]]] = {
     fileCache.register(glob)
-    observable.register(glob).right.foreach(_.close())
+    observable.register(glob).foreach(_.close())
     new RegisterableObservable(observers).register(glob)
   }
   override def list(path: Path): Seq[(Path, FileAttributes)] = view.list(path)
