@@ -48,7 +48,7 @@ class FileTreeViewSpec extends FlatSpec {
     val srcGlob = Glob(dir, "src")
 
     val xs = FileTreeView
-      .Ops(FileTreeView.DefaultFileTreeView)
+      .Ops(FileTreeView.default)
       .list(
         List(
           jvmGlob / "src" / "main" / "scala-2.12" / RecursiveGlob / "*.{scala,java}",

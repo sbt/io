@@ -11,10 +11,10 @@
 package sbt.nio.file
 
 import java.io.IOException
-import java.nio.file.Path
+import java.nio.file.{ Files, Path }
 import java.util
 
-import com.swoval.files.FileTreeViews
+import sbt.internal.nio.SwovalFileTreeView
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -36,33 +36,12 @@ trait FileTreeView[+T] {
   def list(path: Path): Seq[T]
 }
 object FileTreeView {
-  private[sbt] object DefaultFileTreeView extends FileTreeView.Nio[FileAttributes] {
-    private[this] val fileTreeView =
-      if ("nio" == sys.props.getOrElse("sbt.pathfinder", ""))
-        FileTreeViews.getNio(true)
-      else
-        FileTreeViews.getDefault(true)
-    override def list(path: Path): Seq[(Path, FileAttributes)] = {
-      try {
-        fileTreeView
-          .list(path, 0, _ => true)
-          .iterator
-          .asScala
-          .map { typedPath =>
-            typedPath.getPath ->
-              FileAttributes(
-                isDirectory = typedPath.isDirectory,
-                isOther = false,
-                isRegularFile = typedPath.isFile,
-                isSymbolicLink = typedPath.isSymbolicLink
-              )
-          }
-          .toVector
-      } catch {
-        case _: IOException => Vector.empty
-      }
-    }
-  }
+  val native: FileTreeView.Nio[FileAttributes] = SwovalFileTreeView
+  val nio: FileTreeView.Nio[FileAttributes] = (path: Path) =>
+    try {
+      val paths = Files.list(path).iterator.asScala.toIndexedSeq
+      paths.flatMap(p => FileAttributes(p).toOption.map(p -> _))
+    } catch { case _: IOException => Nil }
 
   /**
    * Adds additional methods to [[FileTreeView]]. This api may be changed so it should not be
@@ -78,8 +57,8 @@ object FileTreeView {
       FileTreeView.iterator(globs, fileTreeView)
   }
   private[sbt] type Nio[+T] = FileTreeView[(Path, T)]
-  def default: FileTreeView[(Path, FileAttributes)] = DEFAULT_NIO
-  private[this] val DEFAULT_NIO: Nio[FileAttributes] = DefaultFileTreeView
+  def default: FileTreeView[(Path, FileAttributes)] =
+    if ("nio" == System.getProperty("sbt.io.filetreeview", "")) nio else native
   private[sbt] implicit class NioFileTreeViewOps[T](val view: FileTreeView.Nio[T]) {
     def map[A >: T, B](f: (Path, A) => B): FileTreeView.Nio[B] = {
       val converter: ((Path, A)) => (Path, B) = {

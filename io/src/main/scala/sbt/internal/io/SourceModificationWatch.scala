@@ -285,7 +285,7 @@ private[sbt] object WatchState {
     globSet ++= globs
     val initFiles = globs.flatMap {
       case glob if glob.range._2 == Int.MaxValue =>
-        DefaultFileTreeView.list(Glob(glob.base, RecursiveGlob)).collect {
+        FileTreeView.default.list(Glob(glob.base, RecursiveGlob)).collect {
           case (p, a) if a.isDirectory => p
         }
       case glob => Seq(glob.base)
