@@ -23,7 +23,6 @@ import java.nio.file.{
   Path => NioPath
 }
 
-import com.swoval.files.FileTreeViews
 import sbt.io.PathFinder.GlobPathFinder
 import sbt.nio.file.{ AnyPath, FileAttributes, FileTreeView, Glob }
 
@@ -658,19 +657,19 @@ private class DescendantOrSelfPathFinder(
 private object DescendantOrSelfPathFinder {
   def default(file: File, filter: FileFilter, fileSet: mutable.Set[File], depth: Int): Unit = {
     try {
-      FileTreeViews
-        .getDefault(true)
-        .list(
-          file.toPath,
-          depth - 1,
-          t =>
-            filter.accept(new File(t.getPath.toString) {
-              override def isDirectory: Boolean = t.isDirectory
-              override def isFile: Boolean = t.isFile
-            })
-        )
-        .asScala
-        .foreach(tp => fileSet += tp.getPath.toFile)
+      if (depth > 0)
+        FileTreeView.default.list(file.toPath).foreach {
+          case (path, attributes) =>
+            val file = path.toFile
+            if (attributes.isRegularFile && filter.accept(new File(path.toString) {
+                  override def isDirectory: Boolean = attributes.isDirectory
+                  override def isFile: Boolean = attributes.isRegularFile
+                })) {
+              fileSet += file
+            } else if (attributes.isDirectory) {
+              default(file, filter, fileSet, depth - 1)
+            }
+        }
       val typedFile = new File(file.toString) {
         override def isDirectory: Boolean = true
         override def isFile: Boolean = false
