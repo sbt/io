@@ -79,11 +79,10 @@ object FileAttributes {
         s"isRegularFile = $isRegularFile, isSymbolicLink = $isSymbolicLink)"
   }
   def apply(path: NioPath): Either[IOException, FileAttributes] = apply(path, followLinks = true)
-  def apply(path: NioPath, followLinks: Boolean): Either[IOException, FileAttributes] =
+  private[sbt] def apply(path: NioPath, followLinks: Boolean): Either[IOException, FileAttributes] =
     try {
       val attrs =
-        if (followLinks) Files.readAttributes(path, classOf[BasicFileAttributes])
-        else Files.readAttributes(path, classOf[BasicFileAttributes], LinkOption.NOFOLLOW_LINKS)
+        Files.readAttributes(path, classOf[BasicFileAttributes], LinkOption.NOFOLLOW_LINKS)
       if (attrs.isSymbolicLink && followLinks) {
         try {
           val linkAttrs = Files.readAttributes(path, classOf[BasicFileAttributes])
@@ -96,7 +95,7 @@ object FileAttributes {
             )
           )
         } catch {
-          case _: NoSuchFieldException =>
+          case _: NoSuchFileException =>
             Right(
               apply(
                 isDirectory = false,
@@ -107,7 +106,7 @@ object FileAttributes {
             )
         }
       } else
-        Right(apply(attrs.isDirectory, attrs.isOther, attrs.isRegularFile, isSymbolicLink = false))
+        Right(apply(attrs.isDirectory, attrs.isOther, attrs.isRegularFile, attrs.isSymbolicLink))
     } catch {
       case _: NoSuchFileException => Right(NonExistent)
       case e: IOException         => Left(e)
