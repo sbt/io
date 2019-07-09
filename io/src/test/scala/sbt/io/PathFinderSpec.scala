@@ -79,9 +79,9 @@ trait PathFinderSpec extends FlatSpec with Matchers {
 }
 class NioPathFinderSpec extends PathFinderSpec {
   override def handler: (File, FileFilter, mutable.Set[File]) => Unit =
-    DescendantOrSelfPathFinder.nio(_, _, _, Int.MaxValue)
+    DescendantOrSelfPathFinder.default(_, _, _, Int.MaxValue)
 }
 class DefaultPathFinderSpec extends PathFinderSpec {
   override def handler: (File, FileFilter, mutable.Set[File]) => Unit =
-    DescendantOrSelfPathFinder.default(_, _, _, Int.MaxValue)
+    DescendantOrSelfPathFinder.native(_, _, _, Int.MaxValue)
 }

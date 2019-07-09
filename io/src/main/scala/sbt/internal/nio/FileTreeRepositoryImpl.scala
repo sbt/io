@@ -27,7 +27,7 @@ import scala.collection.immutable.VectorBuilder
 import scala.util.Properties
 
 /**
- * The default implemenation of [[FileTreeRepository]]. It delegates all of its methods to the
+ * The default implementation of [[FileTreeRepository]]. It delegates all of its methods to the
  * [[https://swoval.github.io/files/jvm/com/swoval/files/FileTreeRepository.html swoval FileTreeRepository]].
  *
  * @tparam T the type of the values.
