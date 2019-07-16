@@ -62,7 +62,7 @@ private[sbt] object Globs {
             case (left, Some(NoPath))                        => left
             case (any @ Some(AnyPath), _)                    => any
             case (_, any @ Some(AnyPath))                    => any
-            case (Some(left: Matcher), Some(right: Matcher)) => Some(Matcher.and(left, right))
+            case (Some(left: Matcher), Some(right: Matcher)) => Some(Matcher.or(left, right))
             case _                                           => None
           }
         }
