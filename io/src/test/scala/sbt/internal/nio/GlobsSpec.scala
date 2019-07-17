@@ -139,4 +139,12 @@ class GlobsSpec extends FlatSpec {
     assert(!glob.matches(basePath.resolve("foo").resolve("bar.scala")))
     assert(glob.matches(basePath.resolve("foo").resolve("baz.java")))
   }
+  it should "apply or with name filters" in {
+    val excludeFilter: FileFilter = ("Baz.scala": NameFilter) || "Bar.scala"
+    val includeFilter: NameFilter = "*.scala"
+    val filter = includeFilter -- excludeFilter
+    val glob = Globs(basePath, recursive = true, filter)
+    assert(glob.matches(basePath.resolve("foo").resolve("Foo.scala")))
+    assert(!glob.matches(basePath.resolve("foo").resolve("Bar.scala")))
+  }
 }

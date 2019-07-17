@@ -492,7 +492,7 @@ object RelativeGlob {
      * @return true it the path matches.
      */
     override def matches(path: Path): Boolean = left.matches(path) || right.matches(path)
-    override def toString: String = s"($left && $right)"
+    override def toString: String = s"($left || $right)"
   }
   private[file] final case class AndMatcher(left: Matcher, right: Matcher) extends Matcher {
     override private[sbt] def matchers: List[Matcher] = this :: Nil
