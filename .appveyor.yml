@@ -17,11 +17,9 @@ install:
         [System.IO.Compression.ZipFile]::ExtractToDirectory("C:\sbt-bin.zip", "C:\sbt")
       }
   - SET PATH=C:\sbt\sbt\bin;%PATH%
-  - SET SBT_VER=1.3.0-RC1
-  - SET SBT_OPTS=-XX:MaxPermSize=2g -Xmx4g -Dfile.encoding=UTF8 -Dsbt.version=1.3.0-RC1
-  - SET SCALA_VERSION=2.12.6
+  - SET SBT_OPTS=-XX:MaxPermSize=2g -Xmx4g -Dfile.encoding=UTF8
 test_script:
-  - sbt "++2.12.6 io/test"
+  - sbt "io/test"
 
 cache:
   - '%USERPROFILE%\.ivy2\cache'
