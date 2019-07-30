@@ -39,8 +39,8 @@ object FileTreeView {
   val native: FileTreeView.Nio[FileAttributes] = SwovalFileTreeView
   val nio: FileTreeView.Nio[FileAttributes] = (path: Path) =>
     try {
-      val paths = Files.list(path).iterator.asScala.toIndexedSeq
-      paths.flatMap(p => FileAttributes(p).toOption.map(p -> _))
+      val paths = Files.list(path).iterator.asScala
+      paths.flatMap(p => FileAttributes(p).toOption.map(p -> _)).toIndexedSeq
     } catch { case _: IOException => Nil }
 
   /**

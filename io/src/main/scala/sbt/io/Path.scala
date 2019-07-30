@@ -645,7 +645,7 @@ private class DescendantOrSelfPathFinder(
     handleFileDescendant: (File, FileFilter, mutable.Set[File]) => Unit
 ) extends FilterFiles {
   def this(parent: PathFinder, filter: FileFilter) =
-    this(parent, filter, DescendantOrSelfPathFinder.native(_, _, _, Int.MaxValue))
+    this(parent, filter, Path.defaultDescendantHandler(_, _, _, Int.MaxValue))
   override private[sbt] def addTo(fileSet: mutable.Set[File]): Unit = {
     for (file <- parent.get()) {
       if (accept(file)) fileSet += file
@@ -657,6 +657,7 @@ private class DescendantOrSelfPathFinder(
 private object DescendantOrSelfPathFinder {
   def native(file: File, filter: FileFilter, fileSet: mutable.Set[File], depth: Int): Unit = {
     try {
+      if (filter.accept(file)) fileSet += file
       if (depth > 0)
         FileTreeView.default.list(file.toPath).foreach {
           case (path, attributes) =>
@@ -670,12 +671,6 @@ private object DescendantOrSelfPathFinder {
               native(file, filter, fileSet, depth - 1)
             }
         }
-      val typedFile = new File(file.toString) {
-        override def isDirectory: Boolean = true
-        override def isFile: Boolean = false
-      }
-
-      if (filter.accept(typedFile)) fileSet += file
       ()
     } catch {
       case _: IOException =>

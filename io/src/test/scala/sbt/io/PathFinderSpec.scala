@@ -76,12 +76,17 @@ trait PathFinderSpec extends FlatSpec with Matchers {
     val file = Files.createFile(dir.toPath.resolve("file")).toFile
     dir.all.toSet shouldBe Set(dir, file)
   }
+  it should "preserve ordering" in IO.withTemporaryDirectory { dir =>
+    val subdir = Files.createDirectories(dir.toPath.resolve("subdir"))
+    val file = Files.createFile(subdir.resolve("file"))
+    assert(dir.all == dir +: Seq(subdir, file).map(_.toFile))
+  }
 }
 class NioPathFinderSpec extends PathFinderSpec {
   override def handler: (File, FileFilter, mutable.Set[File]) => Unit =
     DescendantOrSelfPathFinder.default(_, _, _, Int.MaxValue)
 }
-class DefaultPathFinderSpec extends PathFinderSpec {
+class NativePathFinderSpec extends PathFinderSpec {
   override def handler: (File, FileFilter, mutable.Set[File]) => Unit =
     DescendantOrSelfPathFinder.native(_, _, _, Int.MaxValue)
 }
