@@ -20,6 +20,7 @@ import sbt.nio.file.RelativeGlob.{ PathComponent, SingleComponentMatcher }
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.util.Properties
+import scala.util.matching.Regex
 
 sealed trait Glob {
 
@@ -37,12 +38,15 @@ object Glob {
     ordering.compare(left, right)
   def apply(file: File): Glob = if (file.isAbsolute) Root(file.toPath) else apply(file.toString)
   def apply(file: File, relative: String): Glob = Glob(file, RelativeGlob.parse(relative))
+  def apply(file: File, relative: Regex): Glob = Glob(file, s"regex:${relative.regex}")
   def apply(file: File, relative: RelativeGlob): Glob = Glob(file.toPath) / relative
   def apply(path: Path): Glob = if (path.isAbsolute) Root(path) else apply(path.toString)
   def apply(path: Path, relative: RelativeGlob): Glob = Glob(path) / relative
   def apply(path: Path, relative: String): Glob = Glob(path) / relative
+  def apply(path: Path, relative: Regex): Glob = Glob(path, s"regex:${relative.regex}")
   def apply(glob: String): Glob = {
-    val parts = splitter(glob)
+    val (regex, tail) = if (glob.startsWith("regex:")) (true, glob.drop(6)) else (false, glob)
+    val parts = splitter(tail)
     @tailrec def fullGlob(path: Path, rest: List[String]): Glob = {
       rest match {
         case component :: tail if !hasMeta(component) => fullGlob(path.resolve(component), tail)
@@ -50,6 +54,8 @@ object Glob {
         case _                                        => Pattern(path, RelativeGlob(rest: _*))
       }
     }
+    def addRegexPrefix(parts: List[String]): List[String] =
+      if (regex) parts.map(p => s"regex:$p") else parts
     parts match {
       case h :: rest if !hasMeta(h) =>
         val base = if (isWin) {
@@ -58,10 +64,10 @@ object Glob {
           if (h.isEmpty) Paths.get("/") else Paths.get(h)
         }
         base match {
-          case p if p.isAbsolute => fullGlob(p, rest)
-          case _                 => RelativeGlob(parts: _*)
+          case p if p.isAbsolute => fullGlob(p, addRegexPrefix(rest))
+          case _                 => RelativeGlob(addRegexPrefix(parts): _*)
         }
-      case _ => RelativeGlob(parts: _*)
+      case _ => RelativeGlob(addRegexPrefix(parts): _*)
     }
   }
   implicit object ordering extends Ordering[Glob] {
@@ -217,6 +223,7 @@ object Glob {
       case FullFileGlob(_, recursive, _)      => if (recursive) (1, Int.MaxValue) else (1, 1)
     }
     def /(glob: String): Glob = /(RelativeGlob.parse(glob))
+    def /(regex: Regex): Glob = /(RelativeGlob.parse(s"regex:${regex.regex}"))
     def /(that: RelativeGlob): Glob = glob match {
       case Pattern(root, relative) => Pattern(root, relative / that)
       case Root(path) =>
@@ -300,6 +307,7 @@ sealed trait RelativeGlob extends Glob {
   private[file] def tail: List[RelativeGlob.Matcher] =
     matchers.dropWhile(_.isInstanceOf[PathComponent])
   def /(component: String): RelativeGlob = /(RelativeGlob.parse(component))
+  def /(regex: Regex): RelativeGlob = /(RelativeGlob.parse(s"regex:${regex.regex}"))
   def /(that: RelativeGlob): RelativeGlob = RelativeGlob(this.matchers ::: that.matchers)
 }
 case object RecursiveGlob extends SingleComponentMatcher with RelativeGlob {
@@ -466,7 +474,8 @@ object RelativeGlob {
     override def toString: String = glob
   }
   private[file] object PathComponent {
-    def apply(component: String): PathComponent = new PathComponent(component)
+    def apply(component: String): PathComponent =
+      new PathComponent(if (component.startsWith("regex:")) component.drop(6) else component)
     def unapply(glob: Glob): Option[String] = glob match {
       case p: PathComponent => Some(p.glob)
       case _                => None

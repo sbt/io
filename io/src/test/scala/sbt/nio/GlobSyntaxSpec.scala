@@ -163,6 +163,23 @@ class GlobSyntaxSpec extends FlatSpec {
       Glob(s"./foo/*").fileTreeViewListParameters._3.matches(Paths.get(s"foo/bar").toAbsolutePath)
     )
   }
+  "regex syntax" should "apply patterns" in {
+    assert(Glob(basePath, ".*.txt".r).matches(basePath.resolve("foo.txt")))
+    assert(!Glob(basePath, ".*.txt".r).matches(basePath.resolve("foo.tx")))
+    assert(!Glob(basePath, "foo/.*.txt".r).matches(basePath.resolve("foo.txt")))
+    assert(Glob(basePath, "foo/.*.txt".r).matches(basePath.resolve("foo").resolve("foo.txt")))
+    assert(Glob(basePath, "foo/.*.txt".r).matches(basePath.resolve("foo").resolve("foo.txt")))
+    assert((Glob(basePath) / ".*.txt".r).matches(basePath.resolve("foo.txt")))
+    assert(!(Glob(basePath) / ".*.txt".r).matches(basePath.resolve("foo.tx")))
+    assert((Glob(basePath) / ** / ".*.txt".r).matches(basePath.resolve("foo.txt")))
+    assert(!(Glob(basePath) / ** / ".*.txt".r).matches(basePath.resolve("foo.tx")))
+    assert((Glob(basePath) / ** / ".*.txt".r).matches(basePath.resolve("bar").resolve("foo.txt")))
+    assert(!(Glob(basePath) / ** / ".*.txt".r).matches(basePath.resolve("bar").resolve("foo.tx")))
+    assert((Glob(basePath) / ** / ".*.txt$".r).matches(basePath.resolve("bar").resolve("foo.txt")))
+    assert(
+      !(Glob(basePath) / ** / ".*.txt$".r).matches(basePath.resolve("bar").resolve("foo.txt4"))
+    )
+  }
   "hidden files" should "be excluded by default" in {
     assert(!Glob(basePath, "*").matches(basePath.resolve(".foo")))
     assert(!Glob(basePath, AnyPath).matches(basePath.resolve(".foo")))
@@ -173,5 +190,7 @@ class GlobSyntaxSpec extends FlatSpec {
   they should "be allowed with regex" in {
     assert(Glob(basePath, "regex:\\.?.*").matches(basePath.resolve(".foo")))
     assert(Glob(basePath, "regex:\\.?.*").matches(basePath.resolve("foo")))
+    assert(Glob(basePath, "\\.?.*".r).matches(basePath.resolve(".foo")))
+    assert(Glob(basePath, "\\.?.*".r).matches(basePath.resolve("foo")))
   }
 }
