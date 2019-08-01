@@ -20,6 +20,7 @@ import sbt.nio.file.RelativeGlob.{ PathComponent, SingleComponentMatcher }
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.util.Properties
+import scala.util.matching.Regex
 
 /**
  * Represents a query for a path on the file system. Instances of `Glob` can be combined together
@@ -100,7 +101,8 @@ object Glob {
    * @param relative the relativeGlob glob string
    * @return a Glob that matches the file prefix with
    */
-  def apply(file: File, relative: String): Glob = Glob(file, RelativeGlob.parse(relative))
+  def apply(file: File, relative: String): Glob =
+    Glob(file, RelativeGlob.parse(relative, isRegex = false))
 
   /**
    * Construct a [[Glob]] with a file prefix and a [[RelativeGlob]] suffix. In order for a path to
@@ -118,6 +120,24 @@ object Glob {
    *         `relativeGlob`.
    */
   def apply(file: File, relativeGlob: RelativeGlob): Glob = Glob(file.toPath) / relativeGlob
+
+  /**
+   * Appends a relative glob specified by a regex pattern to an existing [[Glob]]. For example:
+   * {{{
+   *   val scalaSources = Glob(file("foo/bar"), "^[^.].*\\.scala".r
+   *   scalaSources.matches(Paths.get("foo/bar/Foo.scala")) // true
+   *   scalaSources.matches(Paths.get("foo/bar/.hidden.scala")) // false
+   * }}}
+   *
+   * Note that on Windows, `\` will be treated as a regex escape character but `/` will be treated
+   * as a path separator.
+   *
+   * @param file the file prefix of the pattern
+   * @param regex the pattern to apply
+   * @return a Glob with the new [[RelativeGlob]] appended to the query.
+   */
+  def apply(file: File, regex: Regex): Glob =
+    Glob(file, RelativeGlob.parse(regex.regex, isRegex = true))
 
   /**
    * Construct a single path Glob. The resulting glob
@@ -151,6 +171,24 @@ object Glob {
   def apply(path: Path, relative: String): Glob = Glob(path) / relative
 
   /**
+   * Appends a relative glob specified by a regex pattern to an existing [[Glob]]. For example:
+   * {{{
+   *   val scalaSources = Glob(file("foo/bar"), "^[^.].*\\.scala".r
+   *   scalaSources.matches(Paths.get("foo/bar/Foo.scala")) // true
+   *   scalaSources.matches(Paths.get("foo/bar/.hidden.scala")) // false
+   * }}}
+   *
+   * Note that on Windows, `\` will be treated as a regex escape character but `/` will be treated
+   * as a path separator.
+   *
+   * @param path the file path prefix of the pattern
+   * @param regex the pattern to apply
+   * @return a Glob with the new [[RelativeGlob]] appended to the query.
+   */
+  def apply(path: Path, regex: Regex): Glob =
+    Glob(path, RelativeGlob.parse(regex.regex, isRegex = true))
+
+  /**
    * Construct a glob from a string. It can represent a full path. Any `/` characters in a pathname
    * are automatically converted to `\\` on windows.
    * {{{
@@ -160,8 +198,10 @@ object Glob {
    * @param glob the string to convert to a glob
    * @return a parsed `Glob` for the input. May throw if the input cannot be parsed into a `Glob`.
    */
-  def apply(glob: String): Glob = {
-    val parts = splitter(glob)
+  def apply(glob: String): Glob = apply(glob, isRegex = false)
+
+  private[sbt] def apply(glob: String, isRegex: Boolean): Glob = {
+    val parts = splitter(glob, isRegex)
     @tailrec def fullGlob(path: Path, rest: List[String]): Glob = {
       rest match {
         case component :: tail if !hasMeta(component) => fullGlob(path.resolve(component), tail)
@@ -169,6 +209,8 @@ object Glob {
         case _                                        => Pattern(path, RelativeGlob(rest: _*))
       }
     }
+    def addRegexPrefix(parts: List[String]): List[String] =
+      if (isRegex) parts.map(p => s"regex:$p") else parts
     parts match {
       case h :: rest if !hasMeta(h) =>
         val base = if (isWin) {
@@ -177,10 +219,10 @@ object Glob {
           if (h.isEmpty) Paths.get("/") else Paths.get(h)
         }
         base match {
-          case p if p.isAbsolute => fullGlob(p, rest)
-          case _                 => RelativeGlob(parts: _*)
+          case p if p.isAbsolute => fullGlob(p, addRegexPrefix(rest))
+          case _                 => RelativeGlob(addRegexPrefix(parts): _*)
         }
-      case _ => RelativeGlob(parts: _*)
+      case _ => RelativeGlob(addRegexPrefix(parts): _*)
     }
   }
 
@@ -358,7 +400,32 @@ object Glob {
      *                     the base glob
      * @return a Glob with the new [[RelativeGlob]] appended to the query.
      */
-    def /(relativeGlob: String): Glob = /(RelativeGlob.parse(relativeGlob))
+    def /(relativeGlob: String): Glob = /(RelativeGlob.parse(relativeGlob, isRegex = false))
+
+    /**
+     * Appends a relative glob specified by a regex pattern to an existing [[Glob]]. For example:
+     * {{{
+     *   val glob = Glob("foo/bar")
+     *   val scalaSources = glob / "^[^.].*\\.scala".r
+     *   scalaSources.matches(Paths.get("foo/bar/Foo.scala")) // true
+     *   scalaSources.matches(Paths.get("foo/bar/.hidden.scala")) // false
+     * }}}
+     *
+     * Note that it is not possible to specify a recursive glob this way because `**` is not valid
+     * in regex. To make a recursive glob, combine with [[RecursiveGlob]]:
+     * {{{
+     *   val scalaSources = Glob("foo/bar") / ** / "^[^.].*\\.scala".r
+     *   scalaSources.matches(Paths.get("foo/bar/baz/fizz/buzz/Foo.scala")) // true
+     *   scalaSources.matches(Paths.get("foo/bar/baz/fizz/buzz/.hidden.scala")) // false
+     * }}}
+     *
+     * On Windows, `\` will be treated as a regex escape character but `/` will be treated
+     * as a path separator.
+     *
+     * @param regex the pattern to apply
+     * @return a Glob with the new [[RelativeGlob]] appended to the query.
+     */
+    def /(regex: Regex): Glob = /(RelativeGlob.parse(regex.regex, isRegex = true))
 
     /**
      * Appends a relative glob path to an existing [[Glob]]. For example:
@@ -430,8 +497,8 @@ object Glob {
   private[this] val allMeta = "*{([?"
   private[file] val hasMeta: String => Boolean = _.exists(allMeta.contains(_))
   private[file] val isWin = Properties.isWin
-  private[this] val splitter: String => List[String] = {
-    if (Glob.isWin) { glob =>
+  private[this] val splitter: (String, Boolean) => List[String] = {
+    if (Glob.isWin) { (glob, isRegex) =>
       {
         val stringBuilder = new StringBuilder(glob.length)
         val components = new util.ArrayList[String]
@@ -440,7 +507,7 @@ object Glob {
         @tailrec def fillComponents(index: Int): Unit = index match {
           case i if i < array.length =>
             array(i) match {
-              case `separator` =>
+              case `separator` if !isRegex =>
                 val nextIndex = i + 1
                 if (nextIndex < array.length) {
                   array(nextIndex) match {
@@ -471,8 +538,8 @@ object Glob {
         fillComponents(index = 0)
         components.asScala.toList
       }
-    } else {
-      _.split(File.separatorChar).toList
+    } else { (glob, _) =>
+      glob.split(File.separatorChar).toList
     }
   }
 }
@@ -509,7 +576,7 @@ sealed trait RelativeGlob extends Glob {
    * @param relativeGlob the additional query string to parse and append
    * @return a Glob with the new [[RelativeGlob]] appended to the query.
    */
-  def /(relativeGlob: String): RelativeGlob = /(RelativeGlob.parse(relativeGlob))
+  def /(relativeGlob: String): RelativeGlob = /(RelativeGlob.parse(relativeGlob, isRegex = false))
 
   /**
    * Appends an additional [[RelativeGlob]] to this [[RelativeGlob]]:
@@ -526,6 +593,31 @@ sealed trait RelativeGlob extends Glob {
    */
   def /(relativeGlob: RelativeGlob): RelativeGlob =
     RelativeGlob(this.matchers ::: relativeGlob.matchers)
+
+  /**
+   * Appends a relative glob specified by a regex pattern to an existing [[Glob]]. For example:
+   * {{{
+   *   val glob = Glob("foo/bar")
+   *   val scalaSources = glob / "^[^.].*\\.scala".r
+   *   scalaSources.matches(Paths.get("foo/bar/Foo.scala")) // true
+   *   scalaSources.matches(Paths.get("foo/bar/.hidden.scala")) // false
+   * }}}
+   *
+   * Note that it is not possible to specify a recursive glob this way because `**` is not valid
+   * in regex. To make a recursive glob, combine with [[RecursiveGlob]]:
+   * {{{
+   *   val scalaSources = Glob("foo/bar") / ** / "^[^.].*\\.scala".r
+   *   scalaSources.matches(Paths.get("foo/bar/baz/fizz/buzz/Foo.scala")) // true
+   *   scalaSources.matches(Paths.get("foo/bar/baz/fizz/buzz/.hidden.scala")) // false
+   * }}}
+   *
+   * On Windows, `\` will be treated as a regex escape character but `/` will be treated
+   * as a path separator.
+   *
+   * @param regex the pattern to apply
+   * @return a Glob with the new [[RelativeGlob]] appended to the query.
+   */
+  def /(regex: Regex): RelativeGlob = /(RelativeGlob.parse(regex.regex, isRegex = true))
 }
 
 /**
@@ -575,12 +667,13 @@ object RelativeGlob {
    * Aliases [[AnyPath]].
    */
   val * = AnyPath
-  private[file] def parse(glob: String): RelativeGlob = Glob(glob) match {
-    case r: RelativeGlob => r
-    case _ =>
-      val msg = s"Couldn't create relativeGlob glob from absolute glob: $glob"
-      throw new IllegalArgumentException(msg)
-  }
+  private[file] def parse(glob: String, isRegex: Boolean): RelativeGlob =
+    Glob(glob, isRegex) match {
+      case r: RelativeGlob => r
+      case _ =>
+        val msg = s"Couldn't create relativeGlob glob from absolute glob: $glob"
+        throw new IllegalArgumentException(msg)
+    }
   private[sbt] def apply(matchers: String*): RelativeGlob =
     new RelativeGlobImpl(matchers.view.filterNot(_ == ".").map(Matcher.apply).toList)
   private[sbt] def apply(matchers: List[Matcher]): RelativeGlob = new RelativeGlobImpl(matchers)
@@ -709,10 +802,10 @@ object RelativeGlob {
       case m       => NotMatcher(m)
     }
     private[sbt] def apply(glob: String): Matcher = glob match {
-      case "**"                  => RecursiveGlob
-      case "*"                   => AnyPath
-      case g if !Glob.hasMeta(g) => PathComponent(g)
-      case g                     => new GlobMatcher(g)
+      case "**"                                             => RecursiveGlob
+      case "*"                                              => AnyPath
+      case g if !g.startsWith("regex:") && !Glob.hasMeta(g) => PathComponent(g)
+      case g                                                => new GlobMatcher(g)
     }
     private[sbt] def apply(f: String => Boolean): Matcher = FunctionNameFilter(f)
   }
