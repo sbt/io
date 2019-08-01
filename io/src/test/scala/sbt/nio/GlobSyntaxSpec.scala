@@ -163,4 +163,15 @@ class GlobSyntaxSpec extends FlatSpec {
       Glob(s"./foo/*").fileTreeViewListParameters._3.matches(Paths.get(s"foo/bar").toAbsolutePath)
     )
   }
+  "hidden files" should "be excluded by default" in {
+    assert(!Glob(basePath, "*").matches(basePath.resolve(".foo")))
+    assert(!Glob(basePath, AnyPath).matches(basePath.resolve(".foo")))
+    assert(!Glob(basePath, "!.*").matches(basePath.resolve(".foo")))
+    assert(Glob(basePath, "!.*").matches(basePath.resolve("foo")))
+    assert(Glob(basePath, "?*").matches(basePath.resolve(".foo")))
+  }
+  they should "be allowed with regex" in {
+    assert(Glob(basePath, "regex:\\.?.*").matches(basePath.resolve(".foo")))
+    assert(Glob(basePath, "regex:\\.?.*").matches(basePath.resolve("foo")))
+  }
 }

@@ -304,11 +304,13 @@ sealed trait RelativeGlob extends Glob {
 }
 case object RecursiveGlob extends SingleComponentMatcher with RelativeGlob {
   override def glob: String = "**"
-  def matches(path: Path): Boolean = true
+  def matches(path: Path): Boolean =
+    !path.iterator.asScala.exists(_.getFileName.toString.startsWith("."))
 }
 case object AnyPath extends SingleComponentMatcher with RelativeGlob {
   override def glob: String = "*"
-  override def matches(path: Path): Boolean = path.getNameCount == 1
+  override def matches(path: Path): Boolean =
+    path.getNameCount == 1 && !path.getFileName.toString.startsWith(".")
 }
 object RelativeGlob {
   val ** = RecursiveGlob
