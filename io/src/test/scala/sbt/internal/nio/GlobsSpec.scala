@@ -147,4 +147,17 @@ class GlobsSpec extends FlatSpec {
     assert(glob.matches(basePath.resolve("foo").resolve("Foo.scala")))
     assert(!glob.matches(basePath.resolve("foo").resolve("Bar.scala")))
   }
+  "hidden files" should "be included by default" in {
+    val glob = Globs(basePath, recursive = true, "*.scala")
+    assert(glob.matches(basePath.resolve("foo").resolve("Foo.scala")))
+    assert(glob.matches(basePath.resolve("foo").resolve("bar").resolve(".Bar.scala")))
+  }
+  they should "be excluded by filter" in {
+    val glob = Globs(basePath, recursive = true, ("*.scala": NameFilter) -- HiddenFileFilter)
+    assert(glob.matches(basePath.resolve("foo").resolve("Foo.scala")))
+    assert(
+      scala.util.Properties.isWin ||
+        !glob.matches(basePath.resolve("foo").resolve("bar").resolve(".Bar.scala"))
+    )
+  }
 }

@@ -163,4 +163,33 @@ class GlobSyntaxSpec extends FlatSpec {
       Glob(s"./foo/*").fileTreeViewListParameters._3.matches(Paths.get(s"foo/bar").toAbsolutePath)
     )
   }
+  "dot files" should "not be excluded by default" in {
+    assert(Glob(basePath, "*").matches(basePath.resolve(".foo")))
+    assert(Glob(basePath, AnyPath).matches(basePath.resolve(".foo")))
+    assert(!Glob(basePath, "[!.]*").matches(basePath.resolve(".foo")))
+    assert(Glob(basePath, "[!.]*").matches(basePath.resolve("foo")))
+    assert(Glob(basePath, "?*").matches(basePath.resolve(".foo")))
+  }
+  they should "be excluded with filter" in {
+    val noHiddenFiles = Glob(basePath, "[!.]*")
+    assert(!noHiddenFiles.matches(basePath.resolve(".foo")))
+    assert(noHiddenFiles.matches(basePath.resolve("foo")))
+    assert(!noHiddenFiles.matches(basePath.resolve(".f")))
+    assert(noHiddenFiles.matches(basePath.resolve("f")))
+    val noHiddenScalaFiles = Glob(basePath, "[!.]*.scala")
+    assert(noHiddenScalaFiles.matches(basePath.resolve("Foo.scala")))
+    assert(!noHiddenScalaFiles.matches(basePath.resolve(".Foo.scala")))
+    assert(noHiddenScalaFiles.matches(basePath.resolve("a.scala")))
+  }
+  they should "be excluded with regex filter" in {
+    val noHiddenFiles = Glob(basePath, "regex:^[^.].*")
+    assert(!noHiddenFiles.matches(basePath.resolve(".foo")))
+    assert(noHiddenFiles.matches(basePath.resolve("foo")))
+    assert(!noHiddenFiles.matches(basePath.resolve(".f")))
+    assert(noHiddenFiles.matches(basePath.resolve("f")))
+    val noHiddenScalaFiles = Glob(basePath, "regex:^[^.].*\\.scala$")
+    assert(noHiddenScalaFiles.matches(basePath.resolve("Foo.scala")))
+    assert(!noHiddenScalaFiles.matches(basePath.resolve(".Foo.scala")))
+    assert(noHiddenScalaFiles.matches(basePath.resolve("a.scala")))
+  }
 }

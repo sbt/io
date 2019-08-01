@@ -709,11 +709,10 @@ object RelativeGlob {
       case m       => NotMatcher(m)
     }
     private[sbt] def apply(glob: String): Matcher = glob match {
-      case "**"                   => RecursiveGlob
-      case "*"                    => AnyPath
-      case g if g.startsWith("!") => NotMatcher(Matcher(g.drop(1)))
-      case g if !Glob.hasMeta(g)  => PathComponent(g)
-      case g                      => new GlobMatcher(g)
+      case "**"                  => RecursiveGlob
+      case "*"                   => AnyPath
+      case g if !Glob.hasMeta(g) => PathComponent(g)
+      case g                     => new GlobMatcher(g)
     }
     private[sbt] def apply(f: String => Boolean): Matcher = FunctionNameFilter(f)
   }
@@ -789,9 +788,7 @@ object RelativeGlob {
       case i  => (glob.substring(0, i), glob.substring(i + 1))
     }
     private[this] val matcher = FileSystems.getDefault.getPathMatcher(s"$prefix:$pattern")
-    private[this] val needsHiddenFilter = prefix == "glob" && pattern.startsWith("*")
-    override def matches(path: Path): Boolean =
-      matcher.matches(path) && !(needsHiddenFilter && path.getFileName.toString.startsWith("."))
+    override def matches(path: Path): Boolean = matcher.matches(path)
     override def equals(o: Any): Boolean = o match {
       case that: GlobMatcher => this.glob == that.glob
       case _                 => false
