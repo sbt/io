@@ -23,4 +23,5 @@ test_script:
 
 cache:
   - '%USERPROFILE%\.ivy2\cache'
+  - '%USERPROFILE%\Coursier\Cache\v1'
   - '%USERPROFILE%\.sbt'
