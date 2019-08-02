@@ -302,9 +302,7 @@ object Glob {
       case Pattern(p, relative) if path.startsWith(p) => relative.matches(p.getFileName)
       case g                                          => g.matches(path)
     }
-    private[sbt] def toFileFilter: FileFilter = new FileFilter {
-      override def accept(pathname: File): Boolean = glob.matches(pathname.toPath)
-    }
+    private[sbt] def toFileFilter: FileFilter = pathname => glob.matches(pathname.toPath)
     private[sbt] def toAbsolutePath(path: Path)(implicit option: RelativeGlobViewOption): Path = {
       import RelativeGlobViewOption._
       if (!path.isAbsolute) {
@@ -326,7 +324,7 @@ object Glob {
         case r: RelativeGlob =>
           r.tail match {
             case Nil => Root(b)
-            case t   => Pattern(b, RelativeGlob(r.tail))
+            case t   => Pattern(b, RelativeGlob(t))
           }
         case _ => glob
       }
