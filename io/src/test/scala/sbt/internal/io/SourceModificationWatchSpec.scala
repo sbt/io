@@ -557,7 +557,7 @@ object EventMonitorSpec {
   }
   implicit class FileOps(val file: File) extends AnyVal {
     def scalaSourceGlobs: Seq[Glob] =
-      Glob(file.toPath.toRealPath(), RecursiveGlob / "*.scala") :: Nil
+      Glob(file.toPath.toRealPath(), RecursiveGlob / "[!.]*.scala") :: Nil
   }
   class CachingWatchLogger extends Logger {
     val lines = new scala.collection.mutable.ArrayBuffer[String]
