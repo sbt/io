@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+@FunctionalInterface
 private[sbt] trait Observer[-T] extends AutoCloseable {
 
   /**
