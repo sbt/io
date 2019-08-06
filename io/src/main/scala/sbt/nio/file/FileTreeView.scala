@@ -64,9 +64,9 @@ object FileTreeView {
   implicit class Ops(val fileTreeView: FileTreeView.Nio[FileAttributes]) extends AnyVal {
 
     /**
-     * Returns all of the existing paths on the file system that match the [[Glob]] pattern. This
-     * method should not throw and will return an empty sequence if no paths exist that match
-     * the pattern. It will print a warning if the glob does not have an absolute
+     * Returns all of the existing paths on the file system that match the [[Glob]] pattern. It
+     * should not throw an IOException and will return an empty sequence if no paths exist that
+     * match the pattern. It will print a warning if the glob does not have an absolute
      * base path but it will expand the glob to `Paths.get("").toAbsolutePath.toGlob / glob`
      * for traversal.
      *
@@ -74,6 +74,20 @@ object FileTreeView {
      * @return all of the paths that match the search query.
      */
     def list(glob: Glob): Seq[(Path, FileAttributes)] = all(glob :: Nil, fileTreeView)
+
+    /**
+     * Returns a filtered list of the existing paths on the file system that match the [[Glob]]
+     * pattern. It should not throw an IOException and will return an empty sequence if no paths
+     * exist that match the patterns and filter. It will print a warning if any of the globs do not
+     * have an absolute base path but it will expand the glob to `Paths.get("").toGlob / glob` for
+     * traversal.
+     *
+     * @param glob the search query
+     * @param filter the filter for the path name and attributes of each file in the result set
+     * @return all of the paths that match the search query.
+     */
+    def list(glob: Glob, filter: (Path, FileAttributes) => Boolean): Seq[(Path, FileAttributes)] =
+      all(glob :: Nil, fileTreeView, filter)
 
     /**
      * Returns all of the existing paths on the file system that match the [[Glob]] pattern. This
@@ -97,9 +111,37 @@ object FileTreeView {
     def list(globs: Traversable[Glob]): Seq[(Path, FileAttributes)] = all(globs, fileTreeView)
 
     /**
+     * Returns a filtered list of the existing paths on the file system that match the [[Glob]]
+     * pattern. It should not throw an IOException and will return an empty sequence if no paths
+     * exist that match the patterns and filter. It will print a warning if any of the globs do not
+     * have an absolute base path but it will expand the glob to `Paths.get("").toGlob / glob` for
+     * traversal. It optimizes traversal so that each directory on the file system is only listed
+     * once:
+     *
+     * {{{
+     *   val dir = Paths.get("").toAbsolutePath.toGlob
+     *   // This only lists the current directory once
+     *   val view = FileTreeView.default
+     *   val filter: (Path, FileAttributes) = (_, a) => a.isRegularFile
+     *   val sources = view.list(Seq(dir / "*.scala", dir / "*.java"), filter)
+     *   // This lists the current directory twice
+     *   val slowSources =
+     *     view.list(dir / "*.scala", filter) ++ view.list(current / "*.java", filter)
+     * }}}
+     *
+     * @param globs the search queries
+     * @param filter the filter for the path name and attributes of each file in the result set
+     * @return all of the paths that match the search query.
+     */
+    def list(
+        globs: Traversable[Glob],
+        filter: (Path, FileAttributes) => Boolean
+    ): Seq[(Path, FileAttributes)] = all(globs, fileTreeView, filter)
+
+    /**
      * Returns an iterator for all of the existing paths on the file system that match the [[Glob]]
-     * pattern. This method should not throw and will return an empty sequence if no paths exist
-     * that match the pattern. It will print a warning if the glob does not have an absolute
+     * pattern. It should not throw an IOException and will return an empty sequence if no paths
+     * exist that match the pattern. It will print a warning if the glob does not have an absolute
      * base path but it will expand the glob to `Paths.get("").toAbsolutePath.toGlob / glob`
      * for traversal.
      *
@@ -110,9 +152,32 @@ object FileTreeView {
       FileTreeView.iterator(glob :: Nil, fileTreeView)
 
     /**
-     * Returns all of the existing paths on the file system that match the [[Glob]] pattern. This
-     * method should not throw and will return an empty sequence if no paths exist that match
-     * the patterns. It will print a warning if any of the globs do not have an absolute
+     * Returns a filtered iterator for all of the existing paths on the file system that match the
+     * [[Glob]] pattern. It should not throw an IOException and will return an empty sequence if no
+     * paths exist that match the pattern and the filter. It will print a warning if the glob does
+     * not have an absolute base path but it will expand the glob to
+     * `Paths.get("").toAbsolutePath.toGlob / glob` for traversal.
+     *
+     * {{{
+     *   val dir = Paths.get("").toAbsolutePath.toGlob
+     *   val regularNonHiddenFiles = FileTreeView.default.list(dir / "*.scala",
+     *    (p: Path, a: FileAttributes) => a.isRegularFile && !Files.isHidden(p) )
+     * }}}
+     *
+     * @param glob the search query
+     * @param filter the filter for the path name and attributes of each file in the result set
+     * @return an iterator for all of the paths that match the search query.
+     */
+    def iterator(
+        glob: Glob,
+        filter: (Path, FileAttributes) => Boolean
+    ): Iterator[(Path, FileAttributes)] =
+      FileTreeView.iterator(glob :: Nil, fileTreeView, filter)
+
+    /**
+     * Returns all of the existing paths on the file system that match the [[Glob]] pattern. It
+     * should not throw an IOException and will return an empty sequence if no paths exist tha
+     * match the patterns. It will print a warning if any of the globs do not have an absolute
      * base path but it will expand the glob to `Paths.get("").toGlob / glob` for traversal. It
      * optimizes traversal so that each directory on the file system is only listed once:
      *
@@ -121,11 +186,12 @@ object FileTreeView {
      *   // This only lists the current directory once
      *   val view = FileTreeView.default
      *   view.iterator(Seq(dir / "*.scala", dir / "*.java")).foreach {
-     *    case (path, attributes) => println(s"path: $path, attributes: $attributes")
+     *    case (path: Path, attributes: FileAttributes) =>
+     *      println(s"path: $$path, attributes: $$attributes")
      *  }
      *   // This lists the current directory twice
      *   (view.iterator(dir / "*.scala") ++ view.iterator(dir / "*.java")) .foreach {
-     *    case (path, attributes) => println(s"path: $path, attributes: $attributes")
+     *    case (path, attributes) => println(s"path: $$path, attributes: $$attributes")
      *  }
      * }}}
      *
@@ -134,6 +200,36 @@ object FileTreeView {
      */
     def iterator(globs: Traversable[Glob]): Iterator[(Path, FileAttributes)] =
       FileTreeView.iterator(globs, fileTreeView)
+
+    /**
+     * Returns a filtered of the existing paths on the file system that match the [[Glob]] pattern.
+     * It should not throw an IOException and will return an empty sequence if no paths exist that
+     * match the patterns. It will print a warning if any of the globs do not have an absolute
+     * base path but it will expand the glob to `Paths.get("").toGlob / glob` for traversal. It
+     * optimizes traversal so that each directory on the file system is only listed once:
+     *
+     * {{{
+     *   val dir = Paths.get("").toAbsolutePath.toGlob
+     *   // This only lists the current directory once
+     *   val view = FileTreeView.default
+     *   val filter: (Path, FileAttributes) => Boolean = (_, a) => a.isRegularFile
+     *   view.iterator(Seq(dir / "*.scala", dir / "*.java"), filter).foreach {
+     *    case (path, attributes) => println(s"path: $$path, attributes: $$attributes")
+     *  }
+     *   // This lists the current directory twice
+     *   (view.iterator(dir / "*.scala", filter) ++ view.iterator(dir / "*.java"), filter).foreach {
+     *    case (path, attributes) => println(s"path: $$path, attributes: $$attributes")
+     *  }
+     * }}}
+     *
+     * @param globs the search queries
+     * @return all of the paths that match the search query.
+     */
+    def iterator(
+        globs: Traversable[Glob],
+        filter: (Path, FileAttributes) => Boolean
+    ): Iterator[(Path, FileAttributes)] =
+      FileTreeView.iterator(globs, fileTreeView, filter)
   }
   private[sbt] type Nio[+T] = FileTreeView[(Path, T)]
 

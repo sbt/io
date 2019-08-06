@@ -78,6 +78,19 @@ class FileTreeViewSpec extends FlatSpec {
     assert(paths.toSet == Set(file1, file2))
     assert(listed == Seq(file1.getParent))
   }
+  it should "apply filters" in IO.withTemporaryDirectory { dir =>
+    val subdir = Files.createDirectories(dir.toPath.resolve("subdir"))
+    val nested = Files.createDirectories(subdir.resolve("nested"))
+    val subdirFile = Files.createFile(subdir.resolve("file"))
+    val nestedFile = Files.createFile(nested.resolve("file"))
+    val glob = Glob(dir.toPath, RecursiveGlob)
+
+    val files = FileTreeView.default.list(glob, (_: Path, a: FileAttributes) => a.isRegularFile)
+    assert(files.map(_._1) == Seq(subdirFile, nestedFile))
+
+    val directories = FileTreeView.default.list(glob, (_: Path, a: FileAttributes) => a.isDirectory)
+    assert(directories.map(_._1) == Seq(subdir, nested))
+  }
   "iterator" should "be lazy" in IO.withTemporaryDirectory { dir =>
     val firstSubdir = Files.createDirectory(dir.toPath.resolve("first"))
     val firstSubdirFile = Files.createFile(firstSubdir.resolve("first-file"))
