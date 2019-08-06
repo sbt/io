@@ -14,7 +14,15 @@ import java.nio.file._
 
 import org.scalatest.FlatSpec
 import sbt.io.IO
-import sbt.nio.file.{ AnyPath, FileAttributes, FileTreeView, Glob, RecursiveGlob }
+import sbt.nio.file.{
+  AnyPath,
+  DirectoryFilter,
+  FileAttributes,
+  FileTreeView,
+  Glob,
+  RecursiveGlob,
+  RegularFileFilter
+}
 
 import scala.collection.mutable
 
@@ -85,10 +93,10 @@ class FileTreeViewSpec extends FlatSpec {
     val nestedFile = Files.createFile(nested.resolve("file"))
     val glob = Glob(dir.toPath, RecursiveGlob)
 
-    val files = FileTreeView.default.list(glob, (_: Path, a: FileAttributes) => a.isRegularFile)
+    val files = FileTreeView.default.list(glob, RegularFileFilter)
     assert(files.map(_._1) == Seq(subdirFile, nestedFile))
 
-    val directories = FileTreeView.default.list(glob, (_: Path, a: FileAttributes) => a.isDirectory)
+    val directories = FileTreeView.default.list(glob, DirectoryFilter)
     assert(directories.map(_._1) == Seq(subdir, nested))
   }
   "iterator" should "be lazy" in IO.withTemporaryDirectory { dir =>
@@ -108,7 +116,7 @@ class FileTreeViewSpec extends FlatSpec {
       ListingFileTreeView.iterator(Glob(dir, RecursiveGlob)).collectFirst {
         case (p, a) if a.isRegularFile => p
       }
-    assert(firstSubdirFoundFile.map(_.getParent) == Some(firstSubdir))
+    assert(firstSubdirFoundFile.map(_.getParent).contains(firstSubdir))
     assert(ListingFileTreeView.listed.toSet == Set(dir.toPath, firstSubdir))
     val allFiles = ListingFileTreeView
       .iterator(Glob(dir, RecursiveGlob))

@@ -86,7 +86,7 @@ object FileTreeView {
      * @param filter the filter for the path name and attributes of each file in the result set
      * @return all of the paths that match the search query.
      */
-    def list(glob: Glob, filter: (Path, FileAttributes) => Boolean): Seq[(Path, FileAttributes)] =
+    def list(glob: Glob, filter: PathFilter): Seq[(Path, FileAttributes)] =
       all(glob :: Nil, fileTreeView, filter)
 
     /**
@@ -133,10 +133,8 @@ object FileTreeView {
      * @param filter the filter for the path name and attributes of each file in the result set
      * @return all of the paths that match the search query.
      */
-    def list(
-        globs: Traversable[Glob],
-        filter: (Path, FileAttributes) => Boolean
-    ): Seq[(Path, FileAttributes)] = all(globs, fileTreeView, filter)
+    def list(globs: Traversable[Glob], filter: PathFilter): Seq[(Path, FileAttributes)] =
+      all(globs, fileTreeView, filter)
 
     /**
      * Returns an iterator for all of the existing paths on the file system that match the [[Glob]]
@@ -168,10 +166,7 @@ object FileTreeView {
      * @param filter the filter for the path name and attributes of each file in the result set
      * @return an iterator for all of the paths that match the search query.
      */
-    def iterator(
-        glob: Glob,
-        filter: (Path, FileAttributes) => Boolean
-    ): Iterator[(Path, FileAttributes)] =
+    def iterator(glob: Glob, filter: PathFilter): Iterator[(Path, FileAttributes)] =
       FileTreeView.iterator(glob :: Nil, fileTreeView, filter)
 
     /**
@@ -223,12 +218,10 @@ object FileTreeView {
      * }}}
      *
      * @param globs the search queries
+     * @param filter the pathfilter
      * @return all of the paths that match the search query.
      */
-    def iterator(
-        globs: Traversable[Glob],
-        filter: (Path, FileAttributes) => Boolean
-    ): Iterator[(Path, FileAttributes)] =
+    def iterator(globs: Traversable[Glob], filter: PathFilter): Iterator[(Path, FileAttributes)] =
       FileTreeView.iterator(globs, fileTreeView, filter)
   }
   private[sbt] type Nio[+T] = FileTreeView[(Path, T)]
@@ -260,11 +253,11 @@ object FileTreeView {
       globs: Traversable[Glob],
       view: FileTreeView.Nio[FileAttributes]
   ): Seq[(Path, FileAttributes)] =
-    all(globs, view, (_, _) => true)
+    all(globs, view, AllPass)
   private[sbt] def all(
       globs: Traversable[Glob],
       view: FileTreeView.Nio[FileAttributes],
-      filter: (Path, FileAttributes) => Boolean
+      filter: PathFilter
   ): Seq[(Path, FileAttributes)] =
     iterator(globs, view, filter).toVector
 
@@ -276,7 +269,7 @@ object FileTreeView {
   private[sbt] def iterator(
       globs: Traversable[Glob],
       view: FileTreeView.Nio[FileAttributes],
-      filter: (Path, FileAttributes) => Boolean
+      filter: PathFilter
   ): Iterator[(Path, FileAttributes)] = {
     val params = globs.toSeq.sorted.distinct.map(_.fileTreeViewListParameters)
     var directoryCache: Option[(Path, ConcurrentHashMap[Path, FileAttributes])] = None
@@ -288,7 +281,7 @@ object FileTreeView {
     val visited = new util.HashSet[Path]
     val pathFilter: Path => Boolean = path => params.exists(_._3.matches(path))
     val totalFilter: (Path, FileAttributes) => Boolean = { (path, attributes) =>
-      pathFilter(path) && filter(path, attributes)
+      pathFilter(path) && filter.accept(path, attributes)
     }
     val remainingGlobs = new util.LinkedList[Glob]()
     params.foreach(p => remainingGlobs.add(p._3))

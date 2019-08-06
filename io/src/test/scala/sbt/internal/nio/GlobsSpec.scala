@@ -17,9 +17,10 @@ import org.scalatest.FlatSpec
 import sbt.io._
 import sbt.nio.TestHelpers._
 import sbt.nio.file.RelativeGlob.{ Matcher, NoPath }
-import sbt.nio.file._
+import sbt.nio.file.{ **, AnyPath, Glob }
 
 class GlobsSpec extends FlatSpec {
+
   "FullFileGlob" should "apply exact name filters" in {
     assert(Globs(basePath, recursive = true, "foo") == Glob(basePath, ** / "foo"))
     assert(Globs(basePath, recursive = false, "foo") == Glob(basePath, "foo"))
