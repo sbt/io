@@ -11,8 +11,9 @@
 package sbt.nio.file
 
 import java.io.IOException
-import java.nio.file.{ Files, Path }
+import java.nio.file.{ Files, NotDirectoryException, Path }
 import java.util
+import java.util.concurrent.ConcurrentHashMap
 
 import sbt.internal.nio.SwovalFileTreeView
 
@@ -37,11 +38,10 @@ trait FileTreeView[+T] {
 }
 object FileTreeView {
   val native: FileTreeView.Nio[FileAttributes] = SwovalFileTreeView
-  val nio: FileTreeView.Nio[FileAttributes] = (path: Path) =>
-    try {
-      val paths = Files.list(path).iterator.asScala
-      paths.flatMap(p => FileAttributes(p).toOption.map(p -> _)).toIndexedSeq
-    } catch { case _: IOException => Nil }
+  val nio: FileTreeView.Nio[FileAttributes] = (path: Path) => {
+    val paths = Files.list(path).iterator.asScala
+    paths.flatMap(p => FileAttributes(p).toOption.map(p -> _)).toIndexedSeq
+  }
 
   /**
    * Adds additional methods to [[FileTreeView]]. This api may be changed so it should not be
@@ -97,6 +97,7 @@ object FileTreeView {
       filter: (Path, FileAttributes) => Boolean
   ): Iterator[(Path, FileAttributes)] = {
     val params = globs.toSeq.sorted.distinct.map(_.fileTreeViewListParameters)
+    var directoryCache: Option[(Path, ConcurrentHashMap[Path, FileAttributes])] = None
     val needListDirectory: Path => Boolean = (path: Path) =>
       params.exists {
         case (base, maxDepth, _) =>
@@ -117,6 +118,33 @@ object FileTreeView {
           if (totalFilter(path, attributes)) buffer.add(pair)
           ()
       }
+      private def listPath(path: Path): Unit = {
+        try {
+          view.list(path) foreach {
+            case pair @ (p, attributes) if attributes.isDirectory =>
+              if (needListDirectory(p)) remainingPaths.add(p)
+              maybeAdd(pair)
+            case pair => maybeAdd(pair)
+          }
+        } catch {
+          case _: NotDirectoryException if !visited.contains(path.getParent) =>
+            val map = directoryCache match {
+              case Some((parent, m)) if parent == path.getParent => m
+              case _ =>
+                val map = new ConcurrentHashMap[Path, FileAttributes]()
+                try view.list(path.getParent).foreach { case (p, a) => map.put(p, a) } catch {
+                  case _: IOException =>
+                }
+                directoryCache = Some(path.getParent -> map)
+                map
+            }
+            map.get(path) match {
+              case null =>
+              case a    => maybeAdd(path -> a)
+            }
+          case _: IOException =>
+        }
+      }
       @tailrec
       private def fillBuffer(): Unit = {
         remainingPaths.poll match {
@@ -132,18 +160,15 @@ object FileTreeView {
             path.getParent match {
               case null =>
               case p =>
-                if (!visited.contains(p) && pathFilter(path))
-                  FileAttributes(path).foreach(a => maybeAdd(path -> a))
-            }
-            try {
-              view.list(path) foreach {
-                case pair @ (p, attributes) if attributes.isDirectory =>
-                  if (needListDirectory(p)) remainingPaths.add(p)
-                  maybeAdd(pair)
-                case pair => maybeAdd(pair)
-              }
-            } catch {
-              case _: IOException =>
+                directoryCache match {
+                  case Some((`p`, m)) =>
+                    m.get(path) match {
+                      case null               =>
+                      case a if a.isDirectory => listPath(p)
+                      case a                  => maybeAdd(path -> a)
+                    }
+                  case _ => listPath(path)
+                }
             }
             if (buffer.isEmpty) fillBuffer()
           // if we've already visited the path, go to next

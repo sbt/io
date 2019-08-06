@@ -65,6 +65,19 @@ class FileTreeViewSpec extends FlatSpec {
       .map { case (p, _) => p }
     assert(xs.contains(fooFile) && xs.contains(barFile))
   }
+  it should "list directories only once" in IO.withTemporaryDirectory { dir =>
+    val file1 = Files.createFile(dir.toPath.resolve("file-1"))
+    val file2 = Files.createFile(dir.toPath.resolve("file-2"))
+    val listed = new mutable.ArrayBuffer[Path]
+    val view: FileTreeView.Nio[FileAttributes] = (path: Path) => {
+      val res = FileTreeView.default.list(path)
+      listed += path
+      res
+    }
+    val paths = view.list(Seq(Glob(file1), Glob(file2))).map(_._1)
+    assert(paths.toSet == Set(file1, file2))
+    assert(listed == Seq(file1.getParent))
+  }
   "iterator" should "be lazy" in IO.withTemporaryDirectory { dir =>
     val firstSubdir = Files.createDirectory(dir.toPath.resolve("first"))
     val firstSubdirFile = Files.createFile(firstSubdir.resolve("first-file"))

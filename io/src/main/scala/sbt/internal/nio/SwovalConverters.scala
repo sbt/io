@@ -10,7 +10,6 @@
 
 package sbt.internal.nio
 
-import java.io.IOException
 import java.nio.file.Path
 
 import com.swoval.files.FileTreeViews
@@ -41,17 +40,15 @@ private[sbt] object SwovalFileTreeView extends FileTreeView.Nio[FileAttributes] 
   private[this] val view = FileTreeViews.getDefault(true)
   override def list(path: Path): Seq[(Path, FileAttributes)] = {
     val result = new VectorBuilder[(Path, FileAttributes)]
-    try {
-      view.list(path, 0, _ => true).forEach { typedPath =>
-        result += typedPath.getPath ->
-          FileAttributes(
-            isDirectory = typedPath.isDirectory,
-            isOther = false,
-            isRegularFile = typedPath.isFile,
-            isSymbolicLink = typedPath.isSymbolicLink
-          )
-      }
-    } catch { case _: IOException => }
+    view.list(path, 0, _ => true).forEach { typedPath =>
+      result += typedPath.getPath ->
+        FileAttributes(
+          isDirectory = typedPath.isDirectory,
+          isOther = false,
+          isRegularFile = typedPath.isFile,
+          isSymbolicLink = typedPath.isSymbolicLink
+        )
+    }
     result.result()
   }
 }
