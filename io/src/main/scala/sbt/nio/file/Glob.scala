@@ -273,7 +273,7 @@ object Glob {
   private object Root {
     implicit val ordering: Ordering[Root] = Ordering.by(_.root)
   }
-  private final case class Root(root: Path) extends Glob {
+  private[file] final case class Root(root: Path) extends Glob {
     require(root.isAbsolute, s"Tried to construct absolute glob from relative path $root")
     override def matches(path: Path): Boolean = root == path
     override def toString: String = root.toString

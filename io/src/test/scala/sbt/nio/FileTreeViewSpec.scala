@@ -15,6 +15,7 @@ import java.nio.file._
 import org.scalatest.FlatSpec
 import sbt.io.IO
 import sbt.nio.file.{
+  **,
   AnyPath,
   DirectoryFilter,
   FileAttributes,
@@ -23,7 +24,9 @@ import sbt.nio.file.{
   RecursiveGlob,
   RegularFileFilter
 }
+import sbt.nio.file.syntax._
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 class FileTreeViewSpec extends FlatSpec {
@@ -98,6 +101,22 @@ class FileTreeViewSpec extends FlatSpec {
 
     val directories = FileTreeView.default.list(glob, DirectoryFilter)
     assert(directories.map(_._1) == Seq(subdir, nested))
+  }
+  it should "handle exact file glob" in IO.withTemporaryDirectory { dir =>
+    val file = Files.createFile(dir.toPath.resolve("file"))
+    assert(FileTreeView.default.list(file.toGlob).map(_._1) == Seq(file))
+  }
+  it should "handle many exact file globs" in IO.withTemporaryDirectory { dir =>
+    val random = new scala.util.Random()
+    val n = 2000
+    val nested = Files.createDirectories(dir.toPath / "subdir" / "nested")
+    @tailrec
+    def newRandomFile(): Path =
+      try Files.createFile(nested / s"a${1 + random.nextInt(n)}")
+      catch { case _: FileAlreadyExistsException => newRandomFile() }
+    val randomFiles = (1 to Seq(10, n).min).map(_ => newRandomFile())
+    val globs = (1 to n).map(i => dir.toGlob / "subdir" / "nested" / s"a$i") :+ Glob(dir, ** / "b*")
+    assert(randomFiles.toSet == FileTreeView.default.list(globs).map(_._1).toSet)
   }
   "iterator" should "be lazy" in IO.withTemporaryDirectory { dir =>
     val firstSubdir = Files.createDirectory(dir.toPath.resolve("first"))

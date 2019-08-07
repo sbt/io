@@ -16,6 +16,7 @@ import java.util
 import java.util.concurrent.ConcurrentHashMap
 
 import sbt.internal.nio.SwovalFileTreeView
+import sbt.nio.file.Glob.Root
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -271,7 +272,30 @@ object FileTreeView {
       view: FileTreeView.Nio[FileAttributes],
       filter: PathFilter
   ): Iterator[(Path, FileAttributes)] = {
-    val params = globs.toSeq.sorted.distinct.map(_.fileTreeViewListParameters)
+    /*
+     * As an optimization, partition the Globs into Root globs and other kinds. Then for each of
+     * the root Globs, we can partition by parent path and aggregate these into a single Glob
+     * for each parent. For example, if the input globs are `/foo/bar.txt` and `/foo/baz.txt`, we
+     * can aggregate these into the glob: `/foo/{bar.txt,baz.txt}`. In the case where there are
+     * 1000 input globs of the form { /foo/a1, /foo/a2, .., /foo/a1000 }, and 10 random files that
+     * match that pattern, e.g. /foo/63, the total time to run FileTreeView.list(globs) drops from
+     * about 20ms to 1ms.
+     */
+    val (roots, rest) = globs.toVector.partition { case _: Root => true; case _ => false }
+    val rootPaths = roots.map {
+      case r: Root => r.root
+      case _       => throw new IllegalStateException("Partition failed (should be unreachable).")
+    }
+    val rootPathsByParent = rootPaths.groupBy(_.getParent)
+    val rootPathParams = rootPathsByParent.map {
+      case (parent, paths) =>
+        paths.map(_.getFileName) match {
+          case Seq(fileName) => (parent, 1, Glob(parent, fileName.toString))
+          case fileNames     => (parent, 1, Glob(parent, fileNames.mkString("{", ",", "}")))
+        }
+    }
+    val params = (rootPathParams.toSeq ++
+      rest.distinct.map(_.fileTreeViewListParameters)).sortBy(_._1)
     var directoryCache: Option[(Path, ConcurrentHashMap[Path, FileAttributes])] = None
     val needListDirectory: Path => Boolean = (path: Path) =>
       params.exists {
