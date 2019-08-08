@@ -69,7 +69,7 @@ import scala.util.matching.Regex
  *   allScalaAndJavaSources.matches(Paths.get("/foo/bar/baz/fizz/buzz/Buzz.java")) // true
  * }}}
  */
-sealed trait Glob {
+sealed trait Glob extends PathFilter {
 
   /**
    * Indicates whether a path matches the pattern specified by this [[Glob]].
@@ -78,6 +78,14 @@ sealed trait Glob {
    * @return true it the path matches.
    */
   def matches(path: Path): Boolean
+
+  /**
+   * Returns true if the pathname matches the glob pattern.
+   * @param path the path name
+   * @param attributes the file attributes corresponding to `path`
+   * @return true if the path name matches the glob pattern.
+   */
+  override final def accept(path: Path, attributes: FileAttributes): Boolean = matches(path)
 }
 
 object Glob {

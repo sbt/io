@@ -27,7 +27,17 @@ trait PathFilter {
   def accept(path: Path, attributes: FileAttributes): Boolean
 }
 
-object PathFilter {
+private[sbt] trait LowPriorityPathFilter {
+
+  /**
+   * Converts a glob string to a [[sbt.nio.file.PathFilter]].
+   * @param glob the glob string to convert to a filter, e.g. "**<code>/</code>*.scala"
+   * @return the parsed glob. May throw an exception if the glob string can not be parsed into a
+   *         [[Glob]].
+   */
+  implicit def stringToPathFilter(glob: String): PathFilter = Glob(glob)
+}
+object PathFilter extends LowPriorityPathFilter {
 
   /**
    * Returns a PathFilter that accepts any path for which there exists a [[Glob]] that matches
@@ -38,15 +48,18 @@ object PathFilter {
   def apply(globs: Glob*): PathFilter = if (globs.isEmpty) NoPass else new GlobPathFilter(globs)
 
   /**
-   * Provides extension methods for [[PathFilter]]
-   * @param pathFilter the [[PathFilter]] to extend
+   * Provides extension methods for combining or negating [[PathFilter]] instances or
+   * or other filter types that can be safely converted (see [[sbt.io.DirectoryFilter]]
+   * and [[sbt.io.HiddenFileFilter]]).
    */
   implicit class Ops(val pathFilter: PathFilter) extends AnyVal {
 
     /**
-     * Returns a combined [[PathFilter]] that returns true only if both [[PathFilter]] instances
-     * accept the path.
-     * @param other the other [[PathFilter]]
+     * Combines this filter with a [[sbt.nio.file.PathFilter]] to produce a combined filter
+     * that returns true only if both filters accept the path.
+     * @param other the other [[sbt.nio.file.PathFilter]]
+     * @return the [[sbt.nio.file.PathFilter]] representing both filters combined by the `&&`
+     *         operation
      */
     def &&(other: PathFilter): PathFilter = pathFilter match {
       case NoPass  => NoPass
@@ -60,9 +73,11 @@ object PathFilter {
     }
 
     /**
-     * Returns a combined [[PathFilter]] that returns true only if both [[PathFilter]] instances
-     * accept the path.
-     * @param other the other [[PathFilter]]
+     * Combines this filter with a [[sbt.nio.file.PathFilter]] to produce a combined filter
+     * that returns true either if this or the other [[sbt.nio.file.PathFilter]] accept the path.
+     * @param other the other [[sbt.nio.file.PathFilter]]
+     * @return the [[sbt.nio.file.PathFilter]] representing both filters combined by the `&&`
+     *         operation
      */
     def ||(other: PathFilter): PathFilter = pathFilter match {
       case NoPass  => other
@@ -76,15 +91,16 @@ object PathFilter {
     }
 
     /**
-     * Inverts the [[PathFilter.accept]] method.
-     * @return
+     * Creates a new [[sbt.nio.file.PathFilter]] what accepts a `(Path, FileAttributes)` pair only
+     * if this filter does not accept it.
+     * @return the negated [[sbt.nio.file.PathFilter]] corresponding to this filter
      */
     def unary_! : PathFilter = pathFilter match {
-      case AllPass         => NoPass
-      case NoPass          => AllPass
-      case HiddenFilter    => NotHiddenFilter
-      case NotHiddenFilter => HiddenFilter
-      case pf              => new NotPathFilter(pf)
+      case AllPass     => NoPass
+      case NoPass      => AllPass
+      case IsHidden    => IsNotHidden
+      case IsNotHidden => IsHidden
+      case pf          => new NotPathFilter(pf)
     }
   }
 
@@ -96,12 +112,14 @@ object PathFilter {
    * @param fileFilter the filter to convert
    * @return the converted.
    */
-  implicit def fromFileFilter(fileFilter: FileFilter): PathFilter = fileFilter match {
-    case sbt.io.HiddenFileFilter    => HiddenFilter
-    case sbt.io.NotHiddenFileFilter => NotHiddenFilter
+  def fromFileFilter(fileFilter: FileFilter): PathFilter = fileFilter match {
+    case sbt.io.HiddenFileFilter    => IsHidden
+    case sbt.io.NotHiddenFileFilter => IsNotHidden
     case sbt.io.AllPassFilter       => AllPass
     case sbt.io.NothingFilter       => NoPass
-    case sbt.io.DirectoryFilter     => DirectoryFilter
+    case sbt.io.DirectoryFilter     => IsDirectory
+    case sbt.io.RegularFileFilter   => IsRegularFile
+    case pf: PathFilter             => pf
     case nf: sbt.io.NotFilter       => !fromFileFilter(nf.fileFilter)
     case af: sbt.io.AndFilter       => fromFileFilter(af.left) && fromFileFilter(af.right)
     case of: sbt.io.OrFilter        => fromFileFilter(of.left) || fromFileFilter(of.right)
@@ -141,7 +159,7 @@ object PathFilter {
 /**
  * A [[PathFilter]] that includes only directories.
  */
-case object DirectoryFilter extends PathFilter {
+private[sbt] case object IsDirectory extends PathFilter {
 
   /**
    * Returns true if the `path` is a directory
@@ -155,7 +173,7 @@ case object DirectoryFilter extends PathFilter {
 /**
  * A [[PathFilter]] that includes only regular files.
  */
-case object RegularFileFilter extends PathFilter {
+private[sbt] case object IsRegularFile extends PathFilter {
 
   /**
    * Returns true if the `path` is a regular file
@@ -170,7 +188,7 @@ case object RegularFileFilter extends PathFilter {
  * A [[PathFilter]] that includes only hidden files according to
  * [[https://docs.oracle.com/javase/8/docs/api/java/nio/file/Files.html#isHidden-java.nio.file.Path- Files.isHidden]].
  */
-case object HiddenFilter extends PathFilter {
+private[sbt] case object IsHidden extends PathFilter {
 
   /**
    * Returns true if the `path` is hidden according to
@@ -186,11 +204,11 @@ case object HiddenFilter extends PathFilter {
  * A [[PathFilter]] that includes only files that are not hidden according to
  * [[https://docs.oracle.com/javase/8/docs/api/java/nio/file/Files.html#isHidden-java.nio.file.Path- Files.isHidden]].
  */
-case object NotHiddenFilter extends PathFilter {
+private[sbt] case object IsNotHidden extends PathFilter {
   override def accept(path: Path, attributes: FileAttributes): Boolean = !Files.isHidden(path)
 }
 
-case object AllPass extends PathFilter {
+private[sbt] case object AllPass extends PathFilter {
 
   /**
    * Always returns true.
@@ -201,7 +219,7 @@ case object AllPass extends PathFilter {
   override def accept(path: Path, attributes: FileAttributes): Boolean = true
 }
 
-case object NoPass extends PathFilter {
+private[sbt] case object NoPass extends PathFilter {
 
   /**
    * Always returns false.

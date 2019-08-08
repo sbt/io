@@ -17,12 +17,12 @@ import sbt.io.IO
 import sbt.nio.file.{
   **,
   AnyPath,
-  DirectoryFilter,
+  IsDirectory,
   FileAttributes,
   FileTreeView,
   Glob,
   RecursiveGlob,
-  RegularFileFilter
+  IsRegularFile
 }
 import sbt.nio.file.syntax._
 
@@ -96,10 +96,10 @@ class FileTreeViewSpec extends FlatSpec {
     val nestedFile = Files.createFile(nested.resolve("file"))
     val glob = Glob(dir.toPath, RecursiveGlob)
 
-    val files = FileTreeView.default.list(glob, RegularFileFilter)
+    val files = FileTreeView.default.list(glob, IsRegularFile)
     assert(files.map(_._1) == Seq(subdirFile, nestedFile))
 
-    val directories = FileTreeView.default.list(glob, DirectoryFilter)
+    val directories = FileTreeView.default.list(glob, IsDirectory)
     assert(directories.map(_._1) == Seq(subdir, nested))
   }
   it should "handle exact file glob" in IO.withTemporaryDirectory { dir =>
