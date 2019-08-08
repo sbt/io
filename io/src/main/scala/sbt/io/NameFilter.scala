@@ -11,8 +11,10 @@
 package sbt.io
 
 import java.io.{ File, IOException }
-import java.nio.file.Files
+import java.nio.file.{ Files, Path => NioPath }
 import java.util.regex.Pattern
+
+import sbt.nio.file.{ FileAttributes, PathFilter }
 
 /** A `java.io.FileFilter` with additional methods for combining filters. */
 trait FileFilter extends java.io.FileFilter {
@@ -196,11 +198,13 @@ final class SuffixFilter(val suffix: String) extends NameFilter {
 }
 
 /** A [[FileFilter]] that selects files that are hidden according to `java.nio.file.Files.isHidden` or if they start with a dot (`.`). */
-case object HiddenFileFilter extends FileFilter {
-  def accept(file: File): Boolean =
-    try Files.isHidden(file.toPath) && file.getName != "."
-    catch { case _: IOException => false }
+case object HiddenFileFilter extends FileFilter with PathFilter {
+  def accept(file: File): Boolean = impl(file.toPath)
+  override def accept(path: NioPath, attributes: FileAttributes): Boolean = impl(path)
   override def unary_- : FileFilter = NotHiddenFileFilter
+  private def impl(path: NioPath): Boolean =
+    try Files.isHidden(path) && path.getFileName.toString != "."
+    catch { case _: IOException => false }
 }
 private[sbt] case object NotHiddenFileFilter extends FileFilter {
   def accept(file: File): Boolean = !HiddenFileFilter.accept(file)
@@ -213,8 +217,15 @@ case object ExistsFileFilter extends FileFilter {
 }
 
 /** A [[FileFilter]] that selects files that are a directory according to `java.io.File.isDirectory`. */
-case object DirectoryFilter extends FileFilter {
+case object DirectoryFilter extends FileFilter with PathFilter {
   def accept(file: File): Boolean = file.isDirectory
+  override def accept(path: NioPath, attributes: FileAttributes): Boolean = attributes.isDirectory
+}
+
+/** A [[FileFilter]] that selects files that are a directory according to `java.io.File.isFile`. */
+case object RegularFileFilter extends FileFilter with PathFilter {
+  def accept(file: File): Boolean = file.isFile
+  override def accept(path: NioPath, attributes: FileAttributes): Boolean = attributes.isRegularFile
 }
 
 /** A [[FileFilter]] that selects files according the predicate `acceptFunction`. */
@@ -310,6 +321,25 @@ object FileFilter {
   /** Allows a String to be used where a `NameFilter` is expected and any asterisks (`*`) will be interpreted as wildcards.  See [[sbt.io.GlobFilter]].*/
   implicit def globFilter(s: String): NameFilter = GlobFilter(s)
 
+  /**
+   * Adds an extension method to convert a [[sbt.io.FileFilter]] to a [[sbt.nio.file.PathFilter]].
+   * @param fileFilter the fileFilter to convert
+   */
+  implicit class FileFilterOps(val fileFilter: FileFilter) extends AnyVal {
+
+    /**
+     * Converts a [[sbt.io.FileFilter]] to a [[sbt.nio.file.PathFilter]] that should accept same
+     * the same paths. This can be used for any
+     * [[sbt.io.FileFilter]] but may also be used to disambiguate the `&&` and `||` methods for
+     * [[DirectoryFilter]], [[HiddenFileFilter]] and [[RegularFileFilter]]:
+     * {{{
+     *   val pathFilter: PathFilter = DirectoryFilter || "**<code>/<code>*.txt"
+     * }}}
+     *
+     * @return the transformed [[sbt.nio.file.PathFilter]].
+     */
+    def toNio: PathFilter = PathFilter.fromFileFilter(fileFilter)
+  }
 }
 
 /** Constructs a filter from a String, interpreting wildcards.  See the [[GlobFilter.apply]] method. */

@@ -15,6 +15,7 @@ import java.nio.file.{ FileSystems, Path, Paths }
 import java.util
 
 import sbt.io._
+import sbt.nio.file.PathFilter.PathFilterExtensions
 import sbt.nio.file.RelativeGlob.{ PathComponent, SingleComponentMatcher }
 
 import scala.annotation.tailrec
@@ -273,7 +274,7 @@ object Glob {
   private object Root {
     implicit val ordering: Ordering[Root] = Ordering.by(_.root)
   }
-  private final case class Root(root: Path) extends Glob {
+  private[file] final case class Root(root: Path) extends Glob {
     require(root.isAbsolute, s"Tried to construct absolute glob from relative path $root")
     override def matches(path: Path): Boolean = root == path
     override def toString: String = root.toString
@@ -344,7 +345,9 @@ object Glob {
       case Pattern(p, relative) if path.startsWith(p) => relative.matches(p.getFileName)
       case g                                          => g.matches(path)
     }
+
     private[sbt] def toFileFilter: FileFilter = pathname => glob.matches(pathname.toPath)
+
     private[sbt] def toAbsolutePath(path: Path)(implicit option: RelativeGlobViewOption): Path = {
       import RelativeGlobViewOption._
       if (!path.isAbsolute) {
@@ -357,6 +360,7 @@ object Glob {
         }
       } else path
     }
+
     private[sbt] def fileTreeViewListParameters(
         implicit option: RelativeGlobViewOption
     ): (Path, Int, Glob) = {
@@ -372,6 +376,7 @@ object Glob {
       }
       (b, r, g)
     }
+
     private[sbt] def base(implicit option: RelativeGlobViewOption): Path =
       toAbsolutePath(glob match {
         case Pattern(root, r)         => r.prefix.map(root.resolve).getOrElse(root)
@@ -379,6 +384,7 @@ object Glob {
         case r: RelativeGlob          => r.prefix.getOrElse(Paths.get(""))
         case FullFileGlob(base, _, _) => base
       })
+
     private[sbt] def range: (Int, Int) = glob match {
       case Pattern(_, relative: RelativeGlob) => RelativeGlob.range(relative)
       case Root(_)                            => (0, 0)
@@ -452,6 +458,17 @@ object Glob {
         throw new IllegalArgumentException(s"Can't call / on legacy glob $f")
       case r: RelativeGlob => r / relativeGlob
     }
+  }
+
+  /**
+   * Provides extension methods to [[Glob]] that allows it to create combined
+   * [[sbt.nio.file.PathFilter]] instances with `&&` and `||`.
+   * @param glob the Glob to extend
+   */
+  implicit class PathFilterOps(val glob: Glob) extends AnyVal with PathFilterExtensions {
+    def &&(other: PathFilter): PathFilter = (glob: PathFilter) && other
+    def ||(other: PathFilter): PathFilter = (glob: PathFilter) || other
+    def unary_! : PathFilter = !(glob: PathFilter)
   }
 
   /**
