@@ -12,8 +12,6 @@ package sbt.io
 
 import java.io.File
 
-import sbt.nio.file.PathFilter
-
 @deprecated("Alternative is likely to be removed in future versions of sbt", "1.3.0")
 private[sbt] trait Alternative[A, B] {
   def |(g: A => Option[B]): A => Option[B]
@@ -42,6 +40,4 @@ object syntax extends IOSyntax0 {
 
   implicit def fileToRichFile(file: File): RichFile = new RichFile(file)
   implicit def filesToFinder(cc: Traversable[File]): PathFinder = PathFinder.strict(cc)
-  implicit def fileFilterToPathFilter(file: FileFilter): PathFilter =
-    PathFilter.fromFileFilter(file)
 }

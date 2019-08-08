@@ -200,13 +200,6 @@ final class SuffixFilter(val suffix: String) extends NameFilter {
 /** A [[FileFilter]] that selects files that are hidden according to `java.nio.file.Files.isHidden` or if they start with a dot (`.`). */
 case object HiddenFileFilter extends FileFilter with PathFilter {
   def accept(file: File): Boolean = impl(file.toPath)
-
-  /**
-   * Convert this to an [[sbt.nio.file.PathFilter]]. This may be necessary to combine with a string
-   * glob, e.g. `excludePathFilter := HiddenFileFilter || "**<code>/</code>*.txt`.
-   * @return this upcast to PathFilter
-   */
-  def toNio: PathFilter = this
   override def accept(path: NioPath, attributes: FileAttributes): Boolean = impl(path)
   override def unary_- : FileFilter = NotHiddenFileFilter
   private def impl(path: NioPath): Boolean =
@@ -226,13 +219,6 @@ case object ExistsFileFilter extends FileFilter {
 /** A [[FileFilter]] that selects files that are a directory according to `java.io.File.isDirectory`. */
 case object DirectoryFilter extends FileFilter with PathFilter {
   def accept(file: File): Boolean = file.isDirectory
-
-  /**
-   * Convert this to an [[sbt.nio.file.PathFilter]]. This may be necessary to combine with a string
-   * glob, e.g. `excludePathFilter := DirectoryFilter || "**<code>/</code>*.txt`.
-   * @return this upcast to PathFilter
-   */
-  def toNio: PathFilter = this
   override def accept(path: NioPath, attributes: FileAttributes): Boolean = attributes.isDirectory
 }
 
@@ -335,6 +321,25 @@ object FileFilter {
   /** Allows a String to be used where a `NameFilter` is expected and any asterisks (`*`) will be interpreted as wildcards.  See [[sbt.io.GlobFilter]].*/
   implicit def globFilter(s: String): NameFilter = GlobFilter(s)
 
+  /**
+   * Adds an extension method to convert a [[sbt.io.FileFilter]] to a [[sbt.nio.file.PathFilter]].
+   * @param fileFilter the fileFilter to convert
+   */
+  implicit class FileFilterOps(val fileFilter: FileFilter) extends AnyVal {
+
+    /**
+     * Converts a [[sbt.io.FileFilter]] to a [[sbt.nio.file.PathFilter]] that should accept same
+     * the same paths. This can be used for any
+     * [[sbt.io.FileFilter]] but may also be used to disambiguate the `&&` and `||` methods for
+     * [[DirectoryFilter]], [[HiddenFileFilter]] and [[RegularFileFilter]]:
+     * {{{
+     *   val pathFilter: PathFilter = DirectoryFilter || "**<code>/<code>*.txt"
+     * }}}
+     *
+     * @return the transformed [[sbt.nio.file.PathFilter]].
+     */
+    def toNio: PathFilter = PathFilter.fromFileFilter(fileFilter)
+  }
 }
 
 /** Constructs a filter from a String, interpreting wildcards.  See the [[GlobFilter.apply]] method. */

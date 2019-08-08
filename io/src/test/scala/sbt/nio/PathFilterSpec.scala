@@ -92,9 +92,8 @@ class PathFilterSpec extends FlatSpec {
     )
   }
   they should "combine file filters" in IO.withTemporaryDirectory { dir =>
-    import sbt.io.syntax._
-    val notHiddenFileFilter: PathFilter = -sbt.io.HiddenFileFilter
-    val hiddenFileFilter: PathFilter = !notHiddenFileFilter
+    val notHiddenFileFilter: PathFilter = !sbt.io.HiddenFileFilter
+    val hiddenFileFilter: PathFilter = sbt.io.HiddenFileFilter
     val dirPath = dir.toPath
     val hidden = Files.createFile(dirPath / ".hidden.scala").setHidden()
     val regular = Files.createFile(dirPath / "foo.scala")
@@ -103,13 +102,15 @@ class PathFilterSpec extends FlatSpec {
     assert(notHiddenFileFilter.accept(regular))
     assert((!notHiddenFileFilter).accept(hidden))
 
-    val directoryFilterAndHidden: PathFilter = sbt.io.DirectoryFilter && sbt.io.HiddenFileFilter
+    val directoryFilterAndHidden
+        : PathFilter = sbt.io.DirectoryFilter.toNio && sbt.io.HiddenFileFilter
     val hiddenDir = Files.createDirectories(dirPath / ".hidden").setHidden()
     assert(directoryFilterAndHidden.accept(hiddenDir) == !isWin)
     assert(!directoryFilterAndHidden.accept(dirPath))
     assert(!directoryFilterAndHidden.accept(hidden))
 
-    val directoryFilterOrHidden: PathFilter = sbt.io.DirectoryFilter || sbt.io.HiddenFileFilter
+    val directoryFilterOrHidden: PathFilter =
+      sbt.io.DirectoryFilter.toNio || sbt.io.HiddenFileFilter
     assert(directoryFilterOrHidden.accept(hiddenDir))
     assert(directoryFilterOrHidden.accept(dirPath))
     assert(directoryFilterOrHidden.accept(hidden))
