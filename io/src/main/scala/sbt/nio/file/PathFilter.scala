@@ -19,6 +19,8 @@ import java.nio.file.{ Files, Path }
 trait PathFilter {
 
   /**
+   * Checks whether a path should be included on the basis of its name and
+   * [[sbt.nio.file.FileAttributes]].
    *
    * @param path the path name
    * @param attributes the file attributes corresponding to `path`
