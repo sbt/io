@@ -32,10 +32,29 @@ private[sbt] trait LowPriorityPathFilter {
   /**
    * Converts a glob string to a [[sbt.nio.file.PathFilter]].
    * @param glob the glob string to convert to a filter, e.g. "**<code>/</code>*.scala"
-   * @return the parsed glob. May throw an exception if the glob string can not be parsed into a
+   * @return the [[PathFilter]] corresponding to the parsed [[Glob]]. May throw an exception if the
+   *         glob string can not be parsed into a [[Glob]].
+   */
+  implicit def stringToPathFilter(glob: String): PathFilter = new GlobPathFilter(Glob(glob))
+
+  /**
+   * Converts a [[Glob]] to a [[PathFilter]]. The [[PathFilter.accept]] method will ignore the
+   * [[FileAttributes]] parameter and return true if the `path` parameter is accepted by the
+   * input glob.
+   * @param glob the glob string to convert to a filter, e.g. "**<code>/</code>*.scala"
+   * @return the [[PathFilter]] corresponding to the parsed [[Glob]]. May throw an exception if the glob string can not be parsed into a
    *         [[Glob]].
    */
-  implicit def stringToPathFilter(glob: String): PathFilter = Glob(glob)
+  implicit def globToPathFilter(glob: Glob): PathFilter = new GlobPathFilter(glob)
+  private class GlobPathFilter(private val glob: Glob) extends PathFilter {
+    override def accept(path: Path, attributes: FileAttributes): Boolean = glob.matches(path)
+    override def toString: String = glob.toString
+    override def equals(obj: Any): Boolean = obj match {
+      case that: GlobPathFilter => this.glob == that.glob
+      case _                    => false
+    }
+    override def hashCode: Int = glob.##
+  }
 }
 object PathFilter extends LowPriorityPathFilter {
 
@@ -47,12 +66,7 @@ object PathFilter extends LowPriorityPathFilter {
    */
   def apply(globs: Glob*): PathFilter = if (globs.isEmpty) NoPass else new GlobPathFilter(globs)
 
-  /**
-   * Provides extension methods for combining or negating [[PathFilter]] instances or
-   * or other filter types that can be safely converted (see [[sbt.io.DirectoryFilter]]
-   * and [[sbt.io.HiddenFileFilter]]).
-   */
-  implicit class Ops(val pathFilter: PathFilter) extends AnyVal {
+  private[file] trait PathFilterExtensions extends Any {
 
     /**
      * Combines this filter with a [[sbt.nio.file.PathFilter]] to produce a combined filter
@@ -61,6 +75,31 @@ object PathFilter extends LowPriorityPathFilter {
      * @return the [[sbt.nio.file.PathFilter]] representing both filters combined by the `&&`
      *         operation
      */
+    def &&(other: PathFilter): PathFilter
+
+    /**
+     * Combines this filter with a [[sbt.nio.file.PathFilter]] to produce a combined filter
+     * that returns true either if this or the other [[sbt.nio.file.PathFilter]] accept the path.
+     * @param other the other [[sbt.nio.file.PathFilter]]
+     * @return the [[sbt.nio.file.PathFilter]] representing both filters combined by the `&&`
+     *         operation
+     */
+    def ||(other: PathFilter): PathFilter
+
+    /**
+     * Creates a new [[sbt.nio.file.PathFilter]] what accepts a `(Path, FileAttributes)` pair only
+     * if this filter does not accept it.
+     * @return the negated [[sbt.nio.file.PathFilter]] corresponding to this filter
+     */
+    def unary_! : PathFilter
+  }
+
+  /**
+   * Provides extension methods for combining or negating [[PathFilter]] instances or
+   * or other filter types that can be safely converted (see [[sbt.io.DirectoryFilter]]
+   * and [[sbt.io.HiddenFileFilter]]).
+   */
+  implicit class Ops(val pathFilter: PathFilter) extends AnyVal with PathFilterExtensions {
     def &&(other: PathFilter): PathFilter = pathFilter match {
       case NoPass  => NoPass
       case AllPass => other
@@ -71,14 +110,6 @@ object PathFilter extends LowPriorityPathFilter {
           case g       => new AndPathFilter(f, g)
         }
     }
-
-    /**
-     * Combines this filter with a [[sbt.nio.file.PathFilter]] to produce a combined filter
-     * that returns true either if this or the other [[sbt.nio.file.PathFilter]] accept the path.
-     * @param other the other [[sbt.nio.file.PathFilter]]
-     * @return the [[sbt.nio.file.PathFilter]] representing both filters combined by the `&&`
-     *         operation
-     */
     def ||(other: PathFilter): PathFilter = pathFilter match {
       case NoPass  => other
       case AllPass => AllPass
@@ -89,12 +120,6 @@ object PathFilter extends LowPriorityPathFilter {
           case g       => new OrPathFilter(f, g)
         }
     }
-
-    /**
-     * Creates a new [[sbt.nio.file.PathFilter]] what accepts a `(Path, FileAttributes)` pair only
-     * if this filter does not accept it.
-     * @return the negated [[sbt.nio.file.PathFilter]] corresponding to this filter
-     */
     def unary_! : PathFilter = pathFilter match {
       case AllPass     => NoPass
       case NoPass      => AllPass
