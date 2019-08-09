@@ -118,6 +118,16 @@ class FileTreeViewSpec extends FlatSpec {
     val globs = (1 to n).map(i => dir.toGlob / "subdir" / "nested" / s"a$i") :+ Glob(dir, ** / "b*")
     assert(randomFiles.toSet == FileTreeView.default.list(globs).map(_._1).toSet)
   }
+  it should "throw NoSuchFileException for non-existent directories" in IO.withTemporaryDirectory {
+    dir =>
+      intercept[NoSuchFileException](FileTreeView.nio.list(dir.toPath / "foo"))
+      intercept[NoSuchFileException](FileTreeView.native.list(dir.toPath / "foo"))
+  }
+  it should "throw NotDirectoryException for regular files" in IO.withTemporaryDirectory { dir =>
+    val file = Files.createFile(dir.toPath / "file")
+    intercept[NotDirectoryException](FileTreeView.nio.list(file))
+    intercept[NotDirectoryException](FileTreeView.native.list(file))
+  }
   "iterator" should "be lazy" in IO.withTemporaryDirectory { dir =>
     val firstSubdir = Files.createDirectory(dir.toPath.resolve("first"))
     val firstSubdirFile = Files.createFile(firstSubdir.resolve("first-file"))

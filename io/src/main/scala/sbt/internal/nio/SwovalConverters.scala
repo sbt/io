@@ -10,10 +10,11 @@
 
 package sbt.internal.nio
 
-import java.nio.file.Path
+import java.nio.file.{ NoSuchFileException, NotDirectoryException, Path }
 
 import com.swoval.files.FileTreeViews
 import com.swoval.functional.{ Either => SEither }
+import sbt.internal.io.Retry
 import sbt.nio.file.{ FileAttributes, FileTreeView }
 
 import scala.collection.immutable.VectorBuilder
@@ -38,17 +39,22 @@ private[nio] object SwovalConverters {
 }
 private[sbt] object SwovalFileTreeView extends FileTreeView.Nio[FileAttributes] {
   private[this] val view = FileTreeViews.getDefault(true)
-  override def list(path: Path): Seq[(Path, FileAttributes)] = {
-    val result = new VectorBuilder[(Path, FileAttributes)]
-    view.list(path, 0, _ => true).forEach { typedPath =>
-      result += typedPath.getPath ->
-        FileAttributes(
-          isDirectory = typedPath.isDirectory,
-          isOther = false,
-          isRegularFile = typedPath.isFile,
-          isSymbolicLink = typedPath.isSymbolicLink
-        )
-    }
-    result.result()
-  }
+  override def list(path: Path): Seq[(Path, FileAttributes)] =
+    Retry(
+      {
+        val result = new VectorBuilder[(Path, FileAttributes)]
+        view.list(path, 0, _ => true).forEach { typedPath =>
+          result += typedPath.getPath ->
+            FileAttributes(
+              isDirectory = typedPath.isDirectory,
+              isOther = false,
+              isRegularFile = typedPath.isFile,
+              isSymbolicLink = typedPath.isSymbolicLink
+            )
+        }
+        result.result()
+      },
+      classOf[NotDirectoryException],
+      classOf[NoSuchFileException]
+    )
 }

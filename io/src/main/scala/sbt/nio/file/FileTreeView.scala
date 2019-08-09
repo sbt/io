@@ -11,10 +11,11 @@
 package sbt.nio.file
 
 import java.io.IOException
-import java.nio.file.{ Files, NotDirectoryException, Path }
+import java.nio.file.{ Files, NoSuchFileException, NotDirectoryException, Path }
 import java.util
 import java.util.concurrent.ConcurrentHashMap
 
+import sbt.internal.io.Retry
 import sbt.internal.nio.SwovalFileTreeView
 import sbt.nio.file.Glob.Root
 
@@ -49,13 +50,18 @@ object FileTreeView {
   val native: FileTreeView.Nio[FileAttributes] = SwovalFileTreeView
 
   /**
-   * An implemenation of [[FileTreeView]] that uses built in jvm apis. This implementation
+   * An implementation of [[FileTreeView]] that uses built in jvm apis. This implementation
    * will throw an IOException if the input path is not a directory or doesn't exist.
    */
-  val nio: FileTreeView.Nio[FileAttributes] = (path: Path) => {
-    val paths = Files.list(path).iterator.asScala
-    paths.flatMap(p => FileAttributes(p).toOption.map(p -> _)).toIndexedSeq
-  }
+  val nio: FileTreeView.Nio[FileAttributes] = (path: Path) =>
+    Retry(
+      {
+        val paths = Files.list(path).iterator.asScala
+        paths.flatMap(p => FileAttributes(p).toOption.map(p -> _)).toIndexedSeq
+      },
+      classOf[NotDirectoryException],
+      classOf[NoSuchFileException]
+    )
 
   /**
    * Adds additional methods to [[FileTreeView]]. This api may be changed so it should not be
