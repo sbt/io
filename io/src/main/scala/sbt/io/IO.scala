@@ -587,7 +587,7 @@ object IO {
           catch { case _: IOException => }
       }
     } catch {
-      case _: NotDirectoryException | _: NoSuchFileException =>
+      case _: IOException => // Silently fail to preserve legacy behavior.
     }
     try Files.deleteIfExists(file.toPath)
     catch { case _: IOException => }

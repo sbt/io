@@ -209,6 +209,12 @@ class IOSpec extends FunSuite {
     assert(s.startsWith("file:") && s.endsWith("/sbt/io/IOSpec.class"))
   }
 
+  test("delete should handle non-existent files") {
+    IO.withTemporaryDirectory { dir =>
+      IO.delete(new File(dir, "foo"))
+    }
+  }
+
   def normalizeForWindows(s: String): String = {
     s.replaceAllLiterally("""\""", "/")
   }
