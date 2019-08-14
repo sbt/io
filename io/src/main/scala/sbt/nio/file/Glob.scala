@@ -274,6 +274,10 @@ object Glob {
   private object Root {
     implicit val ordering: Ordering[Root] = Ordering.by(_.root)
   }
+  private[file] final case object Empty extends RelativeGlob {
+    override private[file] def matchers: List[RelativeGlob.Matcher] = Nil
+    override def matches(path: Path): Boolean = false
+  }
   private[file] final case class Root(root: Path) extends Glob {
     require(root.isAbsolute, s"Tried to construct absolute glob from relative path $root")
     override def matches(path: Path): Boolean = root == path
@@ -488,7 +492,15 @@ object Glob {
      * Converts the path to a single path glob
      * @return the single path [[Glob]].
      */
-    def toGlob: Glob = Root(path)
+    def toGlob: Glob =
+      if (path.isAbsolute) Root(path)
+      else {
+        path.iterator.asScala.toList match {
+          case Nil                                        => Empty
+          case h :: Nil if h.getFileName.toString.isEmpty => Empty
+          case parts                                      => RelativeGlob(parts.map(p => PathComponent(p.getFileName.toString)))
+        }
+      }
 
     /**
      * Appends a path component to a path.
@@ -508,7 +520,7 @@ object Glob {
      * Converts the file to a single path glob.
      * @return the single path [[Glob]].
      */
-    def toGlob: Glob = Root(file.toPath)
+    def toGlob: Glob = new PathOps(file.toPath).toGlob
   }
   private[this] val windowsEscapable = "(){}"
   private[this] val allMeta = "*{([?"
