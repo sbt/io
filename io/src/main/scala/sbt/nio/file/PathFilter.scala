@@ -122,12 +122,18 @@ object PathFilter extends LowPriorityPathFilter {
           case g       => new OrPathFilter(f, g)
         }
     }
-    def unary_! : PathFilter = pathFilter match {
-      case AllPass     => NoPass
-      case NoPass      => AllPass
-      case IsHidden    => IsNotHidden
-      case IsNotHidden => IsHidden
-      case pf          => new NotPathFilter(pf)
+    def unary_! : PathFilter = {
+      def not(pf: PathFilter): PathFilter = pf match {
+        case AllPass           => NoPass
+        case NoPass            => AllPass
+        case IsHidden          => IsNotHidden
+        case IsNotHidden       => IsHidden
+        case p: NotPathFilter  => p.filter
+        case af: AndPathFilter => new OrPathFilter(not(af.left), not(af.right))
+        case of: OrPathFilter  => new AndPathFilter(not(of.left), not(of.right))
+        case pf                => new NotPathFilter(pf)
+      }
+      not(pathFilter)
     }
   }
 
@@ -257,8 +263,7 @@ private[sbt] case object NoPass extends PathFilter {
   override def accept(path: Path, attributes: FileAttributes): Boolean = false
 }
 
-private[sbt] class AndPathFilter(private val left: PathFilter, private val right: PathFilter)
-    extends PathFilter {
+private[sbt] class AndPathFilter(val left: PathFilter, val right: PathFilter) extends PathFilter {
   override def accept(path: Path, attributes: FileAttributes): Boolean =
     left.accept(path, attributes) && right.accept(path, attributes)
   override def equals(obj: Any): Boolean = obj match {
@@ -269,8 +274,7 @@ private[sbt] class AndPathFilter(private val left: PathFilter, private val right
   override def toString: String = s"$left && $right"
 }
 
-private[sbt] class OrPathFilter(private val left: PathFilter, private val right: PathFilter)
-    extends PathFilter {
+private[sbt] class OrPathFilter(val left: PathFilter, val right: PathFilter) extends PathFilter {
   override def accept(path: Path, attributes: FileAttributes): Boolean =
     left.accept(path, attributes) || right.accept(path, attributes)
   override def hashCode: Int = (left.## * 31) ^ right.##
@@ -281,7 +285,7 @@ private[sbt] class OrPathFilter(private val left: PathFilter, private val right:
   override def toString: String = s"$left || $right"
 }
 
-private[sbt] class NotPathFilter(private val filter: PathFilter) extends PathFilter {
+private[sbt] class NotPathFilter(val filter: PathFilter) extends PathFilter {
   override def accept(path: Path, attributes: FileAttributes): Boolean =
     !filter.accept(path, attributes)
   override def equals(obj: Any): Boolean = obj match {
