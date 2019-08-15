@@ -126,4 +126,38 @@ class PathFilterSpec extends FlatSpec {
     assert(!(!notBar).accept(foo))
     assert((!notBar).accept(bar))
   }
+  they should "negate" in IO.withTemporaryDirectory { dir =>
+    val dirPath = dir.toPath
+    val foo = Files.createFile(dirPath / "foo.txt")
+    val hidden = Files.createFile(dirPath / ".hidden").setHidden
+    val filter = IsDirectory && !IsHidden
+    val notFilter = !filter
+    assert(notFilter == (!IsDirectory || IsHidden))
+    assert(!filter.accept(foo))
+    assert(!filter.accept(hidden))
+    assert(filter.accept(dirPath))
+    assert(notFilter.accept(foo))
+    assert(notFilter.accept(hidden))
+    assert(!notFilter.accept(dirPath))
+
+    val tripleAndFilter = IsDirectory && !IsHidden && !(** / "*.txt")
+    val notTripleAndFilter = !tripleAndFilter
+    assert(notTripleAndFilter == (!IsDirectory || IsHidden || (** / "*.txt")))
+    assert(!(tripleAndFilter.accept(foo)))
+    assert(tripleAndFilter.accept(dirPath))
+    assert(!(tripleAndFilter.accept(hidden)))
+    assert(notTripleAndFilter.accept(foo))
+    assert(notTripleAndFilter.accept(hidden))
+    assert(!(notTripleAndFilter.accept(dirPath)))
+
+    val tripleOrFilter = IsDirectory || IsHidden || (** / "*.txt")
+    val notTripleOrFilter = !tripleOrFilter
+    assert(notTripleOrFilter == (!IsDirectory && !IsHidden && !(** / "*.txt")))
+    assert(tripleOrFilter.accept(foo))
+    assert(tripleOrFilter.accept(hidden))
+    assert(tripleOrFilter.accept(dirPath))
+    assert(!(notTripleOrFilter.accept(foo)))
+    assert(!(notTripleOrFilter.accept(hidden)))
+    assert(!(notTripleOrFilter.accept(dirPath)))
+  }
 }
