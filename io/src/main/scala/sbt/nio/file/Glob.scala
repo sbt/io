@@ -262,11 +262,13 @@ object Glob {
       case Root(leftRoot) =>
         right match {
           case Root(rightRoot) => leftRoot.compareTo(rightRoot)
+          case _: FullFileGlob => -1
           case _               => -compare(right, left)
         }
       case FullFileGlob(leftBase, _, _) =>
         right match {
           case FullFileGlob(rightBase, _, _) => leftBase.compareTo(rightBase)
+          case _: Root                       => 1
           case _                             => -compare(right, left)
         }
     }

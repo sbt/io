@@ -26,4 +26,9 @@ class GlobOrderingSpec extends FlatSpec {
     val nonRecursive = Glob(dir)
     assert(Seq(nonRecursive, recursive).sorted == Seq(recursive, nonRecursive))
   }
+  they should "not stack overflow" in IO.withTemporaryDirectory { dir =>
+    val exact = Glob(dir.toPath.resolve("foo"))
+    val fullFile = sbt.internal.nio.Globs(dir.toPath, true, sbt.io.HiddenFileFilter)
+    assert(Seq(exact, fullFile).sorted == Seq(exact, fullFile))
+  }
 }
