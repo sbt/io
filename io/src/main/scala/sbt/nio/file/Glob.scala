@@ -262,13 +262,16 @@ object Glob {
       case Root(leftRoot) =>
         right match {
           case Root(rightRoot) => leftRoot.compareTo(rightRoot)
-          case _: FullFileGlob => -1
-          case _               => -compare(right, left)
+          case FullFileGlob(leftBase, _, _) =>
+            leftRoot.compareTo(leftBase) match {
+              case 0 => -1
+              case i => i
+            }
+          case _ => -compare(right, left)
         }
       case FullFileGlob(leftBase, _, _) =>
         right match {
           case FullFileGlob(rightBase, _, _) => leftBase.compareTo(rightBase)
-          case _: Root                       => 1
           case _                             => -compare(right, left)
         }
     }
@@ -777,35 +780,28 @@ object RelativeGlob {
         case spm: SingleComponentMatcher =>
           y match {
             case that: SingleComponentMatcher => spm.glob.compareTo(that.glob)
-            case _                            => 1
+            case _                            => -1
           }
         case _: FunctionNameFilter =>
           y match {
-            case _: FunctionNameFilter => 0
-            case _                     => 1
+            case _: FunctionNameFilter                        => 0
+            case _: NotMatcher | _: AndMatcher | _: OrMatcher => -1
+            case _                                            => 1
           }
-        case nm: NotMatcher =>
+        case _: NotMatcher =>
           y match {
-            case that: NotMatcher => compare(nm.matcher, that.matcher)
-            case _                => 1
+            case _: NotMatcher | _: AndMatcher | _: OrMatcher => 0
+            case _                                            => 1
           }
-        case am: AndMatcher =>
+        case _: AndMatcher =>
           y match {
-            case that: AndMatcher =>
-              compare(am.left, that.left) match {
-                case 0 => compare(am.right, that.right)
-                case _ => 1
-              }
-            case _ => 1
+            case _: NotMatcher | _: AndMatcher | _: OrMatcher => 0
+            case _                                            => 1
           }
-        case om: OrMatcher =>
+        case _: OrMatcher =>
           y match {
-            case that: OrMatcher =>
-              compare(om.left, that.left) match {
-                case 0 => compare(om.right, that.right)
-                case _ => 1
-              }
-            case _ => 1
+            case _: NotMatcher | _: AndMatcher | _: OrMatcher => 0
+            case _                                            => 1
           }
       }
     }
