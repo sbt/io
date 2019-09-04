@@ -56,8 +56,9 @@ object FileTreeView {
   val nio: FileTreeView.Nio[FileAttributes] = (path: Path) =>
     Retry(
       {
-        val paths = Files.list(path).iterator.asScala
-        paths.flatMap(p => FileAttributes(p).toOption.map(p -> _)).toIndexedSeq
+        val stream = Files.list(path)
+        try stream.iterator.asScala.flatMap(p => FileAttributes(p).toOption.map(p -> _)).toVector
+        finally stream.close()
       },
       classOf[NotDirectoryException],
       classOf[NoSuchFileException]
