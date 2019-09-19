@@ -263,7 +263,7 @@ private object WinMilli extends MilliNative[FILETIME] {
 
   private def getHandle(lpFileName: String, dwDesiredAccess: Int, dwShareMode: Int): HANDLE = {
     val hFile = CreateFile(
-      lpFileName,
+      "\\\\?\\" + lpFileName,
       dwDesiredAccess,
       dwShareMode,
       null,
