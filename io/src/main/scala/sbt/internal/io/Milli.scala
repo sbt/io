@@ -28,6 +28,7 @@ import sbt.io.JavaMilli
 
 import scala.collection.JavaConverters.mapAsJavaMapConverter
 import scala.reflect.{ ClassTag, classTag }
+import scala.util.control.NonFatal
 
 private abstract class Stat[Time_T](size: Int) extends NativeMapped {
   val buffer = ByteBuffer.allocate(size).order(ByteOrder.nativeOrder())
@@ -262,7 +263,7 @@ private object WinMilli extends MilliNative[FILETIME] {
 
   private def getHandle(lpFileName: String, dwDesiredAccess: Int, dwShareMode: Int): HANDLE = {
     val hFile = CreateFile(
-      lpFileName,
+      "\\\\?\\" + lpFileName,
       dwDesiredAccess,
       dwShareMode,
       null,
@@ -341,8 +342,18 @@ object Milli {
   // "false", disable native millisecond-accurate modification timestamps.
   //
   private val jdkTimestamps = {
-    val prop = System.getProperty("sbt.io.jdktimestamps")
-    !(prop eq null) && (prop.toLowerCase != "false")
+    System.getProperty("sbt.io.jdktimestamps") match {
+      case null =>
+        System.getProperty("java.specification.version") match {
+          case null => false
+          case sv =>
+            try sv.split("\\.").last.toInt match {
+              case v if v >= 11 => true
+              case _            => false
+            } catch { case NonFatal(_) => false }
+        }
+      case p => p.toLowerCase != "false"
+    }
   }
 
   private val milli =
