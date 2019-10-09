@@ -1372,7 +1372,10 @@ object IO {
     try {
       Retry(Milli.getModifiedTime(file), classOf[FileNotFoundException])
     } catch {
-      case _: FileNotFoundException => 0L
+      case _: FileNotFoundException =>
+        val unnormalized = file.toPath
+        val normalized = unnormalized.normalize.toAbsolutePath
+        if (unnormalized != normalized) getModifiedTimeOrZero(normalized.toFile) else 0L
     }
 
   /**
@@ -1395,7 +1398,10 @@ object IO {
       Retry(Milli.setModifiedTime(file, mtime), classOf[FileNotFoundException])
       true
     } catch {
-      case _: FileNotFoundException => false
+      case _: FileNotFoundException =>
+        val unnormalized = file.toPath
+        val normalized = unnormalized.normalize.toAbsolutePath
+        if (unnormalized != normalized) setModifiedTimeOrFalse(normalized.toFile, mtime) else false
     }
 
   /**
