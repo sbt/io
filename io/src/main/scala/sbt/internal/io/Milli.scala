@@ -344,6 +344,7 @@ object Milli {
   //
   // If the property "sbt.io.jdktimestamps" is set to anything other than
   // "false", disable native millisecond-accurate modification timestamps.
+  // millis were missing until Java 10, see https://bugs.openjdk.java.net/browse/JDK-8177809
   //
   private val jdkTimestamps = {
     System.getProperty("sbt.io.jdktimestamps") match {
@@ -351,9 +352,8 @@ object Milli {
         System.getProperty("java.specification.version") match {
           case null => false
           case sv =>
-            try sv.split("\\.").last.toInt match {
-              case v if v >= 11 => true
-              case _            => false
+            try {
+              sv.split("\\.").last.toInt >= 10
             } catch { case NonFatal(_) => false }
         }
       case p => p.toLowerCase != "false"
