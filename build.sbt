@@ -60,7 +60,8 @@ lazy val ioRoot = (project in file("."))
                |  Java versions is ${sys.props("java.specification.version")}. We recommend 1.8.
                |!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!""".stripMargin
          else "")
-    }
+    },
+    mimaPreviousArtifacts := Set.empty,
   )
 
 // Path, IO (formerly FileUtilities), NameFilter and other I/O utility classes
@@ -137,7 +138,12 @@ val io = (project in file("io"))
       exclude[DirectMissingMethodProblem]("sbt.internal.io.EventMonitor.applyImpl"),
       // private classes that have been removed
       exclude[MissingClassProblem]("sbt.internal.io.Alternatives$"),
-      exclude[MissingClassProblem]("sbt.internal.io.Alternatives")
+      exclude[MissingClassProblem]("sbt.internal.io.Alternatives"),
+      exclude[DirectMissingMethodProblem]("sbt.io.NothingFilter.unary_-"),
+      exclude[DirectMissingMethodProblem]("sbt.io.AllPassFilter.unary_-"),
+      exclude[IncompatibleSignatureProblem]("sbt.io.PollingWatchService.pollEvents"),
+      exclude[IncompatibleSignatureProblem]("sbt.io.WatchService#WatchServiceAdapter.pollEvents"),
+      exclude[IncompatibleSignatureProblem]("sbt.io.WatchService.pollEvents"),
     ),
     BuildInfoPlugin.buildInfoDefaultSettings, // avoids BuildInfo generated in Compile scope
     addBuildInfoToConfig(Test),
