@@ -16,7 +16,7 @@ import java.nio.charset.Charset
 import java.nio.file.attribute.PosixFilePermissions
 import java.nio.file.{ Path => NioPath, _ }
 import java.util.Properties
-import java.util.jar.{ Attributes, JarEntry, JarOutputStream, Manifest }
+import java.util.jar.{ Attributes, JarEntry, JarFile, JarOutputStream, Manifest }
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
 
 import sbt.internal.io.ErrorHandling.translate
@@ -607,6 +607,10 @@ object IO {
 
   private[sbt] def wrapNull(a: Array[File]) = if (a == null) new Array[File](0) else a
 
+  @deprecated("Please specify whether to use a static timestamp", "1.3.2")
+  def jar(sources: Traversable[(File, String)], outputJar: File, manifest: Manifest): Unit =
+    archive(sources.toSeq, outputJar, Some(manifest), None)
+
   /**
    * Creates a jar file.
    *
@@ -614,9 +618,19 @@ object IO {
    *                Only the pairs explicitly listed are included.
    * @param outputJar The file to write the jar to.
    * @param manifest The manifest for the jar.
+   * @param time static timestamp to use for all entries, if any.
    */
-  def jar(sources: Traversable[(File, String)], outputJar: File, manifest: Manifest): Unit =
-    archive(sources.toSeq, outputJar, Some(manifest))
+  def jar(
+      sources: Traversable[(File, String)],
+      outputJar: File,
+      manifest: Manifest,
+      time: Option[Long]
+  ): Unit =
+    archive(sources.toSeq, outputJar, Some(manifest), time)
+
+  @deprecated("Please specify whether to use a static timestamp", "1.3.2")
+  def zip(sources: Traversable[(File, String)], outputZip: File): Unit =
+    archive(sources.toSeq, outputZip, None, None)
 
   /**
    * Creates a zip file.
@@ -624,14 +638,16 @@ object IO {
    * @param sources The files to include in the zip file paired with the entry name in the zip.
    *                Only the pairs explicitly listed are included.
    * @param outputZip The file to write the zip to.
+   * @param time static timestamp to use for all entries, if any.
    */
-  def zip(sources: Traversable[(File, String)], outputZip: File): Unit =
-    archive(sources.toSeq, outputZip, None)
+  def zip(sources: Traversable[(File, String)], outputZip: File, time: Option[Long]): Unit =
+    archive(sources.toSeq, outputZip, None, time)
 
   private def archive(
       sources: Seq[(File, String)],
       outputFile: File,
-      manifest: Option[Manifest]
+      manifest: Option[Manifest],
+      time: Option[Long]
   ) = {
     if (outputFile.isDirectory)
       sys.error("Specified output file " + outputFile + " is a directory.")
@@ -641,19 +657,23 @@ object IO {
         case parentFile => parentFile
       }
       createDirectory(outputDir)
-      withZipOutput(outputFile, manifest) { output =>
+      withZipOutput(outputFile, manifest, time) { output =>
         val createEntry: (String => ZipEntry) =
           if (manifest.isDefined) new JarEntry(_) else new ZipEntry(_)
-        writeZip(sources, output)(createEntry)
+        writeZip(sources, output, time)(createEntry)
       }
     }
   }
-  private def writeZip(sources: Seq[(File, String)], output: ZipOutputStream)(
+  private def writeZip(sources: Seq[(File, String)], output: ZipOutputStream, time: Option[Long])(
       createEntry: String => ZipEntry
   ) = {
-    val files = sources.flatMap {
-      case (file, name) => if (file.isFile) (file, normalizeName(name)) :: Nil else Nil
-    }
+    val files = sources
+      .flatMap {
+        case (file, name) => if (file.isFile) (file, normalizeName(name)) :: Nil else Nil
+      }
+      .sortBy {
+        case (_, name) => name
+      }
 
     val now = System.currentTimeMillis
     // The CRC32 for an empty value, needed to store directories in zip files
@@ -667,7 +687,7 @@ object IO {
     def makeDirectoryEntry(name: String) = {
       //			log.debug("\tAdding directory " + relativePath + " ...")
       val e = createEntry(name)
-      e setTime now
+      e setTime time.getOrElse(now)
       e setSize 0
       e setMethod ZipEntry.STORED
       e setCrc emptyCRC
@@ -677,7 +697,7 @@ object IO {
     def makeFileEntry(file: File, name: String) = {
       //			log.debug("\tAdding " + file + " as " + name + " ...")
       val e = createEntry(name)
-      e setTime getModifiedTimeOrZero(file)
+      e setTime time.getOrElse(getModifiedTimeOrZero(file))
       e
     }
     def addFileEntry(file: File, name: String) = {
@@ -714,7 +734,9 @@ object IO {
     if (sep == '/') name else name.replace(sep, '/')
   }
 
-  private def withZipOutput(file: File, manifest: Option[Manifest])(f: ZipOutputStream => Unit) = {
+  private def withZipOutput(file: File, manifest: Option[Manifest], time: Option[Long])(
+      f: ZipOutputStream => Unit
+  ) = {
     fileOutputStream(false)(file) { fileOut =>
       val (zipOut, _) =
         manifest match {
@@ -723,7 +745,15 @@ object IO {
             val main = mf.getMainAttributes
             if (!main.containsKey(MANIFEST_VERSION))
               main.put(MANIFEST_VERSION, "1.0")
-            (new JarOutputStream(fileOut, mf), "jar")
+
+            val os = new JarOutputStream(fileOut)
+            val e = new ZipEntry(JarFile.MANIFEST_NAME)
+            e setTime time.getOrElse(System.currentTimeMillis)
+            os.putNextEntry(e)
+            mf.write(new BufferedOutputStream(os))
+            os.closeEntry()
+
+            (new JarOutputStream(fileOut), "jar")
           case None => (new ZipOutputStream(fileOut), "zip")
         }
       try {
