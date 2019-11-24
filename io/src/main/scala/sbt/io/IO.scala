@@ -618,7 +618,7 @@ object IO {
    *                Only the pairs explicitly listed are included.
    * @param outputJar The file to write the jar to.
    * @param manifest The manifest for the jar.
-   * @param time static timestamp to use for all entries, if any.
+   * @param time static timestamp to use for all entries, if any, in milliseconds since Epoch
    */
   def jar(
       sources: Traversable[(File, String)],
@@ -649,6 +649,10 @@ object IO {
       manifest: Option[Manifest],
       time: Option[Long]
   ) = {
+    // The zip 'setTime' methods try to convert from the given time to the local time based
+    // on java.util.TimeZone.getDefault(). When explicitly specifying the timestamp, we assume
+    // this already has been done if desired, so we need to 'convert back' here:
+    val localTime = time.map(t => t - java.util.TimeZone.getDefault().getOffset(t))
     if (outputFile.isDirectory)
       sys.error("Specified output file " + outputFile + " is a directory.")
     else {
@@ -657,10 +661,10 @@ object IO {
         case parentFile => parentFile
       }
       createDirectory(outputDir)
-      withZipOutput(outputFile, manifest, time) { output =>
+      withZipOutput(outputFile, manifest, localTime) { output =>
         val createEntry: (String => ZipEntry) =
           if (manifest.isDefined) new JarEntry(_) else new ZipEntry(_)
-        writeZip(sources, output, time)(createEntry)
+        writeZip(sources, output, localTime)(createEntry)
       }
     }
   }
