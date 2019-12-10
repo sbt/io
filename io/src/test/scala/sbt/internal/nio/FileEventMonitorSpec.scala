@@ -132,7 +132,7 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
     // Ensure the timeout is long enough for the background thread to call onUpdate
     assert(monitor.poll(5.seconds) == Seq(fooUpdate))
   }
-  it should "quarantine deletions" in withDeterministicSource { implicit source =>
+  private def deletionSpec(finite: Boolean): Unit = withDeterministicSource { implicit source =>
     val observers = new Observers[Event]
     val antiEntropyPeriod = 40.millis
     val quarantinePeriod = antiEntropyPeriod / 2
@@ -150,8 +150,12 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
     observers.onNext(fooDeletion)
     monitor.poll(0.millis) shouldBe Nil
     source.incrementAsync(quarantinePeriod * 3)
-    monitor.poll(quarantinePeriod * 2) shouldBe Seq(fooDeletion)
+    val period = if (finite) quarantinePeriod * 2 else Duration.Inf
+    assert(monitor.poll(period) == Seq(fooDeletion))
+    ()
   }
+  it should "quarantine deletions with finite poll" in deletionSpec(finite = true)
+  it should "quarantine deletions with infinite poll" in deletionSpec(finite = false)
   it should "immediately trigger for creations" in {
     val observers = new Observers[Event]
     val antiEntropyPeriod = 40.millis
