@@ -753,7 +753,7 @@ object IO {
             mf.write(new BufferedOutputStream(os))
             os.closeEntry()
 
-            (new JarOutputStream(fileOut), "jar")
+            (os, "jar")
           case None => (new ZipOutputStream(fileOut), "zip")
         }
       try {
