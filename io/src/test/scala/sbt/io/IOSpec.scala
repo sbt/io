@@ -229,13 +229,14 @@ class IOSpec extends FunSuite {
       val testJar = tmpdir / "test.jar"
       IO.jar(List((fooTxt, "foo.txt")), testJar, new Manifest(), Some(1577195222))
 
-      val fooTxtInJar = new URI(s"jar:file:$testJar!/foo.txt")
+      val fooTxtInJar = new URI(s"jar:${testJar.toURI}!/foo.txt")
+      println(fooTxtInJar)
 
       val fs = FileSystems.newFileSystem(fooTxtInJar, Collections.emptyMap[String, Object])
       try {
         assert("payload" == new String(Files.readAllBytes(Paths.get(fooTxtInJar))))
         // Read to check it exists:
-        Files.readAllBytes(Paths.get(new URI(s"jar:file:$testJar!/META-INF/MANIFEST.MF")))
+        Files.readAllBytes(Paths.get(new URI(s"jar:${testJar.toURI}!/META-INF/MANIFEST.MF")))
       } finally fs.close()
     }
   }
