@@ -42,7 +42,7 @@ install:
   - sdk install java $(sdk list java | grep -o "$ADOPTOPENJDK\.[0-9\.]*hs-adpt" | head -1) || true
   - unset JAVA_HOME
   - java -Xmx32m -version
-  - sdk install sbt $TRAVIS_SBT
+  - sdk install sbt $TRAVIS_SBT || true
 
 script:
   - sbt -Dsbt.test.fork=true ++$TRAVIS_SCALA212! mimaReportBinaryIssues test
