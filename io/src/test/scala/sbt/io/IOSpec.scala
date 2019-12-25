@@ -230,7 +230,6 @@ class IOSpec extends FunSuite {
       IO.jar(List((fooTxt, "foo.txt")), testJar, new Manifest(), Some(1577195222))
 
       val fooTxtInJar = new URI(s"jar:${testJar.toURI}!/foo.txt")
-      println(fooTxtInJar)
 
       val fs = FileSystems.newFileSystem(fooTxtInJar, Collections.emptyMap[String, Object])
       try {
