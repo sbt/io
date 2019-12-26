@@ -215,6 +215,31 @@ class IOSpec extends FunSuite {
     }
   }
 
+  test("it should create valid jar files") {
+    IO.withTemporaryDirectory { tmpdir =>
+      import java.util.jar.Manifest
+      import java.nio.file.FileSystems
+      import java.nio.file.Paths
+      import java.nio.charset.StandardCharsets
+      import java.util.Collections
+
+      val fooTxt = tmpdir / "foo.txt"
+      Files.write(fooTxt.toPath, "payload".getBytes(StandardCharsets.UTF_8));
+
+      val testJar = tmpdir / "test.jar"
+      IO.jar(List((fooTxt, "foo.txt")), testJar, new Manifest(), Some(1577195222))
+
+      val fooTxtInJar = new URI(s"jar:${testJar.toURI}!/foo.txt")
+
+      val fs = FileSystems.newFileSystem(fooTxtInJar, Collections.emptyMap[String, Object])
+      try {
+        assert("payload" == new String(Files.readAllBytes(Paths.get(fooTxtInJar))))
+        // Read to check it exists:
+        Files.readAllBytes(Paths.get(new URI(s"jar:${testJar.toURI}!/META-INF/MANIFEST.MF")))
+      } finally fs.close()
+    }
+  }
+
   def normalizeForWindows(s: String): String = {
     s.replaceAllLiterally("""\""", "/")
   }
