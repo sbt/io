@@ -263,8 +263,11 @@ private object WinMilli extends MilliNative[FILETIME] {
   import Kernel32.INSTANCE._
 
   private def getHandle(lpFileName: String, dwDesiredAccess: Int, dwShareMode: Int): HANDLE = {
+    // https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file
+    // \\?\ prefix is used to overcome the 260 character limitation.
+    val fileName = "\\\\?\\" + lpFileName
     val hFile = CreateFile(
-      "\\\\?\\" + lpFileName,
+      fileName,
       dwDesiredAccess,
       dwShareMode,
       null,
@@ -281,7 +284,7 @@ private object WinMilli extends MilliNative[FILETIME] {
       else if (err == ERROR_INVALID_NAME)
         throw new FileNotFoundException("Invalid path name " + lpFileName)
       else {
-        throw new IOException("CreateFile() failed with error " + GetLastError())
+        throw new IOException(s"CreateFile() failed with error ${GetLastError()}: $fileName")
       }
     }
     hFile
