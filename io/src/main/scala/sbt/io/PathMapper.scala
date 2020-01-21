@@ -112,12 +112,10 @@ abstract class Mapper {
    * Selects descendants of `base` directory matching `filter` and maps them to a path relative to `base`.
    * `base` itself is not included.
    */
-  def selectSubpaths(base: File, filter: FileFilter): Traversable[(File, String)] = {
-    val path = base.toPath
+  def selectSubpaths(base: File, filter: FileFilter): Traversable[(File, String)] =
     PathFinder(base).globRecursive(filter).get().collect {
-      case f if f != path => f -> path.relativize(f.toPath).toString
+      case f if f != base => f -> base.toPath.relativize(f.toPath).toString
     }
-  }
 
   /**
    * return a Seq of mappings which effect is to add a whole directory in the generated package
