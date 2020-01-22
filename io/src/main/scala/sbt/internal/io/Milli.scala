@@ -19,6 +19,7 @@ import com.sun.jna.platform.win32.WinBase.{ FILETIME, INVALID_HANDLE_VALUE }
 import com.sun.jna.platform.win32.WinError.{
   ERROR_ACCESS_DENIED,
   ERROR_FILE_NOT_FOUND,
+  ERROR_INVALID_NAME,
   ERROR_PATH_NOT_FOUND
 }
 import com.sun.jna.platform.win32.WinNT._
@@ -277,8 +278,11 @@ private object WinMilli extends MilliNative[FILETIME] {
         throw new FileNotFoundException("Not found: " + lpFileName)
       else if (err == ERROR_ACCESS_DENIED)
         throw new FileNotFoundException("Access denied: " + lpFileName)
-      else
+      else if (err == ERROR_INVALID_NAME)
+        throw new FileNotFoundException("Invalid path name " + lpFileName)
+      else {
         throw new IOException("CreateFile() failed with error " + GetLastError())
+      }
     }
     hFile
   }
