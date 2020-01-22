@@ -128,6 +128,13 @@ class PathMapperSpec extends fixture.FlatSpec with Matchers {
     mappings should be(empty)
   }
 
+  it should "not include the base directory" in { tempDirectory =>
+    val file = Files.createFile(tempDirectory.resolve("file"))
+    val paths = Path.allSubpaths(tempDirectory.toFile).toVector.map(_._1.toPath).toSet
+    assert(paths.contains(file))
+    assert(!paths.contains(tempDirectory))
+  }
+
   override protected def withFixture(test: OneArgTest): Outcome = {
     val tmpDir = Files.createTempDirectory("path-mappings")
     try {
