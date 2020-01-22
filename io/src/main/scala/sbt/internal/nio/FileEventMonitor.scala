@@ -234,19 +234,25 @@ private[sbt] object FileEventMonitor {
      * correctness.
      */
     private[this] val quarantinedEvents = new ConcurrentHashMap[JPath, FileEvent[T]].asScala
+    private[this] def quarantineDuration = {
+      val now = Deadline.now
+      val waits = quarantinedEvents.map(_._2.occurredAt + quarantinePeriod - now).toVector
+      if (waits.isEmpty) None else Some(waits.min)
+    }
     @tailrec
     override final def poll(
         duration: Duration,
         filter: FileEvent[T] => Boolean
     ): Seq[FileEvent[T]] = {
       val start = Deadline.now
+      val adjustedDuration = quarantineDuration.map(Seq(duration, _).min).getOrElse(duration)
       /*
        * The impl is tail recursive to handle the case when we quarantine a deleted file or find
        * an event for a path that is an anti-entropy quarantine. In these cases, if there are other
        * events in the queue, we want to immediately pull them. Otherwise it's possible to return
        * None while there events ready in the queue.
        */
-      val results = fileEventMonitor.poll(duration, filter)
+      val results = fileEventMonitor.poll(adjustedDuration, filter)
       /*
        * Note that this transformation is not purely functional because it has the side effect of
        * modifying the quarantinedEvents and antiEntropyDeadlines maps.
