@@ -75,15 +75,20 @@ private abstract class MilliNative[Native] extends Milli {
   protected def toNative(mtime: Long): Native // convert milliseconds to native time
 }
 
-private trait PosixBase {
+/**
+ * FFI for standard C library.
+ */
+private sealed trait PosixBase extends Library {
+  /** http://www.cplusplus.com/reference/cstring/strerror/ */
   def strerror(errnum: Int): String
 }
+
 private abstract class MilliPosixBase[Interface <: PosixBase: ClassTag, Native]
     extends MilliNative[Native] {
   private val options = scala.collection.Map[String, Object]().asJava
   private final val ENOENT = 2
   protected val libc: Interface =
-    (JNANative.loadLibrary(
+    (JNANative.load(
       Platform.C_LIBRARY_NAME,
       classTag[Interface].runtimeClass.asInstanceOf[Class[Interface]],
       options
