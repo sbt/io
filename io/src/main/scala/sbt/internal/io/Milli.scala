@@ -368,7 +368,7 @@ object Milli {
     }
   }
 
-  private val milli =
+  val milli: Milli =
     if (jdkTimestamps || !isIntel)
       JavaMilli
     else
