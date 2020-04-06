@@ -53,16 +53,18 @@ object FileTreeView {
    * An implementation of [[FileTreeView]] that uses built in jvm apis. This implementation
    * will throw an IOException if the input path is not a directory or doesn't exist.
    */
-  val nio: FileTreeView.Nio[FileAttributes] = (path: Path) =>
-    Retry(
-      {
-        val stream = Files.list(path)
-        try stream.iterator.asScala.flatMap(p => FileAttributes(p).toOption.map(p -> _)).toVector
-        finally stream.close()
-      },
-      classOf[NotDirectoryException],
-      classOf[NoSuchFileException]
-    )
+  val nio: FileTreeView.Nio[FileAttributes] = {
+    val excludedExceptions = List(classOf[NotDirectoryException], classOf[NoSuchFileException])
+    (path: Path) =>
+      Retry(
+        {
+          val stream = Files.list(path)
+          try stream.iterator.asScala.flatMap(p => FileAttributes(p).toOption.map(p -> _)).toVector
+          finally stream.close()
+        },
+        excludedExceptions: _*
+      )
+  }
 
   /**
    * Adds additional methods to [[FileTreeView]]. This api may be changed so it should not be

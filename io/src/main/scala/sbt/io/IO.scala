@@ -27,6 +27,7 @@ import sbt.nio.file.FileTreeView
 import scala.Function.tupled
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
+import scala.collection.immutable
 import scala.collection.immutable.TreeSet
 import scala.collection.mutable.{ HashMap, HashSet }
 import scala.reflect.{ Manifest => SManifest }
@@ -1404,7 +1405,7 @@ object IO {
    */
   def getModifiedTimeOrZero(file: File): Long =
     try {
-      Retry(Milli.getModifiedTime(file), classOf[FileNotFoundException])
+      Retry(Milli.getModifiedTime(file), excludeFileNotFound: _*)
     } catch {
       case _: FileNotFoundException =>
         val unnormalized = file.toPath
@@ -1429,7 +1430,7 @@ object IO {
    */
   def setModifiedTimeOrFalse(file: File, mtime: Long): Boolean =
     try {
-      Retry(Milli.setModifiedTime(file, mtime), classOf[FileNotFoundException])
+      Retry(Milli.setModifiedTime(file, mtime), excludeFileNotFound: _*)
       true
     } catch {
       case _: FileNotFoundException =>
@@ -1461,4 +1462,8 @@ object IO {
     // see Java bug #6791812
     setModifiedTimeOrFalse(targetFile, math.max(last, 0L))
   }
+
+  private val excludeFileNotFound: immutable.Seq[Class[_ <: IOException]] = List(
+    classOf[FileNotFoundException]
+  )
 }

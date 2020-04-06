@@ -54,7 +54,9 @@ private[sbt] object SwovalFileTreeView extends FileTreeView.Nio[FileAttributes] 
         }
         result.result()
       },
-      classOf[NotDirectoryException],
-      classOf[NoSuchFileException]
+      excludedExceptions: _*
     )
+
+  private val excludedExceptions =
+    List(classOf[NotDirectoryException], classOf[NoSuchFileException])
 }
