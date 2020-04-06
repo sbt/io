@@ -79,6 +79,7 @@ private abstract class MilliNative[Native] extends Milli {
  * FFI for standard C library.
  */
 private sealed trait PosixBase extends Library {
+
   /** http://www.cplusplus.com/reference/cstring/strerror/ */
   def strerror(errnum: Int): String
 }
@@ -368,7 +369,7 @@ object Milli {
     }
   }
 
-  private val milli =
+  val milli: Milli =
     if (jdkTimestamps || !isIntel)
       JavaMilli
     else

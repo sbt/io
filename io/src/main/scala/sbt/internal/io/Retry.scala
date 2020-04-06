@@ -11,7 +11,6 @@
 package sbt.internal.io
 import java.io.IOException
 
-import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
 private[sbt] object Retry {
@@ -20,35 +19,29 @@ private[sbt] object Retry {
     try System.getProperty("sbt.io.retry.limit", defaultLimit.toString).toInt
     catch { case NonFatal(_) => defaultLimit }
   }
-  private[sbt] def apply[T](f: => T, excludedExceptions: Class[_ <: IOException]*): T =
+  private[sbt] def apply[@specialized T](f: => T, excludedExceptions: Class[_ <: IOException]*): T =
     apply(f, limit, excludedExceptions: _*)
-  private[sbt] def apply[T](
+  private[sbt] def apply[@specialized T](
       f: => T,
       limit: Int,
       excludedExceptions: Class[_ <: IOException]*
   ): T = {
-    lazy val filter: Exception => Boolean = excludedExceptions match {
+    def filter(e: Exception): Boolean = excludedExceptions match {
       case s if s.nonEmpty =>
-        (e: Exception) => !excludedExceptions.exists(_.isAssignableFrom(e.getClass))
+        !excludedExceptions.exists(_.isAssignableFrom(e.getClass))
       case _ =>
-        (_: Exception) => true
+        true
     }
-    @tailrec
-    def impl(attempt: Int): T = {
-      val (retry, res) = try false -> Right(f)
-      catch {
-        case e: IOException if filter(e) && (attempt < limit) => (true, Left(e))
-        case e: IOException                                   => (false, Left(e))
-      }
-      if (retry) {
-        Thread.sleep(0); impl(attempt + 1)
-      } else {
-        res match {
-          case Right(r) => r
-          case Left(e)  => throw e
-        }
+    var attempt = 1
+    while (attempt < limit) {
+      try {
+        return f
+      } catch {
+        case e: IOException if filter(e) && (attempt < limit) =>
+          Thread.sleep(0);
+          attempt += 1
       }
     }
-    impl(1)
+    throw new IllegalStateException()
   }
 }
