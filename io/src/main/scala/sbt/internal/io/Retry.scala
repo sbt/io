@@ -26,6 +26,7 @@ private[sbt] object Retry {
       limit: Int,
       excludedExceptions: Class[_ <: IOException]*
   ): T = {
+    require(limit >= 1, "limit must be 1 or higher: was: " + limit)
     def filter(e: Exception): Boolean = excludedExceptions match {
       case s if s.nonEmpty =>
         !excludedExceptions.exists(_.isAssignableFrom(e.getClass))
@@ -33,15 +34,18 @@ private[sbt] object Retry {
         true
     }
     var attempt = 1
-    while (attempt < limit) {
+    var firstException: IOException = null
+    while (attempt <= limit) {
       try {
         return f
       } catch {
-        case e: IOException if filter(e) && (attempt < limit) =>
+        case e: IOException if filter(e) =>
+          if (firstException == null) firstException = e
+
           Thread.sleep(0);
           attempt += 1
       }
     }
-    throw new IllegalStateException()
+    throw firstException
   }
 }
