@@ -332,7 +332,7 @@ object IO {
     try Retry(
       try Files.createDirectories(path)
       catch { case _: IOException if Files.isDirectory(path) => },
-      excludedExceptions = classOf[FileSystemException]
+      excludedExceptions = classOf[FileAlreadyExistsException]
     )
     catch { case e: IOException => throw new IOException(failBase + ": " + e, e) }
     ()
