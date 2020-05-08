@@ -41,8 +41,9 @@ private[sbt] object Retry {
       } catch {
         case e: IOException if filter(e) =>
           if (firstException == null) firstException = e
-
-          Thread.sleep(0);
+          // https://github.com/sbt/io/issues/295
+          // On Windows, we're seeing java.nio.file.AccessDeniedException with sleep(0).
+          Thread.sleep(100)
           attempt += 1
       }
     }
