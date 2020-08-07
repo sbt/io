@@ -178,6 +178,27 @@ class FileEventMonitorSpec extends FlatSpec with Matchers {
 
     assert(monitor.poll(0.millis) == Seq(Update(foo, deletionAttributes, creationAttributes)))
   }
+  it should "immediately trigger with zero antientropy" in {
+    val observers = new Observers[Event]
+    val antiEntropyPeriod = 0.millis
+    val quarantinePeriod = antiEntropyPeriod / 2
+    val monitor =
+      FileEventMonitor.antiEntropy(
+        observers,
+        antiEntropyPeriod,
+        NullWatchLogger,
+        quarantinePeriod,
+        10.minutes
+      )
+    val foo = Paths.get("foo")
+    val updateAttributes = TestAttributes(isRegularFile = true)
+    val fooUpdate = Update(foo, updateAttributes, updateAttributes)
+    observers.onNext(fooUpdate)
+    assert(monitor.poll(0.millis) == Seq(Update(foo, updateAttributes, updateAttributes)))
+    observers.onNext(fooUpdate)
+    assert(monitor.poll(0.millis) == Seq(Update(foo, updateAttributes, updateAttributes)))
+
+  }
 }
 object FileEventMonitorSpec extends Matchers {
   private type Event = FileEvent[FileAttributes]

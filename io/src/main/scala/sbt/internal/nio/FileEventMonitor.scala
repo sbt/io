@@ -270,7 +270,7 @@ private[sbt] object FileEventMonitor {
               Some(Update(path, oldAttributes, attributes, d.occurredAt))
             case _ =>
               antiEntropyDeadlines.get(path) match {
-                case Some(deadline) if occurredAt <= deadline =>
+                case Some(deadline) if occurredAt < deadline =>
                   val msg = s"Discarding entry for recently updated path $path. " +
                     s"This event occurred ${(occurredAt - (deadline - period)).toMillis} ms since " +
                     "the last event for this path."
