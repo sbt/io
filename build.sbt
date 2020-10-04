@@ -8,6 +8,7 @@ ThisBuild / version := {
     case _       => old
   }
 }
+ThisBuild / versionScheme := Some("early-semver")
 ThisBuild / organization := "org.scala-sbt"
 ThisBuild / bintrayPackage := "io"
 ThisBuild / homepage := Some(url("https://github.com/sbt/io"))
