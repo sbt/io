@@ -1,3 +1,5 @@
+package iobuild
+
 import sbt._
 import Keys._
 import bintray.BintrayPlugin
