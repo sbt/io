@@ -4,7 +4,7 @@ on:
   push:
 
 jobs:
-  linux:
+  linux-jdk8:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -26,7 +26,7 @@ jobs:
         SCALA212: 2.12.10
         SCALA213: 2.13.1
 
-  windows:
+  linux-jdk11:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
