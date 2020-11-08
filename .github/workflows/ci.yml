@@ -1,0 +1,71 @@
+name: CI
+on:
+  pull_request:
+  push:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+    - name: Setup
+      uses: olafurpg/setup-scala@v10
+      with:
+        java-version: "adopt@1.8"
+    - name: Coursier cache
+      uses: coursier/cache-action@v5
+    - name: Cache sbt
+      uses: actions/cache@v1
+      with:
+        path: ~/.sbt
+        key: ${{ runner.os }}-sbt-cache-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+    - name: Build and test
+      run: .github/linux_jdk8.sh
+      env:
+        SCALA212: 2.12.10
+        SCALA213: 2.13.1
+
+  windows:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+    - name: Setup
+      uses: olafurpg/setup-scala@v10
+      with:
+        java-version: "adopt@1.11"
+    - name: Coursier cache
+      uses: coursier/cache-action@v5
+    - name: Cache sbt
+      uses: actions/cache@v1
+      with:
+        path: ~/.sbt
+        key: ${{ runner.os }}-sbt-cache-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+    - name: Build and test
+      run: .github/job.sh
+      env:
+        SCALA212: 2.12.10
+        SCALA213: 2.13.1
+
+  macos:
+    runs-on: macos-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+    - name: Setup
+      uses: olafurpg/setup-scala@v10
+      with:
+        java-version: "adopt@1.8"
+    - name: Coursier cache
+      uses: coursier/cache-action@v5
+    - name: Cache sbt
+      uses: actions/cache@v1
+      with:
+        path: ~/.sbt
+        key: ${{ runner.os }}-sbt-cache-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+    - name: Build and test
+      run: .github/job.sh
+      env:
+        SCALA212: 2.12.10
+        SCALA213: 2.13.1
