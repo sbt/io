@@ -3,16 +3,32 @@ on:
   pull_request:
   push:
 
+env:
+  SCALA212: 2.12.10
+  SCALA213: 2.13.1
+
 jobs:
-  linux-jdk8:
-    runs-on: ubuntu-latest
+  test:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            java: 8
+            jobtype: 1
+          - os: ubuntu-latest
+            java: 11
+            jobtype: 2
+          - os: macos-latest
+            java: 8
+            jobtype: 2
+    runs-on: ${{ matrix.os }}
     steps:
     - name: Checkout
       uses: actions/checkout@v1
     - name: Setup
       uses: olafurpg/setup-scala@v10
       with:
-        java-version: "adopt@1.8"
+        java-version: "adopt@1.${{ matrix.java }}"
     - name: Coursier cache
       uses: coursier/cache-action@v5
     - name: Cache sbt
@@ -21,51 +37,22 @@ jobs:
         path: ~/.sbt
         key: ${{ runner.os }}-sbt-cache-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
     - name: Build and test
-      run: .github/linux_jdk8.sh
-      env:
-        SCALA212: 2.12.10
-        SCALA213: 2.13.1
-
-  linux-jdk11:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v1
-    - name: Setup
-      uses: olafurpg/setup-scala@v10
-      with:
-        java-version: "adopt@1.11"
-    - name: Coursier cache
-      uses: coursier/cache-action@v5
-    - name: Cache sbt
-      uses: actions/cache@v1
-      with:
-        path: ~/.sbt
-        key: ${{ runner.os }}-sbt-cache-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
-    - name: Build and test
-      run: .github/job.sh
-      env:
-        SCALA212: 2.12.10
-        SCALA213: 2.13.1
-
-  macos:
-    runs-on: macos-latest
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v1
-    - name: Setup
-      uses: olafurpg/setup-scala@v10
-      with:
-        java-version: "adopt@1.8"
-    - name: Coursier cache
-      uses: coursier/cache-action@v5
-    - name: Cache sbt
-      uses: actions/cache@v1
-      with:
-        path: ~/.sbt
-        key: ${{ runner.os }}-sbt-cache-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
-    - name: Build and test
-      run: .github/job.sh
-      env:
-        SCALA212: 2.12.10
-        SCALA213: 2.13.1
+      run: |
+        case ${{ matrix.jobtype }} in
+          1)
+            sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=true ++$SCALA212! mimaReportBinaryIssues scalafmtCheckAll headerCheck Test/headerCheck test whitesourceCheckPolicies doc
+            sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=false ++$SCALA213! test
+            ;;
+          2)
+            sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=true ++$SCALA212! mimaReportBinaryIssues test
+            sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=false ++$SCALA213! test
+            ;;
+          *)
+            echo unknown jobtype
+            exit 1
+        esac
+        rm -rf "$HOME/.ivy2/local"
+        find $HOME/Library/Caches/Coursier/v1        -name "ivydata-*.properties" -delete || true
+        find $HOME/.ivy2/cache                       -name "ivydata-*.properties" -delete || true
+        find $HOME/.cache/coursier/v1                -name "ivydata-*.properties" -delete || true
+        find $HOME/.sbt                              -name "*.lock"               -delete || true
