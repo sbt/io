@@ -12,5 +12,4 @@ object Dependencies {
   val jna = "net.java.dev.jna" % "jna" % "5.5.0"
   val jnaPlatform = "net.java.dev.jna" % "jna-platform" % "5.5.0"
   val swovalFiles = "com.swoval" % "file-tree-views" % "2.1.4"
-  def nightlyVersion: Option[String] = sys.props.get("sbt.build.version")
 }
