@@ -5,7 +5,9 @@ ThisBuild / version := {
   val old = (ThisBuild / version).value
   nightlyVersion match {
     case Some(v) => v
-    case _       => old
+    case _ =>
+      if ((ThisBuild / isSnapshot).value) "1.4.0-SNAPSHOT"
+      else old
   }
 }
 ThisBuild / versionScheme := Some("early-semver")
