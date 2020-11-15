@@ -3,7 +3,7 @@ import com.typesafe.tools.mima.core._, ProblemFilters._
 
 ThisBuild / version := {
   val old = (ThisBuild / version).value
-  nightlyVersion match {
+  (sys.env.get("BUILD_VERSION") orElse sys.props.get("sbt.build.version")) match {
     case Some(v) => v
     case _ =>
       if ((ThisBuild / isSnapshot).value) "1.4.0-SNAPSHOT"
@@ -12,7 +12,7 @@ ThisBuild / version := {
 }
 ThisBuild / versionScheme := Some("early-semver")
 ThisBuild / organization := "org.scala-sbt"
-ThisBuild / bintrayPackage := "io"
+ThisBuild / bintrayPackage := sys.env.get("BINTRAY_PACKAGE").getOrElse("io")
 ThisBuild / homepage := Some(url("https://github.com/sbt/io"))
 ThisBuild / description := "IO module for sbt"
 ThisBuild / scmInfo := Some(ScmInfo(url("https://github.com/sbt/io"), "git@github.com:sbt/io.git"))
@@ -154,14 +154,6 @@ val io = (project in file("io"))
     buildInfoPackage in Test := "sbt.internal.io",
     buildInfoUsePackageAsPath in Test := true,
   )
-
-ThisBuild / publishTo := {
-  val old = (ThisBuild / publishTo).value
-  sys.props.get("sbt.build.localmaven") match {
-    case Some(path) => Some(MavenCache("local-maven", file(path)))
-    case _          => old
-  }
-}
 
 inThisBuild(
   Seq(
