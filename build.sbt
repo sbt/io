@@ -1,9 +1,18 @@
 import Dependencies._
 import com.typesafe.tools.mima.core._, ProblemFilters._
 
+ThisBuild / version := {
+  val old = (ThisBuild / version).value
+  (sys.env.get("BUILD_VERSION") orElse sys.props.get("sbt.build.version")) match {
+    case Some(v) => v
+    case _ =>
+      if ((ThisBuild / isSnapshot).value) "1.4.0-SNAPSHOT"
+      else old
+  }
+}
 ThisBuild / versionScheme := Some("early-semver")
 ThisBuild / organization := "org.scala-sbt"
-ThisBuild / bintrayPackage := "io"
+ThisBuild / bintrayPackage := sys.env.get("BINTRAY_PACKAGE").getOrElse("io")
 ThisBuild / homepage := Some(url("https://github.com/sbt/io"))
 ThisBuild / description := "IO module for sbt"
 ThisBuild / scmInfo := Some(ScmInfo(url("https://github.com/sbt/io"), "git@github.com:sbt/io.git"))
@@ -145,32 +154,6 @@ val io = (project in file("io"))
     buildInfoPackage in Test := "sbt.internal.io",
     buildInfoUsePackageAsPath in Test := true,
   )
-
-ThisBuild / version := {
-  val old = (ThisBuild / version).value
-  (sys.env.get("BUILD_VERSION") orElse sys.props.get("sbt.build.version")) match {
-    case Some(v) => v
-    case _ =>
-      if ((ThisBuild / isSnapshot).value) "1.4.0-SNAPSHOT"
-      else old
-  }
-}
-def githubPackageRegistry: Option[Resolver] =
-  sys.env.get("RELEASE_GITHUB_PACKAGE_REGISTRY") map { repo =>
-    s"GitHub Package Registry ($repo)" at s"https://maven.pkg.github.com/$repo"
-  }
-ThisBuild / publishTo := {
-  val old = (ThisBuild / publishTo).value
-  githubPackageRegistry orElse old
-}
-ThisBuild / resolvers ++= githubPackageRegistry.toList
-ThisBuild / credentials ++= {
-  sys.env.get("GITHUB_TOKEN") match {
-    case Some(token) =>
-      List(Credentials("GitHub Package Registry", "maven.pkg.github.com", "unused", token))
-    case _ => Nil
-  }
-}
 
 inThisBuild(
   Seq(
