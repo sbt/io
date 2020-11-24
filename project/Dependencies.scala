@@ -11,5 +11,5 @@ object Dependencies {
   val scalatest = "org.scalatest" %% "scalatest" % "3.0.8"
   val jna = "net.java.dev.jna" % "jna" % "5.5.0"
   val jnaPlatform = "net.java.dev.jna" % "jna-platform" % "5.5.0"
-  val swovalFiles = "com.swoval" % "file-tree-views" % "2.1.4"
+  val swovalFiles = "com.swoval" % "file-tree-views" % "2.1.6"
 }
