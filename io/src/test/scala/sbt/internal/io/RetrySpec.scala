@@ -21,7 +21,7 @@ final class RetrySpec extends FlatSpec {
     val i = new AtomicInteger()
     def throww(): Any = throw new IOException(i.incrementAndGet().toString)
     try {
-      Retry(throww(), limit = 10, noExcluded: _*)
+      Retry(throww(), limit = 10, sleepInMillis = 0, noExcluded: _*)
       assert(false)
     } catch {
       case ioe: IOException =>
@@ -36,7 +36,7 @@ final class RetrySpec extends FlatSpec {
       val value = Retry({
         val thisI = i.incrementAndGet()
         if (thisI == recoveryStep) "recover" else throw new IOException(thisI.toString)
-      }, limit = 15, noExcluded: _*)
+      }, limit = 15, sleepInMillis = 0, noExcluded: _*)
       assert(value == "recover")
     }
   }
