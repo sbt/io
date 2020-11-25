@@ -12,13 +12,12 @@ package sbt.internal.nio
 
 import java.io.IOException
 import java.nio.file.{ Path => NioPath }
-import java.util
+import java.util.WeakHashMap
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 import sbt.nio.file.Glob
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.util.control.NonFatal
 
 @FunctionalInterface
@@ -81,15 +80,13 @@ private[sbt] object Observable {
 private[sbt] class Observers[T] extends Observer[T] with Observable[T] {
   private class Handle(id: Int) extends AutoCloseable {
     override def close(): Unit = {
-      observers.synchronized(observers -= id)
+      observers.remove(id)
       ()
     }
   }
   private[this] val id = new AtomicInteger(0)
-  private[this] val observers: mutable.Map[Int, Observer[T]] =
-    new util.LinkedHashMap[Int, Observer[T]]().asScala
-  private[this] val observables: mutable.Map[AutoCloseable, Unit] =
-    new util.WeakHashMap[AutoCloseable, Unit]().asScala
+  private[this] val observers = new ConcurrentHashMap[Int, Observer[T]]
+  private[this] val observables = new WeakHashMap[AutoCloseable, Unit]
 
   private[sbt] def addObservable(observable: Observable[T]): AutoCloseable =
     observables.synchronized {
@@ -97,27 +94,24 @@ private[sbt] class Observers[T] extends Observer[T] with Observable[T] {
       observables.put(handle, ())
       handle
     }
-  override def addObserver(observer: Observer[T]): AutoCloseable = observers.synchronized {
+  override def addObserver(observer: Observer[T]): AutoCloseable = {
     val observerId = id.incrementAndGet()
-    observers += observerId -> observer
+    observers.put(observerId, observer)
     new Handle(observerId)
   }
 
   override def close(): Unit = {
-    observers.synchronized(observers.clear())
+    observers.clear()
     observables.synchronized {
-      observables.keys.foreach(_.close())
+      observables.keySet.forEach(_.close())
       observables.clear()
     }
   }
   override def toString: String =
-    s"Observers(observers = ${observers.values}, observables = ${observables.keys})"
-  override def onNext(t: T): Unit = observers.synchronized {
-    observers.values.foreach(
-      o =>
-        try o.onNext(t)
-        catch { case NonFatal(_) => }
-    )
+    s"Observers(observers = ${observers.values}, observables = ${observables.keySet})"
+  override def onNext(t: T): Unit = observers.values.forEach { o =>
+    try o.onNext(t)
+    catch { case NonFatal(_) => }
   }
 }
 private[sbt] class RegisterableObservable[T](val delegate: Observers[FileEvent[T]]) extends AnyVal {
