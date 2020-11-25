@@ -1174,11 +1174,18 @@ object IO {
   /** Converts the given File to a URI.  If the File is relative, the URI is relative, unlike File.toURI*/
   def toURI(f: File): URI =
     if (f.isAbsolute) {
-      f.toPath.toUri
+      //not using f.toURI to avoid filesystem syscalls
+      //we use empty string as host to force file:// instead of just file:
+      new URI(FileScheme, "", normalizeName(slashify(f.getAbsolutePath)), null).toASCIIString
     } else {
       // need to use the three argument URI constructor because the single argument version doesn't encode
       new URI(null, normalizeName(f.getPath), null)
     }
+  
+  private[this] def slashify(name: String) = {
+    if(name.nonEmpty && name.head != File.separatorChar) File.separatorChar + name
+    else name
+  }
 
   /**
    * Resolves `f` against `base`, which must be an absolute directory.
