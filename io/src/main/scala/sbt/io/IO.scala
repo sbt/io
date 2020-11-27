@@ -15,7 +15,7 @@ import java.net.{ URI, URISyntaxException, URL }
 import java.nio.charset.Charset
 import java.nio.file.attribute.PosixFilePermissions
 import java.nio.file.{ Path => NioPath, _ }
-import java.util.Properties
+import java.util.{ Locale, Properties }
 import java.util.jar.{ Attributes, JarEntry, JarFile, JarOutputStream, Manifest }
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
 
@@ -674,7 +674,7 @@ object IO {
   ) = {
     val files = sources
       .flatMap {
-        case (file, name) => if (file.isFile) (file, normalizeName(name)) :: Nil else Nil
+        case (file, name) => if (file.isFile) (file, normalizeToSlash(name)) :: Nil else Nil
       }
       .sortBy {
         case (_, name) => name
@@ -734,7 +734,7 @@ object IO {
   private def allDirectoryPaths(files: Iterable[(File, String)]) =
     TreeSet[String]() ++ (files flatMap { case (_, name) => directoryPaths(name) })
 
-  private def normalizeName(name: String) = {
+  private def normalizeToSlash(name: String) = {
     val sep = File.separatorChar
     if (sep == '/') name else name.replace(sep, '/')
   }
@@ -1171,14 +1171,33 @@ object IO {
     dirURI.normalize
   }
 
+  private[sbt] val isWindows: Boolean =
+    System.getProperty("os.name").toLowerCase(Locale.ENGLISH).contains("windows")
+
   /** Converts the given File to a URI.  If the File is relative, the URI is relative, unlike File.toURI*/
-  def toURI(f: File): URI =
-    if (f.isAbsolute) {
-      f.toPath.toUri
+  def toURI(f: File): URI = {
+    def ensureHeadSlash(name: String) =
+      if (name.nonEmpty && name.head != File.separatorChar) File.separatorChar + name
+      else name
+
+    val p = f.getPath
+    if (isWindows && p.nonEmpty && p.head == File.separatorChar) {
+      if (p.startsWith("""\\""")) {
+        // supports \\laptop\My Documents\Some.doc on Windows
+        new URI(FileScheme, normalizeToSlash(p), null)
+      } else {
+        // supports /tmp on Windows
+        new URI(FileScheme, "", normalizeToSlash(p), null)
+      }
+    } else if (f.isAbsolute) {
+      //not using f.toURI to avoid filesystem syscalls
+      //we use empty string as host to force file:// instead of just file:
+      new URI(FileScheme, "", normalizeToSlash(ensureHeadSlash(f.getAbsolutePath)), null)
     } else {
       // need to use the three argument URI constructor because the single argument version doesn't encode
-      new URI(null, normalizeName(f.getPath), null)
+      new URI(null, normalizeToSlash(f.getPath), null)
     }
+  }
 
   /**
    * Resolves `f` against `base`, which must be an absolute directory.
