@@ -84,8 +84,8 @@ class IOSpec extends FunSuite {
   }
 
   test("toURI should make URI") {
-    val u = IO.toURI(file("/etc/hosts").getAbsoluteFile)
-    assert(u.toString.startsWith("file:///") && u.toString.endsWith("etc/hosts"))
+    val u = IO.toURI(file("/etc/hosts"))
+    assert(u.toString == "file:///etc/hosts")
   }
 
   test("it should make u0 URI from a relative path") {
@@ -93,14 +93,38 @@ class IOSpec extends FunSuite {
     assert(u.toString == "src/main/scala")
   }
 
+  test("it should make u0 URI from a relative path on Windows") {
+    if (IO.isWindows) {
+      val input = file("""..\My Documents\test""")
+      val u = IO.toURI(input)
+      assert(u.toString == "../My%20Documents/test" && IO.toFile(u) == input)
+    } else ()
+  }
+
   test("it should make URI that roundtrips") {
-    val u = IO.toURI(file("/etc/hosts").getAbsoluteFile)
-    assert(IO.toFile(u) == file("/etc/hosts").getAbsoluteFile)
+    val u = IO.toURI(file("/etc/hosts"))
+    assert(IO.toFile(u) == file("/etc/hosts"))
   }
 
   test("it should make u0 URI that roundtrips") {
     val u = IO.toURI(file("src") / "main" / "scala")
     assert(IO.toFile(u) == (file("src") / "main" / "scala"))
+  }
+
+  test("it should make u3 URI for an absolute path on Windows that roundtrips") {
+    if (IO.isWindows) {
+      val input = file("""C:\Documents and Settings\""")
+      val u = IO.toURI(input)
+      assert(u.toString == "file:///C:/Documents%20and%20Settings" && IO.toFile(u) == input)
+    } else ()
+  }
+
+  test("it should make u2 URI for a UNC path on Windows that roundtrips") {
+    if (IO.isWindows) {
+      val input = file("""\\laptop\My Documents\Some.doc""")
+      val u = IO.toURI(input)
+      assert(u.toString == "file://laptop/My%20Documents/Some.doc" && IO.toFile(u) == input)
+    } else ()
   }
 
   test("getModifiedTimeOrZero should return 0L if the file doesn't exists") {
