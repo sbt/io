@@ -24,7 +24,13 @@ private[sbt] object Retry {
   private[sbt] def apply[@specialized T](
       f: => T,
       limit: Int,
-      excludedExceptions: Class[_ <: IOException]*
+      excludedExceptions: Class[_ <: IOException]*,
+  ): T = apply(f, limit, 100, excludedExceptions: _*)
+  private[sbt] def apply[@specialized T](
+      f: => T,
+      limit: Int,
+      sleepInMillis: Long,
+      excludedExceptions: Class[_ <: IOException]*,
   ): T = {
     require(limit >= 1, "limit must be 1 or higher: was: " + limit)
     def filter(e: Exception): Boolean = excludedExceptions match {
@@ -43,7 +49,7 @@ private[sbt] object Retry {
           if (firstException == null) firstException = e
           // https://github.com/sbt/io/issues/295
           // On Windows, we're seeing java.nio.file.AccessDeniedException with sleep(0).
-          Thread.sleep(100)
+          Thread.sleep(sleepInMillis)
           attempt += 1
       }
     }

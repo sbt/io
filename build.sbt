@@ -36,6 +36,7 @@ ThisBuild / developers := List(
   Developer("eed3si9n", "Eugene Yokota", "@eed3si9n", url("http://eed3si9n.com/")),
   Developer("dwijnand", "Dale Wijnand", "@dwijnand", url("https://github.com/dwijnand")),
 )
+ThisBuild / turbo := true
 
 def commonSettings: Seq[Setting[_]] = Seq(
   scalaVersion := scala212,
@@ -77,7 +78,7 @@ val io = (project in file("io"))
       Vector(scalaCompiler.value % Test, scalaCheck % Test, scalatest % Test)
     } ++ Vector(swovalFiles),
     libraryDependencies ++= Seq(jna, jnaPlatform),
-    Test / fork := System.getProperty("sbt.test.fork", "true") == "true",
+    Test / fork := System.getProperty("sbt.test.fork", "false") == "true",
     Test / testForkedParallel := true,
     sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",
     initialCommands in console += "\nimport sbt.io._, syntax._",
