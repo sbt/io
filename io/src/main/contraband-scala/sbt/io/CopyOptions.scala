@@ -20,10 +20,10 @@ final class CopyOptions private (
   
   private def this() = this(false, false, true)
   
-  override def equals(o: Any): Boolean = o match {
+  override def equals(o: Any): Boolean = this.eq(o.asInstanceOf[AnyRef]) || (o match {
     case x: CopyOptions => (this.overwrite == x.overwrite) && (this.preserveLastModified == x.preserveLastModified) && (this.preserveExecutable == x.preserveExecutable)
     case _ => false
-  }
+  })
   override def hashCode: Int = {
     37 * (37 * (37 * (37 * (17 + "sbt.io.CopyOptions".##) + overwrite.##) + preserveLastModified.##) + preserveExecutable.##)
   }
