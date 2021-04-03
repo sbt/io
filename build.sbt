@@ -12,7 +12,6 @@ ThisBuild / version := {
 }
 ThisBuild / versionScheme := Some("early-semver")
 ThisBuild / organization := "org.scala-sbt"
-ThisBuild / bintrayPackage := sys.env.get("BINTRAY_PACKAGE").getOrElse("io")
 ThisBuild / homepage := Some(url("https://github.com/sbt/io"))
 ThisBuild / description := "IO module for sbt"
 ThisBuild / scmInfo := Some(ScmInfo(url("https://github.com/sbt/io"), "git@github.com:sbt/io.git"))
@@ -37,6 +36,11 @@ ThisBuild / developers := List(
   Developer("dwijnand", "Dale Wijnand", "@dwijnand", url("https://github.com/dwijnand")),
 )
 ThisBuild / turbo := true
+ThisBuild / pomIncludeRepository := (_ => false)
+ThisBuild / publishTo := {
+  val nexus = "https://oss.sonatype.org/"
+  Some("releases" at nexus + "service/local/staging/deploy/maven2")
+}
 
 def commonSettings: Seq[Setting[_]] = Seq(
   scalaVersion := scala212,
@@ -96,6 +100,7 @@ val io = (project in file("io"))
           "1.1.4",
           "1.2.0",
           "1.3.0",
+          "1.4.0",
         ) map (version => organization.value %% moduleName.value % version)
     }),
     mimaBinaryIssueFilters ++= Seq(
