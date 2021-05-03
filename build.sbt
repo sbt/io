@@ -44,7 +44,7 @@ ThisBuild / publishTo := {
 
 def commonSettings: Seq[Setting[_]] = Seq(
   scalaVersion := scala212,
-  javacOptions in compile ++= Seq("-Xlint", "-Xlint:-serial"),
+  compile / javacOptions ++= Seq("-Xlint", "-Xlint:-serial"),
   crossScalaVersions := Seq(scala212, scala213),
   headerLicense := (ThisBuild / headerLicense).value,
 )
@@ -54,7 +54,7 @@ lazy val ioRoot = (project in file("."))
   .settings(
     commonSettings,
     name := "IO Root",
-    skip in publish := true,
+    publish / skip := true,
     onLoadMessage := {
       """      _     
         |     (_)___ 
@@ -84,8 +84,8 @@ val io = (project in file("io"))
     libraryDependencies ++= Seq(jna, jnaPlatform),
     Test / fork := System.getProperty("sbt.test.fork", "false") == "true",
     Test / testForkedParallel := true,
-    sourceManaged in (Compile, generateContrabands) := baseDirectory.value / "src" / "main" / "contraband-scala",
-    initialCommands in console += "\nimport sbt.io._, syntax._",
+    Compile / generateContrabands / sourceManaged := baseDirectory.value / "src" / "main" / "contraband-scala",
+    console / initialCommands += "\nimport sbt.io._, syntax._",
     mimaPreviousArtifacts := (CrossVersion partialVersion scalaVersion.value match {
       case Some((2, n)) if n >= 13 => Set.empty
       case _ =>
@@ -101,6 +101,7 @@ val io = (project in file("io"))
           "1.2.0",
           "1.3.0",
           "1.4.0",
+          "1.5.0",
         ) map (version => organization.value %% moduleName.value % version)
     }),
     mimaBinaryIssueFilters ++= Seq(
@@ -156,9 +157,9 @@ val io = (project in file("io"))
     ),
     BuildInfoPlugin.buildInfoDefaultSettings, // avoids BuildInfo generated in Compile scope
     addBuildInfoToConfig(Test),
-    buildInfoKeys in Test := Seq[BuildInfoKey](target),
-    buildInfoPackage in Test := "sbt.internal.io",
-    buildInfoUsePackageAsPath in Test := true,
+    Test / buildInfoKeys := Seq[BuildInfoKey](target),
+    Test / buildInfoPackage := "sbt.internal.io",
+    Test / buildInfoUsePackageAsPath := true,
   )
 
 inThisBuild(
