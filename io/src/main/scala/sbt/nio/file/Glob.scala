@@ -903,11 +903,11 @@ object RelativeGlob {
     override def hashCode: Int = glob.hashCode
   }
   private final class GlobMatcher(override val glob: String) extends SingleComponentMatcher {
-    private[this] val (prefix, pattern) = glob.indexOf(":") match {
+    private[this] val (prefixString, pattern) = glob.indexOf(":") match {
       case -1 => ("glob", glob)
       case i  => (glob.substring(0, i), glob.substring(i + 1))
     }
-    private[this] val matcher = FileSystems.getDefault.getPathMatcher(s"$prefix:$pattern")
+    private[this] val matcher = FileSystems.getDefault.getPathMatcher(s"$prefixString:$pattern")
     override def matches(path: Path): Boolean = matcher.matches(path)
     override def equals(o: Any): Boolean = o match {
       case that: GlobMatcher => this.glob == that.glob
