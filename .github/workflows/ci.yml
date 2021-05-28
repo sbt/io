@@ -4,8 +4,8 @@ on:
   push:
 
 env:
-  SCALA212: 2.12.10
-  SCALA213: 2.13.1
+  SCALA212: 2.12.14
+  SCALA213: 2.13.6
 
 jobs:
   test:
