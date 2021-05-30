@@ -118,6 +118,15 @@ class FileTreeViewSpec extends FlatSpec {
     val globs = (1 to n).map(i => dir.toGlob / "subdir" / "nested" / s"a$i") :+ Glob(dir, ** / "b*")
     assert(randomFiles.toSet == FileTreeView.default.list(globs).map(_._1).toSet)
   }
+  it should "handle overlapping globs with exact file" in IO.withTemporaryDirectory { dir =>
+    val subdir = Files.createDirectories(dir.toPath / "subdir")
+    val nested = Files.createDirectories(subdir / "nested")
+    val a = Files.createFile(subdir / "a.txt")
+    val b = Files.createFile(nested / "b.txt")
+    val globs = Seq(Glob(subdir, "a.txt"), Glob(nested, RecursiveGlob))
+    val queried = FileTreeView.default.list(globs).map(_._1).toSet
+    assert(queried == Set(a, b))
+  }
   it should "throw NoSuchFileException for non-existent directories" in IO.withTemporaryDirectory {
     dir =>
       intercept[NoSuchFileException](FileTreeView.nio.list(dir.toPath / "foo"))

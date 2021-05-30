@@ -372,7 +372,7 @@ object FileTreeView {
                   case Some((`p`, m)) =>
                     m.get(path) match {
                       case null               =>
-                      case a if a.isDirectory => listPath(p)
+                      case a if a.isDirectory => listPath(path)
                       case a                  => maybeAdd(path -> a)
                     }
                   case _ => listPath(path)
