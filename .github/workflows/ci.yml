@@ -35,6 +35,11 @@ jobs:
         java-version: "adopt@1.${{ matrix.java }}"
     - name: Coursier cache
       uses: coursier/cache-action@v5
+    - name: Install the original sbt
+      shell: bash
+      run: |
+        RUNNER_VER=1.5.5
+        curl -sL https://raw.githubusercontent.com/sbt/sbt/v$RUNNER_VER/sbt > $HOME/bin/sbt
     - name: Build and test
       shell: bash
       run: |
