@@ -9,7 +9,7 @@ object Dependencies {
 
   val scalaCheck = "org.scalacheck" %% "scalacheck" % "1.14.0"
   val scalatest = "org.scalatest" %% "scalatest" % "3.0.8"
-  val jna = "net.java.dev.jna" % "jna" % "5.5.0"
-  val jnaPlatform = "net.java.dev.jna" % "jna-platform" % "5.5.0"
+  val jna = "net.java.dev.jna" % "jna" % "5.8.0"
+  val jnaPlatform = "net.java.dev.jna" % "jna-platform" % "5.8.0"
   val swovalFiles = "com.swoval" % "file-tree-views" % "2.1.6"
 }
