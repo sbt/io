@@ -823,6 +823,14 @@ object IO {
       options.hardLink
     )
 
+  // mima Compat
+  def copy(
+      sources: Traversable[(File, File)],
+      overwrite: Boolean,
+      preserveLastModified: Boolean,
+      preserveExecutable: Boolean,
+  ): Set[File] = copy(sources, overwrite, preserveLastModified, preserveExecutable, false)
+
   def copy(
       sources: Traversable[(File, File)],
       overwrite: Boolean,
@@ -871,13 +879,23 @@ object IO {
       options.preserveExecutable
     )
 
+  // mima Compat
   def copyDirectory(
       source: File,
       target: File,
       overwrite: Boolean = false,
       preserveLastModified: Boolean = false,
       preserveExecutable: Boolean = true,
-      hardLink: Boolean = false,
+  ): Unit =
+    copyDirectory(source, target, overwrite, preserveLastModified, preserveExecutable, false)
+
+  def copyDirectory(
+      source: File,
+      target: File,
+      overwrite: Boolean,
+      preserveLastModified: Boolean,
+      preserveExecutable: Boolean,
+      hardLink: Boolean,
   ): Unit = {
     val sources = PathFinder(source).allPaths pair Path.rebase(source, target)
     copy(sources, overwrite, preserveLastModified, preserveExecutable, hardLink)
@@ -901,12 +919,20 @@ object IO {
       options.hardLink
     )
 
+  // mima Compat
   def copyFile(
       sourceFile: File,
       targetFile: File,
       preserveLastModified: Boolean = false,
       preserveExecutable: Boolean = true,
-      hardLink: Boolean = false,
+  ): Unit = copyFile(sourceFile, targetFile, preserveLastModified, preserveExecutable, false)
+
+  def copyFile(
+      sourceFile: File,
+      targetFile: File,
+      preserveLastModified: Boolean,
+      preserveExecutable: Boolean,
+      hardLink: Boolean,
   ): Unit = {
     // NOTE: when modifying this code, test with larger values of CopySpec.MaxFileSizeBits than default
 
