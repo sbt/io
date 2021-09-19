@@ -16,4 +16,6 @@ type CopyOptions {
   ## If `true` the executable properties are copied.
   preserveExecutable: boolean! = true @since("0.0.1")
 
+  ## If 'true' the copy is a hardlink.
+  hardLink: boolean! = false @since("1.6.0")
 }

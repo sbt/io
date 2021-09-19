@@ -815,27 +815,37 @@ object IO {
    * The set of all target files is returned, whether or not they were updated by this method.
    */
   def copy(sources: Traversable[(File, File)], options: CopyOptions): Set[File] =
-    copy(sources, options.overwrite, options.preserveLastModified, options.preserveExecutable)
+    copy(
+      sources,
+      options.overwrite,
+      options.preserveLastModified,
+      options.preserveExecutable,
+      options.hardLink
+    )
 
   def copy(
       sources: Traversable[(File, File)],
       overwrite: Boolean,
       preserveLastModified: Boolean,
-      preserveExecutable: Boolean
+      preserveExecutable: Boolean,
+      hardLink: Boolean
   ): Set[File] =
-    sources.map(tupled(copyImpl(overwrite, preserveLastModified, preserveExecutable))).toSet
+    sources
+      .map(tupled(copyImpl(overwrite, preserveLastModified, preserveExecutable, hardLink)))
+      .toSet
 
   private def copyImpl(
       overwrite: Boolean,
       preserveLastModified: Boolean,
-      preserveExecutable: Boolean
+      preserveExecutable: Boolean,
+      hardLink: Boolean
   )(from: File, to: File): File = {
     if (overwrite || !to.exists || getModifiedTimeOrZero(from) > getModifiedTimeOrZero(to)) {
       if (from.isDirectory)
         createDirectory(to)
       else {
         createDirectory(to.getParentFile)
-        copyFile(from, to, preserveLastModified, preserveExecutable)
+        copyFile(from, to, preserveLastModified, preserveExecutable, hardLink)
       }
     }
     to
@@ -866,10 +876,11 @@ object IO {
       target: File,
       overwrite: Boolean = false,
       preserveLastModified: Boolean = false,
-      preserveExecutable: Boolean = true
+      preserveExecutable: Boolean = true,
+      hardLink: Boolean = false,
   ): Unit = {
     val sources = PathFinder(source).allPaths pair Path.rebase(source, target)
-    copy(sources, overwrite, preserveLastModified, preserveExecutable)
+    copy(sources, overwrite, preserveLastModified, preserveExecutable, hardLink)
     ()
   }
 
@@ -882,13 +893,20 @@ object IO {
    * See [[sbt.io.CopyOptions]] for docs on the options available.
    */
   def copyFile(sourceFile: File, targetFile: File, options: CopyOptions): Unit =
-    copyFile(sourceFile, targetFile, options.preserveLastModified, options.preserveExecutable)
+    copyFile(
+      sourceFile,
+      targetFile,
+      options.preserveLastModified,
+      options.preserveExecutable,
+      options.hardLink
+    )
 
   def copyFile(
       sourceFile: File,
       targetFile: File,
       preserveLastModified: Boolean = false,
-      preserveExecutable: Boolean = true
+      preserveExecutable: Boolean = true,
+      hardLink: Boolean = false,
   ): Unit = {
     // NOTE: when modifying this code, test with larger values of CopySpec.MaxFileSizeBits than default
 
@@ -897,30 +915,36 @@ object IO {
       !sourceFile.isDirectory,
       "Source file '" + sourceFile.getAbsolutePath + "' is a directory."
     )
-    fileInputChannel(sourceFile) { in =>
-      fileOutputChannel(targetFile) { out =>
-        // maximum bytes per transfer according to  from http://dzone.com/snippets/java-filecopy-using-nio
-        val max = (64L * 1024 * 1024) - (32 * 1024)
-        val total = in.size
-        def loop(offset: Long): Long =
-          if (offset < total)
-            loop(offset + out.transferFrom(in, offset, max))
-          else
-            offset
-        val copied = loop(0)
-        if (copied != in.size)
-          sys.error(
-            "Could not copy '" + sourceFile + "' to '" + targetFile + "' (" + copied + "/" + in.size + " bytes copied)"
-          )
+    if (hardLink) {
+      if (targetFile.exists) targetFile.delete()
+      Files.createLink(targetFile.toPath, sourceFile.toPath)
+      ()
+    } else {
+      fileInputChannel(sourceFile) { in =>
+        fileOutputChannel(targetFile) { out =>
+          // maximum bytes per transfer according to  from http://dzone.com/snippets/java-filecopy-using-nio
+          val max = (64L * 1024 * 1024) - (32 * 1024)
+          val total = in.size
+          def loop(offset: Long): Long =
+            if (offset < total)
+              loop(offset + out.transferFrom(in, offset, max))
+            else
+              offset
+          val copied = loop(0)
+          if (copied != in.size)
+            sys.error(
+              "Could not copy '" + sourceFile + "' to '" + targetFile + "' (" + copied + "/" + in.size + " bytes copied)"
+            )
+        }
       }
-    }
-    if (preserveLastModified) {
-      copyLastModified(sourceFile, targetFile)
-      ()
-    }
-    if (preserveExecutable) {
-      copyExecutable(sourceFile, targetFile)
-      ()
+      if (preserveLastModified) {
+        copyLastModified(sourceFile, targetFile)
+        ()
+      }
+      if (preserveExecutable) {
+        copyExecutable(sourceFile, targetFile)
+        ()
+      }
     }
   }
 
