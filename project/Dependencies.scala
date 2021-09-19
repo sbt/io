@@ -2,7 +2,7 @@ import sbt._
 import Keys._
 
 object Dependencies {
-  val scala212 = "2.12.14"
+  val scala212 = "2.12.15"
   val scala213 = "2.13.6"
 
   val scalaCompiler = Def.setting { "org.scala-lang" % "scala-compiler" % scalaVersion.value }
