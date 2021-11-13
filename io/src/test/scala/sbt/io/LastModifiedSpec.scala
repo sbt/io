@@ -12,10 +12,10 @@ package sbt.io
 
 import java.nio.file.{ Files, Paths => JPaths }
 
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 import sbt.nio.file.syntax._
 
-class LastModifiedSpec extends FlatSpec {
+class LastModifiedSpec extends AnyFlatSpec {
   "IO.getModifiedTimeOrZero" should "work with long path names" in IO.withTemporaryDirectory {
     dir =>
       val fileName = "a" * 32

@@ -12,13 +12,13 @@ package sbt.internal.nio
 
 import java.nio.file.Paths
 
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 import sbt.nio.TestHelpers._
 import sbt.nio.file.RelativeGlob
 import sbt.nio.file.syntax._
 import sbt.nio.file._
 
-class PathSyntaxSpec extends FlatSpec {
+class PathSyntaxSpec extends AnyFlatSpec {
   "toGlob" should "work with absolute paths" in {
     assert(basePath.toGlob.matches(basePath))
     assert(!basePath.toGlob.matches(basePath.getParent))

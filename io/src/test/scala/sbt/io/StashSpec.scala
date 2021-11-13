@@ -11,9 +11,10 @@
 package sbt.io
 
 import java.io.File
-import org.scalatest._
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
-class StashSpec extends FlatSpec with Matchers {
+class StashSpec extends AnyFlatSpec with Matchers {
   "stash" should "handle empty files" in {
     IO.stash(Set()) {}
     succeed

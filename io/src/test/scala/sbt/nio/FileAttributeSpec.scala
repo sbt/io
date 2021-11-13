@@ -12,11 +12,11 @@ package sbt.nio
 
 import java.nio.file.Files
 
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 import sbt.io.IO
 import sbt.nio.file.FileAttributes
 
-class FileAttributeSpec extends FlatSpec {
+class FileAttributeSpec extends AnyFlatSpec {
   "symlinks" should "be resolved" in IO.withTemporaryDirectory { dir =>
     val dirPath = dir.toPath
     val file = Files.createFile(dirPath.resolve("file"))

@@ -11,9 +11,10 @@
 package sbt.io
 import java.io.File
 
-import org.scalatest.{ FlatSpec, Matchers }
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
-class GlobFilterSpec extends FlatSpec with Matchers {
+class GlobFilterSpec extends AnyFlatSpec with Matchers {
   "GlobFilter" should "work with *" in {
     assert(GlobFilter("*") == AllPassFilter)
   }

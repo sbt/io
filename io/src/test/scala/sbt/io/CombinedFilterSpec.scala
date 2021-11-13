@@ -11,9 +11,10 @@
 package sbt.io
 import java.io.File
 
-import org.scalatest.{ FlatSpec, Matchers }
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
-class CombinedFilterSpec extends FlatSpec with Matchers {
+class CombinedFilterSpec extends AnyFlatSpec with Matchers {
   def endsWithTxt: String => Boolean = new Function[String, Boolean] {
     override def apply(string: String): Boolean = string.endsWith("txt")
   }

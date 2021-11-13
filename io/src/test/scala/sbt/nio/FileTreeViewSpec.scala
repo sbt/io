@@ -12,7 +12,7 @@ package sbt.nio
 
 import java.nio.file._
 
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 import sbt.io.IO
 import sbt.nio.file.{
   **,
@@ -29,7 +29,7 @@ import sbt.nio.file.syntax._
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-class FileTreeViewSpec extends FlatSpec {
+class FileTreeViewSpec extends AnyFlatSpec {
   val view = FileTreeView.default
   "list" should "return the source root with depth == -1" in IO.withTemporaryDirectory { dir =>
     assert(view.list(dir.toPath.getParent).filter(_._1 == dir.toPath).map(_._1) == Seq(dir.toPath))

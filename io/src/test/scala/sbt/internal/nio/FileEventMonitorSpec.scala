@@ -13,13 +13,14 @@ package sbt.internal.nio
 import java.nio.file.Paths
 import java.util.concurrent.atomic.AtomicReference
 
-import org.scalatest.{ FlatSpec, Matchers }
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import sbt.internal.nio.FileEvent.{ Creation, Deletion, Update }
 import sbt.nio.file.FileAttributes
 
 import scala.concurrent.duration.{ Deadline => _, _ }
 
-class FileEventMonitorSpec extends FlatSpec with Matchers {
+class FileEventMonitorSpec extends AnyFlatSpec with Matchers {
   import FileEventMonitorSpec._
   private[nio] def antiEntropyMonitor[T <: FileAttributes](
       observable: Observable[FileEvent[T]],

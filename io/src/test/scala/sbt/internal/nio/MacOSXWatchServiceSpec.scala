@@ -13,7 +13,7 @@ package sbt.internal.nio
 import java.nio.file.{ Files, WatchKey }
 import java.nio.file.StandardWatchEventKinds._
 
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 import sbt.internal.io.MacOSXWatchService
 import sbt.io.{ IO, WatchService }
 
@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.duration.{ Deadline => SDeadline, _ }
 import scala.util.Properties
 
-class MacOSXWatchServiceSpec extends FlatSpec {
+class MacOSXWatchServiceSpec extends AnyFlatSpec {
   private def pollFor(service: WatchService, duration: FiniteDuration)(
       cond: WatchKey => Boolean
   ): Boolean = {

@@ -13,7 +13,7 @@ package sbt.nio
 import java.io.File
 import java.nio.file.Paths
 
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 import sbt.nio.TestHelpers._
 import sbt.nio.file.Glob.RelativeGlobViewOption
 import sbt.nio.file.RelativeGlob.{ *, ** }
@@ -22,7 +22,7 @@ import sbt.nio.file.{ AnyPath, Glob, RecursiveGlob, RelativeGlob }
 
 import scala.util.Try
 
-class GlobSyntaxSpec extends FlatSpec {
+class GlobSyntaxSpec extends AnyFlatSpec {
   "path builders" should "use `*` and `**` objects" in {
     assert(Glob(basePath, AnyPath).matches(basePath.resolve("foo")))
     assert(!Glob(basePath, AnyPath).matches(basePath.resolve("foo").resolve("bar")))

@@ -12,10 +12,10 @@ package sbt.io
 
 import java.nio.file.Files
 
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 import sbt.io.syntax._
 
-class PathFinderCombinatorSpec extends FlatSpec {
+class PathFinderCombinatorSpec extends AnyFlatSpec {
   "PathFinderCombinator" should "provide extension methods for File" in IO.withTemporaryDirectory {
     dir =>
       val file = Files.createFile(dir.toPath.resolve("file")).toFile
