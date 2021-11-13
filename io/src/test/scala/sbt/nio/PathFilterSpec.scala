@@ -129,7 +129,7 @@ class PathFilterSpec extends FlatSpec {
   they should "negate" in IO.withTemporaryDirectory { dir =>
     val dirPath = dir.toPath
     val foo = Files.createFile(dirPath / "foo.txt")
-    val hidden = Files.createFile(dirPath / ".hidden").setHidden
+    val hidden = Files.createFile(dirPath / ".hidden").setHidden()
     val filter = IsDirectory && !IsHidden
     val notFilter = !filter
     assert(notFilter == (!IsDirectory || IsHidden))
