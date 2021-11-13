@@ -1177,7 +1177,7 @@ object IO {
   /** Converts the given File to a URI.  If the File is relative, the URI is relative, unlike File.toURI*/
   def toURI(f: File): URI = {
     def ensureHeadSlash(name: String) =
-      if (name.nonEmpty && name.head != File.separatorChar) File.separatorChar + name
+      if (name.nonEmpty && name.head != File.separatorChar) s"${File.separatorChar}$name"
       else name
 
     val p = f.getPath
