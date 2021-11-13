@@ -15,8 +15,9 @@ import java.nio.file.Paths
 
 import org.scalatest.flatspec.AnyFlatSpec
 import sbt.nio.TestHelpers._
+import sbt.nio.file.Glob.GlobOps
 import sbt.nio.file.Glob.RelativeGlobViewOption
-import sbt.nio.file.RelativeGlob.{ *, ** }
+import sbt.nio.file.RelativeGlob._
 import sbt.nio.file.syntax._
 import sbt.nio.file.{ AnyPath, Glob, RecursiveGlob, RelativeGlob }
 

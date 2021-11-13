@@ -45,7 +45,7 @@ ThisBuild / publishTo := {
 def commonSettings: Seq[Setting[_]] = Seq(
   scalaVersion := scala212,
   compile / javacOptions ++= Seq("-Xlint", "-Xlint:-serial"),
-  crossScalaVersions := Seq(scala212, scala213),
+  crossScalaVersions := Seq(scala212, scala213, scala3),
   headerLicense := (ThisBuild / headerLicense).value,
 )
 

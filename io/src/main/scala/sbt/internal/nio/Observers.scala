@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 import sbt.nio.file.Glob
+import sbt.nio.file.Glob.GlobOps
 
 import scala.util.control.NonFatal
 

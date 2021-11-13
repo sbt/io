@@ -16,6 +16,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import sbt.io.IO
 import sbt.io.syntax._
 import sbt.nio.file.{ AnyPath, Glob, RecursiveGlob }
+import sbt.nio.file.Glob.GlobOps
 
 class GlobFilterSpec extends AnyFlatSpec {
   "GlobAsFilter" should "work with simple files" in IO.withTemporaryDirectory { dir =>
