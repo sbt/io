@@ -20,7 +20,7 @@ object IOSpecification extends Properties("IO") {
       Try(IO.classLocationPath(c)).toOption.exists {
         case jar if jar.getFileName.toString.endsWith(".jar") =>
           Files.isRegularFile(jar)
-        case jrt if jrt.toUri.getScheme == "jrt" =>
+        case jrt if jrt.getFileSystem.provider.getScheme == "jrt" =>
           jrt.toString.contains("/java.base")
         case dir =>
           Files.isDirectory(dir)
