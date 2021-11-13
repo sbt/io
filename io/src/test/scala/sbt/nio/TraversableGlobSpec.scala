@@ -12,11 +12,11 @@ package sbt.nio
 
 import java.nio.file.Files
 
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 import sbt.io.IO
 import sbt.nio.file.{ FileTreeView, Glob, RecursiveGlob }
 
-class TraversableGlobSpec extends FlatSpec {
+class TraversableGlobSpec extends AnyFlatSpec {
   "Traversable globs" should "collect multiple directories" in {
     IO.withTemporaryDirectory { dirFile =>
       val dir = dirFile.toPath

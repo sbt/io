@@ -15,7 +15,7 @@ package io
 import java.nio.file.{ Files, Path, WatchKey }
 import java.util.concurrent.{ ConcurrentHashMap, CountDownLatch, TimeUnit }
 
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 import sbt.internal.nio.WatchServiceBackedObservable
 import sbt.io._
 import sbt.nio.file._
@@ -24,7 +24,7 @@ import sbt.nio.file.syntax._
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
-class WatchServiceBackedObservableSpec extends FlatSpec {
+class WatchServiceBackedObservableSpec extends AnyFlatSpec {
   "register" should "work recursively" in IO.withTemporaryDirectory { dir =>
     val path = dir.getCanonicalFile.toPath
     val subdir = Files.createDirectories(path.resolve("a").resolve("b").resolve("c")).toRealPath()

@@ -12,11 +12,12 @@ package sbt.io
 
 import java.util.regex.Pattern
 
-import org.scalatest.{ FlatSpec, Matchers }
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.annotation.tailrec
 
-class NameFilterSpec extends FlatSpec with Matchers {
+class NameFilterSpec extends AnyFlatSpec with Matchers {
   "NameFilter" should "have readable toString() method" in {
     AllPassFilter.toString shouldBe "AllPassFilter"
     DirectoryFilter.toString shouldBe "DirectoryFilter"

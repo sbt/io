@@ -12,7 +12,7 @@ package sbt.nio
 
 import java.io.File
 
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 import sbt.io.{ IO, SimpleFilter }
 import sbt.nio.file.RelativeGlob.Matcher
 import sbt.nio.file._
@@ -20,7 +20,7 @@ import sbt.nio.file.syntax._
 
 import scala.collection.JavaConverters._
 
-class GlobOrderingSpec extends FlatSpec {
+class GlobOrderingSpec extends AnyFlatSpec {
   "Globs" should "be ordered" in IO.withTemporaryDirectory { dir =>
     val subdir = new File(dir, "subdir")
     assert(Seq(Glob(subdir), Glob(dir)).sorted == Seq(Glob(dir), Glob(subdir)))

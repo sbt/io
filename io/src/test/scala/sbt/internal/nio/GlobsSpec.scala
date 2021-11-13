@@ -13,13 +13,13 @@ package sbt.internal.nio
 import java.io.File
 import java.nio.file.Files
 
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 import sbt.io._
 import sbt.nio.TestHelpers._
 import sbt.nio.file.RelativeGlob.{ Matcher, NoPath }
 import sbt.nio.file.{ **, AnyPath, Glob }
 
-class GlobsSpec extends FlatSpec {
+class GlobsSpec extends AnyFlatSpec {
 
   "FullFileGlob" should "apply exact name filters" in {
     assert(Globs(basePath, recursive = true, "foo") == Glob(basePath, ** / "foo"))

@@ -7,8 +7,8 @@ object Dependencies {
 
   val scalaCompiler = Def.setting { "org.scala-lang" % "scala-compiler" % scalaVersion.value }
 
-  val scalaCheck = "org.scalacheck" %% "scalacheck" % "1.14.0"
-  val scalatest = "org.scalatest" %% "scalatest" % "3.0.8"
+  val scalaCheck = "org.scalacheck" %% "scalacheck" % "1.15.4"
+  val scalatest = "org.scalatest" %% "scalatest" % "3.2.10"
   val jna = "net.java.dev.jna" % "jna" % "5.8.0"
   val jnaPlatform = "net.java.dev.jna" % "jna-platform" % "5.8.0"
   val swovalFiles = "com.swoval" % "file-tree-views" % "2.1.7"

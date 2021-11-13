@@ -12,12 +12,12 @@ package sbt.nio
 
 import java.nio.file.Paths
 
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 import sbt.io.IO
 import sbt.io.syntax._
 import sbt.nio.file.{ AnyPath, Glob, RecursiveGlob }
 
-class GlobFilterSpec extends FlatSpec {
+class GlobFilterSpec extends AnyFlatSpec {
   "GlobAsFilter" should "work with simple files" in IO.withTemporaryDirectory { dir =>
     val file = new File(dir, "file")
     val nestedFile = new File(new File(dir, "subdir"), "subdir-file")
