@@ -549,7 +549,7 @@ object Glob {
                       stringBuilder.append(separator).append(c)
                     case c =>
                       components.add(stringBuilder.toString)
-                      stringBuilder.clear
+                      stringBuilder.clear()
                       stringBuilder.append(c)
                   }
                   fillComponents(nextIndex + 1)
@@ -559,7 +559,7 @@ object Glob {
                 }
               case '/' =>
                 components.add(stringBuilder.toString)
-                stringBuilder.clear
+                stringBuilder.clear()
                 fillComponents(i + 1)
               case c =>
                 stringBuilder.append(c)
@@ -810,7 +810,7 @@ object RelativeGlob {
         val leftIt = left.iterator
         val rightIt = right.iterator
         while (leftIt.hasNext && rightIt.hasNext) {
-          val res = ordering.compare(leftIt.next, rightIt.next)
+          val res = ordering.compare(leftIt.next(), rightIt.next())
           if (res != 0) return res
         }
         Ordering.Boolean.compare(leftIt.hasNext, rightIt.hasNext)

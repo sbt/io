@@ -105,7 +105,7 @@ private[sbt] class FileTreeRepositoryImpl[T] extends FileTreeRepository[FileAttr
           case _                                   =>
         }
       }
-    res.result
+    res.result()
   }
   override def register(glob: Glob): Either[IOException, Observable[FileEvent[FileAttributes]]] = {
     throwIfClosed("register")

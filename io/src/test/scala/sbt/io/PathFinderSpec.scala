@@ -41,7 +41,7 @@ trait PathFinderSpec extends AnyFlatSpec with Matchers {
     val foo = Files.createTempFile(dir.toPath, "foo", "").toFile
     Files.createTempFile(dir.toPath, "bar", "").toFile
     val include = new SimpleFilter(_.startsWith("foo"))
-    PathFinder(dir).descendantsExcept(include, NothingFilter).get shouldBe Seq(foo)
+    PathFinder(dir).descendantsExcept(include, NothingFilter).get() shouldBe Seq(foo)
   }
   it should "apply exclude filter" in IO.withTemporaryDirectory { dir =>
     val excludeDir = Files.createDirectories(dir.toPath.resolve("sbt-0.13"))
@@ -58,8 +58,12 @@ trait PathFinderSpec extends AnyFlatSpec with Matchers {
     val dirPath = dir.toPath
     val subdir = Files.createDirectories(dirPath.resolve("subdir")).toFile
     val file = Files.createFile(dirPath.resolve("file")).toFile
-    PathFinder(dir).descendantsExcept("*", "*sub*").get.toSet shouldBe Set(dir, file)
-    PathFinder(dir).descendantsExcept("*", NothingFilter).get.toSet shouldBe Set(dir, file, subdir)
+    PathFinder(dir).descendantsExcept("*", "*sub*").get().toSet shouldBe Set(dir, file)
+    PathFinder(dir).descendantsExcept("*", NothingFilter).get().toSet shouldBe Set(
+      dir,
+      file,
+      subdir
+    )
   }
   it should "work for complex extension filters" in IO.withTemporaryDirectory { dir =>
     val subdir = Files.createDirectories(dir.toPath.resolve("subdir"))
