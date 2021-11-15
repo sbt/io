@@ -26,7 +26,6 @@ import sbt.nio.file.{
 }
 import sbt.nio.file.syntax._
 
-import scala.annotation.tailrec
 import scala.collection.mutable
 
 class FileTreeViewSpec extends AnyFlatSpec {
@@ -110,7 +109,8 @@ class FileTreeViewSpec extends AnyFlatSpec {
     val random = new scala.util.Random()
     val n = 2000
     val nested = Files.createDirectories(dir.toPath / "subdir" / "nested")
-    @tailrec
+    // TODO https://github.com/lampepfl/dotty/issues/13941
+    // @tailrec
     def newRandomFile(): Path =
       try Files.createFile(nested / s"a${1 + random.nextInt(n)}")
       catch { case _: FileAlreadyExistsException => newRandomFile() }

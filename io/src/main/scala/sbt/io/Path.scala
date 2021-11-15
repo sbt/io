@@ -25,6 +25,7 @@ import java.nio.file.{
 
 import sbt.io.PathFinder.GlobPathFinder
 import sbt.nio.file.{ AnyPath, FileAttributes, FileTreeView, Glob }
+import sbt.nio.file.Glob.GlobOps
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable

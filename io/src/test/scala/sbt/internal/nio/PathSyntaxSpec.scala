@@ -17,6 +17,7 @@ import sbt.nio.TestHelpers._
 import sbt.nio.file.RelativeGlob
 import sbt.nio.file.syntax._
 import sbt.nio.file._
+import sbt.nio.file.Glob.GlobOps
 
 class PathSyntaxSpec extends AnyFlatSpec {
   "toGlob" should "work with absolute paths" in {

@@ -20,6 +20,7 @@ import sbt.internal.nio._
 import sbt.io._
 import sbt.io.syntax._
 import sbt.nio.file.{ AnyPath, FileAttributes, FileTreeView, Glob, RecursiveGlob }
+import sbt.nio.file.Glob.GlobOps
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
