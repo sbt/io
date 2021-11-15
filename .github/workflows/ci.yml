@@ -46,7 +46,7 @@ jobs:
       run: |
         case ${{ matrix.jobtype }} in
           1)
-            sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=true ++$SCALA212! mimaReportBinaryIssues scalafmtCheckAll headerCheck Test/headerCheck test whitesourceCheckPolicies doc
+            sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=true ++$SCALA212! mimaReportBinaryIssues scalafmtCheckAll headerCheck Test/headerCheck test doc
             sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=false ++$SCALA213! test ++$SCALA3! test
             ;;
           2)

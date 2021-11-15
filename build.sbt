@@ -161,14 +161,3 @@ val io = (project in file("io"))
     Test / buildInfoPackage := "sbt.internal.io",
     Test / buildInfoUsePackageAsPath := true,
   )
-
-inThisBuild(
-  Seq(
-    whitesourceProduct := "Lightbend Reactive Platform",
-    whitesourceAggregateProjectName := "sbt-io-master",
-    whitesourceAggregateProjectToken := "460d23766d364910a7c6f8f330f55aea651a3d13b4a94809b79bb6fb63c761ea",
-    whitesourceIgnoredScopes += "scalafmt",
-    whitesourceFailOnError := sys.env.contains("WHITESOURCE_PASSWORD"), // fail if pwd is present
-    whitesourceForceCheckAllDependencies := true,
-  )
-)
