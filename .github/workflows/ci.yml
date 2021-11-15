@@ -6,6 +6,7 @@ on:
 env:
   SCALA212: 2.12.14
   SCALA213: 2.13.6
+  SCALA3: 3.1.0
 
 jobs:
   test:
@@ -46,11 +47,11 @@ jobs:
         case ${{ matrix.jobtype }} in
           1)
             sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=true ++$SCALA212! mimaReportBinaryIssues scalafmtCheckAll headerCheck Test/headerCheck test doc
-            sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=false ++$SCALA213! test
+            sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=false ++$SCALA213! test ++$SCALA3! test
             ;;
           2)
             sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=true ++$SCALA212! mimaReportBinaryIssues test
-            sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=false ++$SCALA213! test
+            sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=false ++$SCALA213! test ++$SCALA3! test
             ;;
           *)
             echo unknown jobtype

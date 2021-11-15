@@ -21,6 +21,7 @@ import com.swoval.functional.Filters
 import sbt.internal.nio.FileEvent.{ Creation, Deletion, Update }
 import sbt.internal.nio.SwovalConverters._
 import sbt.nio.file.{ FileAttributes, Glob }
+import sbt.nio.file.Glob.GlobOps
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.VectorBuilder

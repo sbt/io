@@ -1102,7 +1102,7 @@ object IO {
    * See `sbt.io.IO$.move(java.io.File,java.io.File):Unit` for the behavior of the individual move operations.
    */
   def move(files: Traversable[(File, File)]): Unit =
-    files.foreach(Function.tupled(move))
+    files.foreach(Function.tupled(move(_, _)))
 
   /**
    * Moves the contents of `a` to the location specified by `b`.

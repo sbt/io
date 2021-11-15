@@ -11,11 +11,10 @@
 package sbt.io
 
 import java.nio.file._
-import org.scalatest.diagrams.Diagrams
 import org.scalatest.flatspec.AnyFlatSpec
 import sbt.io.syntax._
 
-class CopyDirectorySpec extends AnyFlatSpec with Diagrams {
+class CopyDirectorySpec extends AnyFlatSpec {
   it should "copy symlinks" in IO.withTemporaryDirectory { dir =>
     // Given:
     // src/

@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import sbt.internal.io.Retry
 import sbt.internal.nio.SwovalFileTreeView
+import sbt.nio.file.Glob.GlobOps
 import sbt.nio.file.Glob.Root
 
 import scala.annotation.tailrec
@@ -249,13 +250,13 @@ object FileTreeView {
       val converter: ((Path, A)) => (Path, B) = {
         case (path: Path, attrs) => path -> f(path, attrs)
       }
-      path: Path => view.list(path).map(converter)
+      (path: Path) => view.list(path).map(converter)
     }
     def flatMap[B, A >: T](f: (Path, A) => Traversable[B]): FileTreeView.Nio[B] = {
       val converter: ((Path, A)) => Traversable[(Path, B)] = {
         case (path: Path, attrs) => f(path, attrs).map(path -> _)
       }
-      path: Path => view.list(path).flatMap(converter(_))
+      (path: Path) => view.list(path).flatMap(converter(_))
     }
   }
 
