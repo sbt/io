@@ -29,36 +29,22 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
-    - name: Setup
-      uses: olafurpg/setup-scala@v10
+      uses: actions/checkout@v3
+    - name: Setup JDK
+      uses: actions/setup-java@v3
       with:
-        java-version: "adopt@1.${{ matrix.java }}"
-    - name: Coursier cache
-      uses: coursier/cache-action@v5
-    - name: Install the original sbt
+        distribution: temurin
+        java-version: "${{ matrix.java }}"
+        cache: sbt
+    - name: Build and test (1)
+      if: ${{ matrix.jobtype == 1 }}
       shell: bash
       run: |
-        RUNNER_VER=1.5.5
-        curl -sL https://raw.githubusercontent.com/sbt/sbt/v$RUNNER_VER/sbt > $HOME/bin/sbt
-    - name: Build and test
+        sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=true ++$SCALA212 mimaReportBinaryIssues scalafmtCheckAll headerCheck Test/headerCheck test doc
+        sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=false ++$SCALA213 test ++$SCALA3 test
+    - name: Build and test (2)
+      if: ${{ matrix.jobtype == 2 }}
       shell: bash
       run: |
-        case ${{ matrix.jobtype }} in
-          1)
-            sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=true ++$SCALA212 mimaReportBinaryIssues scalafmtCheckAll headerCheck Test/headerCheck test doc
-            sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=false ++$SCALA213 test ++$SCALA3 test
-            ;;
-          2)
-            sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=true ++$SCALA212 mimaReportBinaryIssues test
-            sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=false ++$SCALA213 test ++$SCALA3 test
-            ;;
-          *)
-            echo unknown jobtype
-            exit 1
-        esac
-        rm -rf "$HOME/.ivy2/local"
-        find $HOME/Library/Caches/Coursier/v1        -name "ivydata-*.properties" -delete || true
-        find $HOME/.ivy2/cache                       -name "ivydata-*.properties" -delete || true
-        find $HOME/.cache/coursier/v1                -name "ivydata-*.properties" -delete || true
-        find $HOME/.sbt                              -name "*.lock"               -delete || true
+        sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=true ++$SCALA212 mimaReportBinaryIssues test
+        sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=false ++$SCALA213 test ++$SCALA3 test
