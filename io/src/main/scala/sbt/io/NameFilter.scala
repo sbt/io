@@ -340,6 +340,24 @@ object FileFilter {
      */
     def toNio: PathFilter = PathFilter.fromFileFilter(fileFilter)
   }
+
+  /**
+   * A [[sbt.io.FileFilter]] which is guaranteed to matching nothing. Useful to use as a zero
+   * value in fold like operations, i.e.
+   * {{{
+   *   paths.map(FileFilter.globFilter).fold(FileFilter.nothing)(_ || _)
+   * }}}
+   */
+  val nothing: FileFilter = new FileFilter {
+    override def accept(pathname: File): Boolean = false
+  }
+
+  /**
+   * A [[sbt.io.FileFilter]] which is guaranteed to match everything.
+   */
+  val everything: FileFilter = new FileFilter {
+    override def accept(pathname: File): Boolean = true
+  }
 }
 
 /** Constructs a filter from a String, interpreting wildcards.  See the [[GlobFilter.apply]] method. */
