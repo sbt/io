@@ -148,19 +148,16 @@ object IO {
               case "jar" =>
                 val path = url.getPath
                 val end = path.indexOf('!')
-                new URL(
+                new URI(
                   if (end == -1) path
                   else path.substring(0, end)
-                )
+                ).toURL
               case "jrt" =>
                 val path = url.getPath
                 val end = path.indexOf('/', 1)
-                new URL(
-                  "jrt",
-                  null,
-                  if (end == -1) path
-                  else path.substring(0, end)
-                )
+                new URI(
+                  s"jrt://${if (end == -1) path else path.substring(0, end)}"
+                ).toURL
               case _ => url
             }
         )
