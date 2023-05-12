@@ -526,11 +526,11 @@ object IO {
   def withTemporaryFile[T](prefix: String, postfix: String, keepFile: Boolean)(
       action: File => T
   ): T = {
-    val file = File.createTempFile(prefix, postfix)
+    val file = Files.createTempFile(prefix, postfix)
     try {
-      action(file)
+      action(file.toFile())
     } finally {
-      if (!keepFile) file.delete(); ()
+      if (!keepFile) file.toFile().delete(); ()
     }
   }
 

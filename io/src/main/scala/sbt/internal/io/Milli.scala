@@ -12,6 +12,7 @@ package sbt.internal.io
 
 import java.io.{ File, FileNotFoundException, IOException }
 import java.nio.{ ByteBuffer, ByteOrder }
+import java.nio.file.Files
 import java.util.Date
 
 import com.sun.jna.platform.win32.Kernel32
@@ -396,7 +397,7 @@ object Milli {
     if (jdkTimestamps)
       None
     else {
-      val file = File.createTempFile("sbt.io.Milli", "test-file", projectDir)
+      val file = Files.createTempFile(projectDir.toPath(), "sbt.io.Milli", "test-file").toFile
       try {
         val originalTime = getModifiedTime(file)
         setModifiedTime(file, originalTime - 27)
