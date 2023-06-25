@@ -33,8 +33,8 @@ abstract class Using[Source, T] {
 }
 
 import scala.reflect.{ Manifest => SManifest }
-private[sbt] abstract class WrapUsing[Source, T](
-    implicit srcMf: SManifest[Source],
+private[sbt] abstract class WrapUsing[Source, T](implicit
+    srcMf: SManifest[Source],
     targetMf: SManifest[T]
 ) extends Using[Source, T] {
   protected def label[S](m: SManifest[S]) = m.runtimeClass.getSimpleName
@@ -55,14 +55,14 @@ private[sbt] trait OpenFile[T] extends Using[File, T] {
 }
 
 object Using {
-  def wrap[Source, T <: AutoCloseable](openF: Source => T)(
-      implicit srcMf: SManifest[Source],
+  def wrap[Source, T <: AutoCloseable](openF: Source => T)(implicit
+      srcMf: SManifest[Source],
       targetMf: SManifest[T]
   ): Using[Source, T] =
     wrap(openF, closeCloseable)
 
-  def wrap[Source, T](openF: Source => T, closeF: T => Unit)(
-      implicit srcMf: SManifest[Source],
+  def wrap[Source, T](openF: Source => T, closeF: T => Unit)(implicit
+      srcMf: SManifest[Source],
       targetMf: SManifest[T]
   ): Using[Source, T] =
     new WrapUsing[Source, T] {
@@ -97,8 +97,8 @@ object Using {
 
   val fileInputStream = file(f => new BufferedInputStream(new FileInputStream(f)))
 
-  val urlInputStream = resource(
-    (u: URL) => translate("Error opening " + u + ": ")(new BufferedInputStream(u.openStream))
+  val urlInputStream = resource((u: URL) =>
+    translate("Error opening " + u + ": ")(new BufferedInputStream(u.openStream))
   )
 
   val fileOutputChannel = file(f => new FileOutputStream(f).getChannel)
@@ -131,10 +131,9 @@ object Using {
   val jarInputStream = wrap((in: InputStream) => new JarInputStream(in))
 
   def zipEntry(zip: ZipFile) =
-    resource(
-      (entry: ZipEntry) =>
-        translate("Error opening " + entry.getName + " in " + zip + ": ") {
-          zip.getInputStream(entry)
-        }
+    resource((entry: ZipEntry) =>
+      translate("Error opening " + entry.getName + " in " + zip + ": ") {
+        zip.getInputStream(entry)
+      }
     )
 }

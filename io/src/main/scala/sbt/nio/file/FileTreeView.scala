@@ -247,14 +247,14 @@ object FileTreeView {
     if ("nio" == System.getProperty("sbt.io.filetreeview", "")) nio else native
   private[sbt] implicit class NioFileTreeViewOps[T](val view: FileTreeView.Nio[T]) {
     def map[A >: T, B](f: (Path, A) => B): FileTreeView.Nio[B] = {
-      val converter: ((Path, A)) => (Path, B) = {
-        case (path: Path, attrs) => path -> f(path, attrs)
+      val converter: ((Path, A)) => (Path, B) = { case (path: Path, attrs) =>
+        path -> f(path, attrs)
       }
       (path: Path) => view.list(path).map(converter)
     }
     def flatMap[B, A >: T](f: (Path, A) => Traversable[B]): FileTreeView.Nio[B] = {
-      val converter: ((Path, A)) => Traversable[(Path, B)] = {
-        case (path: Path, attrs) => f(path, attrs).map(path -> _)
+      val converter: ((Path, A)) => Traversable[(Path, B)] = { case (path: Path, attrs) =>
+        f(path, attrs).map(path -> _)
       }
       (path: Path) => view.list(path).flatMap(converter(_))
     }
@@ -297,20 +297,18 @@ object FileTreeView {
       case _       => throw new IllegalStateException("Partition failed (should be unreachable).")
     }
     val rootPathsByParent = rootPaths.groupBy(_.getParent)
-    val rootPathParams = rootPathsByParent.map {
-      case (parent, paths) =>
-        paths.map(_.getFileName) match {
-          case Seq(fileName) => (parent, 1, Glob(parent, fileName.toString))
-          case fileNames     => (parent, 1, Glob(parent, fileNames.mkString("{", ",", "}")))
-        }
+    val rootPathParams = rootPathsByParent.map { case (parent, paths) =>
+      paths.map(_.getFileName) match {
+        case Seq(fileName) => (parent, 1, Glob(parent, fileName.toString))
+        case fileNames     => (parent, 1, Glob(parent, fileNames.mkString("{", ",", "}")))
+      }
     }
     val params = (rootPathParams.toSeq ++
       rest.distinct.map(_.fileTreeViewListParameters)).sortBy(_._1)
     var directoryCache: Option[(Path, ConcurrentHashMap[Path, FileAttributes])] = None
     val needListDirectory: Path => Boolean = (path: Path) =>
-      params.exists {
-        case (base, maxDepth, _) =>
-          path.startsWith(base) && base.relativize(path).getNameCount < maxDepth
+      params.exists { case (base, maxDepth, _) =>
+        path.startsWith(base) && base.relativize(path).getNameCount < maxDepth
       }
     val visited = new util.HashSet[Path]
     val pathFilter: Path => Boolean = path => params.exists(_._3.matches(path))
@@ -341,7 +339,8 @@ object FileTreeView {
               case Some((parent, m)) if parent == path.getParent => m
               case _ =>
                 val map = new ConcurrentHashMap[Path, FileAttributes]()
-                try view.list(path.getParent).foreach { case (p, a) => map.put(p, a) } catch {
+                try view.list(path.getParent).foreach { case (p, a) => map.put(p, a) }
+                catch {
                   case _: IOException =>
                 }
                 directoryCache = Some(path.getParent -> map)

@@ -33,13 +33,13 @@ import scala.collection.mutable
 final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
   def /(component: String): File = if (component == ".") asFile else new File(asFile, component)
 
-  /** True if and only if the wrapped file exists.*/
+  /** True if and only if the wrapped file exists. */
   def exists: Boolean = asFile.exists
 
-  /** True if and only if the wrapped file is a directory.*/
+  /** True if and only if the wrapped file is a directory. */
   def isDirectory: Boolean = asFile.isDirectory
 
-  /** The last modified time of the wrapped file.*/
+  /** The last modified time of the wrapped file. */
   def lastModified: Long = IO.getModifiedTimeOrZero(asFile)
 
   /**
@@ -54,12 +54,12 @@ final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
    */
   def olderThan(other: File): Boolean = Path.newerThan(other, asFile)
 
-  /** The wrapped file converted to a <code>URL</code>.*/
+  /** The wrapped file converted to a <code>URL</code>. */
   def asURL: URL = asFile.toURI.toURL
 
   def absolutePath: String = asFile.getAbsolutePath
 
-  /** The last component of this path.*/
+  /** The last component of this path. */
   def name: String = asFile.getName
 
   def baseAndExt: (String, String) = {
@@ -301,7 +301,7 @@ object Path extends Mapper {
   def newerThan(a: File, b: File): Boolean =
     a.exists && (!b.exists || IO.getModifiedTimeOrZero(a) > IO.getModifiedTimeOrZero(b))
 
-  /** The separator character of the platform.*/
+  /** The separator character of the platform. */
   val sep: Char = java.io.File.separatorChar
 
   def toURLs(files: Seq[File]): Array[URL] = files.map(_.toURI.toURL).toArray
@@ -317,9 +317,8 @@ object Path extends Mapper {
       (file, filter) =>
         fileTreeView
           .list(Glob(file.toPath, AnyPath))
-          .flatMap {
-            case (path: NioPath, attrs: FileAttributes) =>
-              if (filter.accept(new AttributedFile(path, attrs))) Some(path.toFile) else None
+          .flatMap { case (path: NioPath, attrs: FileAttributes) =>
+            if (filter.accept(new AttributedFile(path, attrs))) Some(path.toFile) else None
           }
     } else { (file, filter) =>
       IO.wrapNull(file.listFiles(filter)).toSeq
@@ -334,7 +333,7 @@ object Path extends Mapper {
 
 object PathFinder {
 
-  /** A <code>PathFinder</code> that always produces the empty set of <code>Path</code>s.*/
+  /** A <code>PathFinder</code> that always produces the empty set of <code>Path</code>s. */
   val empty: PathFinder = new PathFinder {}
 
   def apply(file: File): PathFinder = new SingleFile(file)
@@ -660,17 +659,18 @@ private object DescendantOrSelfPathFinder {
     try {
       if (filter.accept(file)) fileSet += file
       if (depth > 0)
-        FileTreeView.default.list(file.toPath).foreach {
-          case (path, attributes) =>
-            val file = path.toFile
-            if (attributes.isRegularFile && filter.accept(new File(path.toString) {
-                  override def isDirectory: Boolean = attributes.isDirectory
-                  override def isFile: Boolean = attributes.isRegularFile
-                })) {
-              fileSet += file
-            } else if (attributes.isDirectory) {
-              native(file, filter, fileSet, depth - 1)
-            }
+        FileTreeView.default.list(file.toPath).foreach { case (path, attributes) =>
+          val file = path.toFile
+          if (
+            attributes.isRegularFile && filter.accept(new File(path.toString) {
+              override def isDirectory: Boolean = attributes.isDirectory
+              override def isFile: Boolean = attributes.isRegularFile
+            })
+          ) {
+            fileSet += file
+          } else if (attributes.isDirectory) {
+            native(file, filter, fileSet, depth - 1)
+          }
         }
       ()
     } catch {

@@ -20,8 +20,8 @@ class LastModifiedSpec extends AnyFlatSpec {
     dir =>
       val fileName = "a" * 32
       val nested =
-        (1 to 8).foldLeft(dir.toPath) {
-          case (d, _) => Files.createDirectories(d.resolve(fileName))
+        (1 to 8).foldLeft(dir.toPath) { case (d, _) =>
+          Files.createDirectories(d.resolve(fileName))
         }
       val file = Files.createFile(nested.resolve(fileName)).toFile
       // in case target platform only has second precision round to nearest second

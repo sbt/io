@@ -102,8 +102,8 @@ class PathFilterSpec extends AnyFlatSpec {
     assert(notHiddenFileFilter.accept(regular))
     assert((!notHiddenFileFilter).accept(hidden))
 
-    val directoryFilterAndHidden
-        : PathFilter = sbt.io.DirectoryFilter.toNio && sbt.io.HiddenFileFilter
+    val directoryFilterAndHidden: PathFilter =
+      sbt.io.DirectoryFilter.toNio && sbt.io.HiddenFileFilter
     val hiddenDir = Files.createDirectories(dirPath / ".hidden").setHidden()
     assert(directoryFilterAndHidden.accept(hiddenDir) == !isWin)
     assert(!directoryFilterAndHidden.accept(dirPath))

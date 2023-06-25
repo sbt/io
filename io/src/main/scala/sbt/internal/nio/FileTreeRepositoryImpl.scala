@@ -115,15 +115,16 @@ private[sbt] class FileTreeRepositoryImpl[T] extends FileTreeRepository[FileAttr
       // workaround for https://github.com/sbt/sbt/issues/4603
       val parent = glob.base.getParent
       if (!registered.contains(parent)) {
-        if (registered.exists(
-              path =>
-                path.getParent == parent && {
-                  val leftFileName = path.getFileName.toString
-                  val rightFileName = base.getFileName.toString
-                  leftFileName != rightFileName && (leftFileName
-                    .startsWith(rightFileName) || rightFileName.startsWith(leftFileName))
-                }
-            )) {
+        if (
+          registered.exists(path =>
+            path.getParent == parent && {
+              val leftFileName = path.getFileName.toString
+              val rightFileName = base.getFileName.toString
+              leftFileName != rightFileName && (leftFileName
+                .startsWith(rightFileName) || rightFileName.startsWith(leftFileName))
+            }
+          )
+        ) {
           register(Glob(parent))
         }
       }

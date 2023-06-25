@@ -16,14 +16,14 @@ import java.net.{ URI, URL }
 object Hash {
   private val BufferSize = 8192
 
-  /** Converts an array of `bytes` to a hexadecimal representation String.*/
+  /** Converts an array of `bytes` to a hexadecimal representation String. */
   def toHex(bytes: Array[Byte]): String = {
     val buffer = new StringBuilder(bytes.length * 2)
     for (i <- bytes.indices) {
       val b = bytes(i)
       val bi: Int = if (b < 0) b + 256 else b.toInt
       buffer append toHex((bi >>> 4).asInstanceOf[Byte])
-      buffer append toHex((bi & 0x0F).asInstanceOf[Byte])
+      buffer append toHex((bi & 0x0f).asInstanceOf[Byte])
     }
     buffer.toString
   }
@@ -52,18 +52,18 @@ object Hash {
   /** Computes the SHA-1 hash of `s` and truncates the hexadecimal representation of the hash via [[halve]]. */
   def halfHashString(s: String): String = halve(toHex(apply(s)))
 
-  /** Calculates the SHA-1 hash of the given String.*/
+  /** Calculates the SHA-1 hash of the given String. */
   def apply(s: String): Array[Byte] = apply(s.getBytes("UTF-8"))
 
-  /** Calculates the SHA-1 hash of the given Array[Byte].*/
+  /** Calculates the SHA-1 hash of the given Array[Byte]. */
   def apply(as: Array[Byte]): Array[Byte] = apply(new ByteArrayInputStream(as))
 
-  /** Calculates the SHA-1 hash of the given file.*/
+  /** Calculates the SHA-1 hash of the given file. */
   def apply(file: File): Array[Byte] =
     try apply(new BufferedInputStream(new FileInputStream(file))) // apply closes the stream
     catch { case _: FileNotFoundException => apply("") }
 
-  /** Calculates the SHA-1 hash of the given resource.*/
+  /** Calculates the SHA-1 hash of the given resource. */
   def apply(url: URL): Array[Byte] = Using.urlInputStream(url)(apply)
 
   /**
@@ -74,7 +74,7 @@ object Hash {
   def contentsIfLocal(uri: URI): Array[Byte] =
     if (uri.getScheme == "file") apply(uri.toURL) else apply(uri.normalize.toString)
 
-  /** Calculates the SHA-1 hash of the given stream, closing it when finished.*/
+  /** Calculates the SHA-1 hash of the given stream, closing it when finished. */
   def apply(stream: InputStream): Array[Byte] = {
     import java.security.{ DigestInputStream, MessageDigest }
     val digest = MessageDigest.getInstance("SHA")

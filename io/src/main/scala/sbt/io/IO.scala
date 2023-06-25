@@ -34,17 +34,17 @@ import scala.reflect.{ Manifest => SManifest }
 import scala.util.control.Exception._
 import scala.util.control.NonFatal
 
-/** A collection of File, URL, and I/O utility methods.*/
+/** A collection of File, URL, and I/O utility methods. */
 object IO {
 
-  /** The maximum number of times a unique temporary filename is attempted to be created.*/
+  /** The maximum number of times a unique temporary filename is attempted to be created. */
   private val MaximumTries = 10
 
-  /** The producer of randomness for unique name generation.*/
+  /** The producer of randomness for unique name generation. */
   private lazy val random = new java.util.Random
   val temporaryDirectory = new File(System.getProperty("java.io.tmpdir"))
 
-  /** The size of the byte or char buffer used in various methods.*/
+  /** The size of the byte or char buffer used in various methods. */
   private val BufferSize = 8192
 
   /** File scheme name */
@@ -142,24 +142,23 @@ object IO {
     try {
       localcl
         .orElse(syscl)
-        .map(
-          url =>
-            url.getProtocol match {
-              case "jar" =>
-                val path = url.getPath
-                val end = path.indexOf('!')
-                new URI(
-                  if (end == -1) path
-                  else path.substring(0, end)
-                ).toURL
-              case "jrt" =>
-                val path = url.getPath
-                val end = path.indexOf('/', 1)
-                new URI(
-                  s"jrt://${if (end == -1) path else path.substring(0, end)}"
-                ).toURL
-              case _ => url
-            }
+        .map(url =>
+          url.getProtocol match {
+            case "jar" =>
+              val path = url.getPath
+              val end = path.indexOf('!')
+              new URI(
+                if (end == -1) path
+                else path.substring(0, end)
+              ).toURL
+            case "jrt" =>
+              val path = url.getPath
+              val end = path.indexOf('/', 1)
+              new URI(
+                s"jrt://${if (end == -1) path else path.substring(0, end)}"
+              ).toURL
+            case _ => url
+          }
         )
         .getOrElse(sys.error("No class location for " + cl))
     } catch {
@@ -317,20 +316,21 @@ object IO {
       sys.error("Could not update last modified time for file " + absFile)
   }
 
-  /** Creates directories `dirs` and all parent directories.  It tries to work around a race condition in `File.mkdirs()` by retrying up to a limit.*/
+  /** Creates directories `dirs` and all parent directories.  It tries to work around a race condition in `File.mkdirs()` by retrying up to a limit. */
   def createDirectories(dirs: Traversable[File]): Unit =
     dirs.foreach(createDirectory)
 
-  /** Creates directory `dir` and all parent directories.  It tries to work around a race condition in `File.mkdirs()` by retrying up to a limit.*/
+  /** Creates directory `dir` and all parent directories.  It tries to work around a race condition in `File.mkdirs()` by retrying up to a limit. */
   def createDirectory(dir: File): Unit = {
     def failBase = "Could not create directory " + dir
     // Need a retry because Files.createDirectories may fail before succeeding on (at least) windows.
     val path = dir.toPath
-    try Retry(
-      try Files.createDirectories(path)
-      catch { case _: IOException if Files.isDirectory(path) => },
-      excludedExceptions = classOf[FileAlreadyExistsException]
-    )
+    try
+      Retry(
+        try Files.createDirectories(path)
+        catch { case _: IOException if Files.isDirectory(path) => },
+        excludedExceptions = classOf[FileAlreadyExistsException]
+      )
     catch { case e: IOException => throw new IOException(failBase + ": " + e, e) }
     ()
   }
@@ -345,7 +345,7 @@ object IO {
     }
   }
 
-  /** Gzips the InputStream 'in' and writes it to 'output'.  Neither stream is closed.*/
+  /** Gzips the InputStream 'in' and writes it to 'output'.  Neither stream is closed. */
   def gzip(input: InputStream, output: OutputStream): Unit =
     gzipOutputStream(output)(gzStream => transfer(input, gzStream))
 
@@ -359,7 +359,7 @@ object IO {
     }
   }
 
-  /** Gunzips the InputStream 'input' and writes it to 'output'.  Neither stream is closed.*/
+  /** Gunzips the InputStream 'input' and writes it to 'output'.  Neither stream is closed. */
   def gunzip(input: InputStream, output: OutputStream): Unit =
     gzipInputStream(input)(gzStream => transfer(gzStream, output))
 
@@ -404,7 +404,7 @@ object IO {
         val name = entry.getName
         if (filter.accept(name)) {
           val target = new File(toDirectory, name)
-          //log.debug("Extracting zip entry '" + name + "' to '" + target + "'")
+          // log.debug("Extracting zip entry '" + name + "' to '" + target + "'")
           if (entry.isDirectory)
             createDirectory(target)
           else {
@@ -416,7 +416,7 @@ object IO {
           if (preserveLastModified)
             setModifiedTimeOrFalse(target, entry.getTime)
         } else {
-          //log.debug("Ignoring zip entry '" + name + "'")
+          // log.debug("Ignoring zip entry '" + name + "'")
         }
         from.closeEntry()
         next()
@@ -433,7 +433,7 @@ object IO {
   //     transfer(inputStream, to)
   //   }
 
-  /** Copies the contents of `in` to `out`.*/
+  /** Copies the contents of `in` to `out`. */
   def transfer(in: File, out: File): Unit =
     fileInputStream(in)(in => transfer(in, out))
 
@@ -444,7 +444,7 @@ object IO {
   def transfer(in: File, out: OutputStream): Unit =
     fileInputStream(in)(in => transfer(in, out))
 
-  /** Copies all bytes from the given input stream to the given File.  The input stream is not closed by this method.*/
+  /** Copies all bytes from the given input stream to the given File.  The input stream is not closed by this method. */
   def transfer(in: InputStream, to: File): Unit =
     Using.fileOutputStream()(to) { outputStream =>
       transfer(in, outputStream)
@@ -552,16 +552,18 @@ object IO {
     for ((f, true) <- isEmpty) f.delete
   }
 
-  /** Deletes each file or directory (recursively) in `files`.*/
+  /** Deletes each file or directory (recursively) in `files`. */
   def delete(files: Iterable[File]): Unit = files.foreach(delete)
 
-  /** Deletes each file or directory in `files` recursively.  Any empty parent directories are deleted, recursively.*/
+  /** Deletes each file or directory in `files` recursively.  Any empty parent directories are deleted, recursively. */
   def deleteFilesEmptyDirs(files: Iterable[File]): Unit = {
     def isEmptyDirectory(dir: File) = dir.isDirectory && listFiles(dir).isEmpty
     def parents(fs: Set[File]) = fs flatMap (f => Option(f.getParentFile))
     @tailrec def deleteEmpty(dirs: Set[File]): Unit = {
       val empty = dirs filter isEmptyDirectory
-      if (empty.nonEmpty) // looks funny, but this is true if at least one of `dirs` is an empty directory
+      if (
+        empty.nonEmpty
+      ) // looks funny, but this is true if at least one of `dirs` is an empty directory
         {
           empty foreach { _.delete() }
           deleteEmpty(parents(empty))
@@ -592,15 +594,15 @@ object IO {
     ()
   }
 
-  /** Returns the children of directory `dir` that match `filter` in a non-null array.*/
+  /** Returns the children of directory `dir` that match `filter` in a non-null array. */
   def listFiles(filter: java.io.FileFilter)(dir: File): Array[File] =
     wrapNull(dir.listFiles(filter))
 
-  /** Returns the children of directory `dir` that match `filter` in a non-null array.*/
+  /** Returns the children of directory `dir` that match `filter` in a non-null array. */
   def listFiles(dir: File, filter: java.io.FileFilter): Array[File] =
     wrapNull(dir.listFiles(filter))
 
-  /** Returns the children of directory `dir` in a non-null array.*/
+  /** Returns the children of directory `dir` in a non-null array. */
   def listFiles(dir: File): Array[File] = wrapNull(dir.listFiles())
 
   private[sbt] def wrapNull(a: Array[File]) = if (a == null) new Array[File](0) else a
@@ -670,11 +672,11 @@ object IO {
       createEntry: String => ZipEntry
   ) = {
     val files = sources
-      .flatMap {
-        case (file, name) => if (file.isFile) (file, normalizeToSlash(name)) :: Nil else Nil
+      .flatMap { case (file, name) =>
+        if (file.isFile) (file, normalizeToSlash(name)) :: Nil else Nil
       }
-      .sortBy {
-        case (_, name) => name
+      .sortBy { case (_, name) =>
+        name
       }
 
     val now = System.currentTimeMillis
@@ -708,10 +710,10 @@ object IO {
       output.closeEntry()
     }
 
-    //Calculate directories and add them to the generated Zip
+    // Calculate directories and add them to the generated Zip
     allDirectoryPaths(files) foreach addDirectoryEntry
 
-    //Add all files to the generated Zip
+    // Add all files to the generated Zip
     files foreach { case (file, name) => addFileEntry(file, name) }
   }
 
@@ -795,7 +797,8 @@ object IO {
     val basePath = toAbsolutePath(base).normalize
     val filePath = toAbsolutePath(file).normalize
     if (filePath startsWith basePath) {
-      val relativePath = catching(classOf[IllegalArgumentException]) opt (basePath relativize filePath)
+      val relativePath =
+        catching(classOf[IllegalArgumentException]) opt (basePath relativize filePath)
       relativePath map (_.toString)
     } else None
   }
@@ -962,7 +965,7 @@ object IO {
     out.toString(charset.name)
   }
 
-  /** Reads the full contents of `in` into a byte array.  This method does not close `in`.*/
+  /** Reads the full contents of `in` into a byte array.  This method does not close `in`. */
   def readStream(in: InputStream, charset: Charset = defaultCharset): String = {
     val out = new ByteArrayOutputStream
     transfer(in, out)
@@ -1011,11 +1014,11 @@ object IO {
   def readLines(file: File, charset: Charset = defaultCharset): List[String] =
     fileReader(charset)(file)(readLines)
 
-  /** Reads all of the lines from `in`.  This method does not close `in`.*/
+  /** Reads all of the lines from `in`.  This method does not close `in`. */
   def readLines(in: BufferedReader): List[String] =
     foldLines[List[String]](in, Nil)((accum, line) => line :: accum).reverse
 
-  /** Applies `f` to each line read from `in`. This method does not close `in`.*/
+  /** Applies `f` to each line read from `in`. This method does not close `in`. */
   def foreachLine(in: BufferedReader)(f: String => Unit): Unit =
     foldLines(in, ())((_, line) => f(line))
 
@@ -1059,12 +1062,12 @@ object IO {
   def write(properties: Properties, label: String, to: File) =
     fileOutputStream()(to)(output => properties.store(output, label))
 
-  /** Reads the properties in `from` into `properties`.  If `from` does not exist, `properties` is left unchanged.*/
+  /** Reads the properties in `from` into `properties`.  If `from` does not exist, `properties` is left unchanged. */
   def load(properties: Properties, from: File): Unit =
     if (from.exists)
       fileInputStream(from)(input => properties.load(input))
 
-  /** A pattern used to split a String by path separator characters.*/
+  /** A pattern used to split a String by path separator characters. */
   private val PathSeparatorPattern = java.util.regex.Pattern.compile(File.pathSeparator)
 
   /** Splits a String around the platform's path separator characters. */
@@ -1157,7 +1160,7 @@ object IO {
    * it does not already end with a slash.
    */
   def directoryURI(uri: URI): URI = {
-    if (!uri.isAbsolute) return uri; //assertAbsolute(uri)
+    if (!uri.isAbsolute) return uri; // assertAbsolute(uri)
     val str = uri.toASCIIString
     val dirURI =
       if (str.endsWith("/") || uri.getScheme != FileScheme || (uri.getRawFragment ne null))
@@ -1171,7 +1174,7 @@ object IO {
   private[sbt] val isWindows: Boolean =
     System.getProperty("os.name").toLowerCase(Locale.ENGLISH).contains("windows")
 
-  /** Converts the given File to a URI.  If the File is relative, the URI is relative, unlike File.toURI*/
+  /** Converts the given File to a URI.  If the File is relative, the URI is relative, unlike File.toURI */
   def toURI(f: File): URI = {
     def ensureHeadSlash(name: String) =
       if (name.nonEmpty && name.head != File.separatorChar) s"${File.separatorChar}$name"
@@ -1187,8 +1190,8 @@ object IO {
         new URI(FileScheme, "", normalizeToSlash(p), null)
       }
     } else if (f.isAbsolute) {
-      //not using f.toURI to avoid filesystem syscalls
-      //we use empty string as host to force file:// instead of just file:
+      // not using f.toURI to avoid filesystem syscalls
+      // we use empty string as host to force file:// instead of just file:
       new URI(FileScheme, "", normalizeToSlash(ensureHeadSlash(f.getAbsolutePath)), null)
     } else {
       // need to use the three argument URI constructor because the single argument version doesn't encode
@@ -1210,7 +1213,7 @@ object IO {
   def assertAbsolute(f: File) = assert(f.isAbsolute, "Not absolute: " + f)
   def assertAbsolute(uri: URI) = assert(uri.isAbsolute, "Not absolute: " + uri)
 
-  /** Parses a classpath String into File entries according to the current platform's path separator.*/
+  /** Parses a classpath String into File entries according to the current platform's path separator. */
   def parseClasspath(s: String): Seq[File] =
     if (s.isEmpty) Nil else IO.pathSplit(s).map(new File(_)).toSeq
 

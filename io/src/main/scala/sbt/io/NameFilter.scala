@@ -318,7 +318,7 @@ object NameFilter {
 }
 object FileFilter {
 
-  /** Allows a String to be used where a `NameFilter` is expected and any asterisks (`*`) will be interpreted as wildcards.  See [[sbt.io.GlobFilter]].*/
+  /** Allows a String to be used where a `NameFilter` is expected and any asterisks (`*`) will be interpreted as wildcards.  See [[sbt.io.GlobFilter]]. */
   implicit def globFilter(s: String): NameFilter = GlobFilter(s)
 
   /**
@@ -385,7 +385,7 @@ object GlobFilter {
           new ExtensionFilter(ext.drop(1))
         case Array(prefix, "") => new PrefixFilter(prefix)
         case Array("", suffix) => new SuffixFilter(suffix)
-        case _                 => new PatternFilter(parts, Pattern.compile(parts.map(quote).mkString(".*")))
+        case _ => new PatternFilter(parts, Pattern.compile(parts.map(quote).mkString(".*")))
       }
     }
   }

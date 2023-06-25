@@ -63,21 +63,19 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
       FileAttributes(path).foreach(add(glob, _))
       val current = subMap.asScala.toMap
       val result = new util.ArrayList[FileEvent[T]].asScala
-      previous.foreach {
-        case (p, prev) =>
-          current.get(p) match {
-            case Some(newPair) if prev != newPair =>
-              result += Update(p, prev, newPair)
-            case None => result += Deletion(p, prev)
-            case _    =>
-          }
+      previous.foreach { case (p, prev) =>
+        current.get(p) match {
+          case Some(newPair) if prev != newPair =>
+            result += Update(p, prev, newPair)
+          case None => result += Deletion(p, prev)
+          case _    =>
+        }
       }
-      current.foreach {
-        case (p, newAttributes) =>
-          previous.get(p) match {
-            case None => result += Creation(p, newAttributes)
-            case _    =>
-          }
+      current.foreach { case (p, newAttributes) =>
+        previous.get(p) match {
+          case None => result += Creation(p, newAttributes)
+          case _    =>
+        }
       }
       result.toVector
     } else {
@@ -132,16 +130,15 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
   }
   private[this] def updateGlob(path: Path): Glob = {
     val depth = globs.toIndexedSeq.view
-      .map(
-        g =>
-          if (path.startsWith(g.base)) {
-            if (path == g.base) g.range._2
-            else
-              g.range._2 match {
-                case Int.MaxValue => Int.MaxValue
-                case d            => d - g.base.relativize(path).getNameCount
-              }
-          } else Int.MinValue
+      .map(g =>
+        if (path.startsWith(g.base)) {
+          if (path == g.base) g.range._2
+          else
+            g.range._2 match {
+              case Int.MaxValue => Int.MaxValue
+              case d            => d - g.base.relativize(path).getNameCount
+            }
+        } else Int.MinValue
       )
       .min
     depth match {
