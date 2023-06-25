@@ -69,9 +69,9 @@ object FileAttributes {
     override def equals(o: Any): Boolean = o match {
       case that: FileAttributesImpl =>
         this.isDirectory == that.isDirectory &&
-          this.isOther == that.isOther &&
-          this.isRegularFile == that.isRegularFile &&
-          this.isSymbolicLink == that.isSymbolicLink
+        this.isOther == that.isOther &&
+        this.isRegularFile == that.isRegularFile &&
+        this.isSymbolicLink == that.isSymbolicLink
       case _ => false
     }
     override def toString: String =

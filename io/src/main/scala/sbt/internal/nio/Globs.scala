@@ -48,8 +48,8 @@ private[sbt] object Globs {
           case NothingFilter => Some(AnyPath)
           case AllPassFilter => Some(NoPath)
           case f =>
-            fileFilterToRelativeGlob(f).collect {
-              case m: Matcher => Matcher.not(m)
+            fileFilterToRelativeGlob(f).collect { case m: Matcher =>
+              Matcher.not(m)
             }
         }
       case of: OrFilter =>
@@ -90,7 +90,7 @@ private[sbt] object Globs {
       case ef: ExtensionFilter =>
         ef.extensions match {
           case extensions if extensions.length == 1 => Some(Matcher(s"*.${extensions.head}"))
-          case extensions                           => Some(Matcher(s"*.${extensions.mkString("{", ",", "}")}"))
+          case extensions => Some(Matcher(s"*.${extensions.mkString("{", ",", "}")}"))
         }
       case NothingFilter => Some(NoPath)
       case nf: NotNameFilter =>

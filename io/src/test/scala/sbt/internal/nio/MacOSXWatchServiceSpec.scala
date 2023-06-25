@@ -58,6 +58,7 @@ class MacOSXWatchServiceSpec extends AnyFlatSpec {
         })
       } finally service.close()
       ()
-    } else {}
+    }
+    else {}
   "MacOSXWatchService" should "handle overlapping directories" in test()
 }

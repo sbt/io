@@ -33,10 +33,15 @@ final class RetrySpec extends AnyFlatSpec {
   "retry" should "throw recover" in {
     for (recoveryStep <- (1 to 14)) {
       val i = new AtomicInteger()
-      val value = Retry({
-        val thisI = i.incrementAndGet()
-        if (thisI == recoveryStep) "recover" else throw new IOException(thisI.toString)
-      }, limit = 15, sleepInMillis = 0, noExcluded: _*)
+      val value = Retry(
+        {
+          val thisI = i.incrementAndGet()
+          if (thisI == recoveryStep) "recover" else throw new IOException(thisI.toString)
+        },
+        limit = 15,
+        sleepInMillis = 0,
+        noExcluded: _*
+      )
       assert(value == "recover")
     }
   }

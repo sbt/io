@@ -303,19 +303,20 @@ private object WinMilli extends MilliNative[FILETIME] {
       FILE_READ_ATTRIBUTES,
       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
     )
-    val mtime = try {
-      val modifiedTime = new FILETIME.ByReference()
-      if (!GetFileTime(hFile, /*creationTime*/ null, /*accessTime*/ null, modifiedTime))
-        throw new IOException(
-          "GetFileTime() failed with error " + GetLastError() + " for file " + filePath
-        )
-      modifiedTime
-    } finally {
-      if (!CloseHandle(hFile))
-        throw new IOException(
-          "CloseHandle() after GetFileTime() failed with error " + GetLastError() + " for file " + filePath
-        )
-    }
+    val mtime =
+      try {
+        val modifiedTime = new FILETIME.ByReference()
+        if (!GetFileTime(hFile, /*creationTime*/ null, /*accessTime*/ null, modifiedTime))
+          throw new IOException(
+            "GetFileTime() failed with error " + GetLastError() + " for file " + filePath
+          )
+        modifiedTime
+      } finally {
+        if (!CloseHandle(hFile))
+          throw new IOException(
+            "CloseHandle() after GetFileTime() failed with error " + GetLastError() + " for file " + filePath
+          )
+      }
     mtime
   }
 

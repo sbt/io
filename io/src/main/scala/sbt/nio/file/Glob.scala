@@ -370,8 +370,8 @@ object Glob {
       } else path
     }
 
-    private[sbt] def fileTreeViewListParameters(
-        implicit option: RelativeGlobViewOption
+    private[sbt] def fileTreeViewListParameters(implicit
+        option: RelativeGlobViewOption
     ): (Path, Int, Glob) = {
       val b = base
       val r = range._2
@@ -503,7 +503,7 @@ object Glob {
         path.iterator.asScala.toList match {
           case Nil                                        => Empty
           case h :: Nil if h.getFileName.toString.isEmpty => Empty
-          case parts                                      => RelativeGlob(parts.map(p => PathComponent(p.getFileName.toString)))
+          case parts => RelativeGlob(parts.map(p => PathComponent(p.getFileName.toString)))
         }
       }
 

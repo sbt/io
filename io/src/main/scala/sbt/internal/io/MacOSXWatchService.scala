@@ -83,15 +83,16 @@ private[sbt] class MacOSXWatchService extends WatchService with Unregisterable {
           val parent = path.getParent
           if (!keys.contains(parent)) {
             // workaround for https://github.com/sbt/sbt/issues/4603
-            if (keys.keys.exists(
-                  p =>
-                    p.getParent == parent && {
-                      val leftFileName = p.getFileName.toString
-                      val rightFileName = path.getFileName.toString
-                      leftFileName != rightFileName && (leftFileName
-                        .startsWith(rightFileName) || rightFileName.startsWith(leftFileName))
-                    }
-                )) {
+            if (
+              keys.keys.exists(p =>
+                p.getParent == parent && {
+                  val leftFileName = p.getFileName.toString
+                  val rightFileName = path.getFileName.toString
+                  leftFileName != rightFileName && (leftFileName
+                    .startsWith(rightFileName) || rightFileName.startsWith(leftFileName))
+                }
+              )
+            ) {
               parentKeys.put(parent, underlying.register(parent, events: _*))
             }
           }

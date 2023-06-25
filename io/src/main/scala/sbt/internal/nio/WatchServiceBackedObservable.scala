@@ -98,9 +98,8 @@ private[sbt] class WatchServiceBackedObservable(
             (event match {
               case Creation(path, attrs) if attrs.isDirectory =>
                 s.register(path)
-                event +: view.list(Glob(path, RecursiveGlob)).flatMap {
-                  case (p, a) =>
-                    process(Creation(p, a))
+                event +: view.list(Glob(path, RecursiveGlob)).flatMap { case (p, a) =>
+                  process(Creation(p, a))
                 }
               case Deletion(p, attrs) if attrs.isDirectory =>
                 val events = fileCache.refresh(Glob(p, RecursiveGlob))

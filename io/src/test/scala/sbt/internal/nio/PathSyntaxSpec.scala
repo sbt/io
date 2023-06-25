@@ -45,7 +45,7 @@ class PathSyntaxSpec extends AnyFlatSpec {
   it should "work with empty paths" in {
     val empty = Paths.get("").toGlob match {
       case r: RelativeGlob => r
-      case _               => throw new IllegalStateException("Relative path was not converted to relative glob")
+      case _ => throw new IllegalStateException("Relative path was not converted to relative glob")
     }
     val glob = basePath.toGlob / empty / ** / empty / empty / "*.txt"
     assert(glob.matches(basePath / "foo.txt"))

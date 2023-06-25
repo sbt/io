@@ -16,7 +16,7 @@ abstract class Mapper {
   type PathMap = File => Option[String]
   type FileMap = File => Option[File]
 
-  /** A path mapper that pairs a File with the path returned by calling `getPath` on it.*/
+  /** A path mapper that pairs a File with the path returned by calling `getPath` on it. */
   val basic: PathMap = f => Some(f.getPath)
 
   /**
@@ -47,7 +47,7 @@ abstract class Mapper {
    */
   def fail: Any => Nothing = f => sys.error("No mapping for " + f)
 
-  /** A path mapper that pairs a File with its name.  For example, `/x/y/z.txt` gets paired with `z.txt`.*/
+  /** A path mapper that pairs a File with its name.  For example, `/x/y/z.txt` gets paired with `z.txt`. */
   val flat: PathMap = f => Some(f.getName)
 
   /**
@@ -59,10 +59,10 @@ abstract class Mapper {
     (f => Some(newBase0 + f.getName))
   }
 
-  /** A mapper that is defined on all inputs by the function `f`.*/
+  /** A mapper that is defined on all inputs by the function `f`. */
   def total[A, B](f: A => B): A => Some[B] = x => Some(f(x))
 
-  /** A mapper that ignores all inputs.*/
+  /** A mapper that ignores all inputs. */
   def transparent: Any => Option[Nothing] = _ => None
 
   def normalizeBase(base: String) = if (!base.isEmpty && !base.endsWith("/")) base + "/" else base
@@ -133,7 +133,6 @@ abstract class Mapper {
    * File(baseDirectory/extras/file2) -> "extras/file2"
    * ...
    * }}}
-   *
    *
    * @param baseDirectory The directory that should be turned into a mappings sequence.
    * @return mappings The `baseDirectory` and all of its contents

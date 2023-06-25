@@ -52,8 +52,8 @@ private[sbt] object FileEvent {
     override def exists: Boolean = true
   }
   private[sbt] object Update {
-    def apply[T](path: Path, previousAttributes: T, attributes: T)(
-        implicit timeSource: TimeSource
+    def apply[T](path: Path, previousAttributes: T, attributes: T)(implicit
+        timeSource: TimeSource
     ): Update[T] =
       new Update(path, previousAttributes, attributes) {
         override val occurredAt: Deadline = timeSource.now

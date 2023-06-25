@@ -483,9 +483,10 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec with Matchers =>
   final def writeNewFile(file: File, content: String, attempt: Int = 0): Unit = {
     if (attempt == 0) IO.write(file, content)
     // IO.setModifiedTimeOrFalse sometimes throws an invalid argument exception
-    val res = try {
-      IO.setModifiedTimeOrFalse(file, (Deadline.now - 5.seconds).time.toMillis)
-    } catch { case _: IOException if attempt < 10 => false }
+    val res =
+      try {
+        IO.setModifiedTimeOrFalse(file, (Deadline.now - 5.seconds).time.toMillis)
+      } catch { case _: IOException if attempt < 10 => false }
     if (!res) writeNewFile(file, content, attempt + 1)
   }
 
@@ -503,8 +504,9 @@ object EventMonitorSpec {
   }
   @tailrec
   final def realPath(path: Path, fileName: Option[Path] = None): Path = {
-    val res: Path = try path.toRealPath()
-    catch { case _: IOException => null }
+    val res: Path =
+      try path.toRealPath()
+      catch { case _: IOException => null }
     if (res != null) fileName.fold(res)(res.resolve)
     else {
       val newFileName = path.getFileName

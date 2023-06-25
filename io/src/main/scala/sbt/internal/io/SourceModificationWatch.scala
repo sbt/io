@@ -117,8 +117,8 @@ private[sbt] final class WatchState private (
   /** Retrieve events from the `WatchService` */
   private[sbt] def pollEvents(): Iterable[(Path, WatchEvent[_])] = {
     val events = service.pollEvents()
-    events.toIterable.flatMap {
-      case (k, evs) => evs.map((k.watchable().asInstanceOf[Path], _))
+    events.toIterable.flatMap { case (k, evs) =>
+      evs.map((k.watchable().asInstanceOf[Path], _))
     }
   }
 
@@ -235,7 +235,7 @@ final class Source(
   override def equals(o: Any): Boolean = o match {
     case that: Source =>
       this.base == that.base && this.includeFilter == that.includeFilter &&
-        this.excludeFilter == that.excludeFilter && this.recursive == that.recursive
+      this.excludeFilter == that.excludeFilter && this.recursive == that.recursive
     case _ => false
   }
   override lazy val hashCode: Int = Seq[Any](base, includeFilter, excludeFilter, recursive).hashCode
