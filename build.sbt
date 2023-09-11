@@ -48,6 +48,17 @@ def commonSettings: Seq[Setting[_]] = Seq(
   compile / javacOptions ++= Seq("-Xlint", "-Xlint:-serial"),
   crossScalaVersions := Seq(scala212, scala213, scala3),
   headerLicense := (ThisBuild / headerLicense).value,
+  scalacOptions ++= {
+    val scala2InlineOptions = List(
+      "-opt-inline-from:<sources>",
+      "-opt:l:inline"
+    )
+    CrossVersion.partialVersion(scalaVersion.value) match {
+      case Some((2, n)) if n == 12 => scala2InlineOptions
+      case Some((2, n)) if n == 13 => scala2InlineOptions
+      case _                       => Nil
+    }
+  }
 )
 
 lazy val ioRoot = (project in file("."))
