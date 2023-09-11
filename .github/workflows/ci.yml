@@ -20,6 +20,9 @@ jobs:
           - os: ubuntu-latest
             java: 11
             jobtype: 2
+          - os: ubuntu-latest
+            java: 17
+            jobtype: 2
           - os: macos-latest
             java: 8
             jobtype: 2
