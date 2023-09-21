@@ -16,5 +16,5 @@ object Dependencies {
   val jnaVersion = "5.13.0"
   val jna = "net.java.dev.jna" % "jna" % jnaVersion
   val jnaPlatform = "net.java.dev.jna" % "jna-platform" % jnaVersion
-  val swovalFiles = "com.swoval" % "file-tree-views" % "2.1.10"
+  val swovalFiles = "com.swoval" % "file-tree-views" % "2.1.11"
 }
