@@ -106,6 +106,7 @@ val io = (project in file("io"))
         ) map (version => organization.value %% moduleName.value % version)
     }),
     mimaBinaryIssueFilters ++= Seq(
+      exclude[FinalClassProblem]("sbt.internal.io.MacJNA$TimeBuf"),
       // MiMa doesn't treat effectively final members as final
       // WORKAROUND typesafehub/migration-manager#162
       exclude[FinalMethodProblem]("sbt.io.SimpleFilter.accept"),

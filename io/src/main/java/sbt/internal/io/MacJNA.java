@@ -45,7 +45,7 @@ public class MacJNA {
     };
   }
 
-  public static class TimeBuf extends Structure {
+  public static final class TimeBuf extends Structure {
     public int size;
     public long tv_sec;
     public long tv_nsec;
