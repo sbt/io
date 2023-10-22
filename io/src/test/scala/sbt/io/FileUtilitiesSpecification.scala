@@ -24,6 +24,7 @@ object WriteContentSpecification extends Properties("Write content") {
   property("Append string appends") = forAll(appendAndCheckStrings _)
   property("Append bytes appends") = forAll(appendAndCheckBytes _)
   property("Unzip doesn't stack overflow") = largeUnzip()
+  property("Unzip errors given parent traversal") = testZipSlip()
 
   implicit lazy val validChar: Arbitrary[Char] = Arbitrary(
     for (i <- Gen.choose(0, 0xd7ff)) yield i.toChar
@@ -37,6 +38,20 @@ object WriteContentSpecification extends Properties("Write content") {
     testUnzip[Product]
     testUnzip[scala.tools.nsc.Global]
     true
+  }
+
+  private def testZipSlip() = {
+    val badFile0 = new File("io/src/test/resources/zip-slip.zip")
+    val badFile1 = new File("src/test/resources/zip-slip.zip")
+    val badFile =
+      if (badFile0.exists()) badFile0
+      else badFile1
+    try {
+      unzipFile(badFile)
+      false
+    } catch {
+      case e: RuntimeException => e.getMessage.contains("outside of the target directory")
+    }
   }
 
   private def testUnzip[T](implicit mf: Manifest[T]) =

@@ -387,16 +387,23 @@ object IO {
       preserveLastModified: Boolean = true
   ): Set[File] = {
     createDirectory(toDirectory)
-    zipInputStream(from)(zipInput => extract(zipInput, toDirectory, filter, preserveLastModified))
+    zipInputStream(from)(zipInput =>
+      extract(zipInput, toDirectory.toPath, filter, preserveLastModified)
+    )
   }
 
   private def extract(
       from: ZipInputStream,
-      toDirectory: File,
+      toDirectory: NioPath,
       filter: NameFilter,
       preserveLastModified: Boolean
   ) = {
-    val set = new HashSet[File]
+    val set = new HashSet[NioPath]
+    val canonicalDirPath = toDirectory.normalize().toString
+    def validateExtractPath(name: String, target: NioPath): Unit =
+      if (!target.normalize().toString.startsWith(canonicalDirPath)) {
+        throw new RuntimeException(s"Entry ($name) is outside of the target directory")
+      }
     @tailrec def next(): Unit = {
       val entry = from.getNextEntry
       if (entry == null)
@@ -404,18 +411,19 @@ object IO {
       else {
         val name = entry.getName
         if (filter.accept(name)) {
-          val target = new File(toDirectory, name)
+          val target = toDirectory.resolve(name)
+          validateExtractPath(name, target)
           // log.debug("Extracting zip entry '" + name + "' to '" + target + "'")
           if (entry.isDirectory)
-            createDirectory(target)
+            createDirectory(target.toFile)
           else {
             set += target
             translate("Error extracting zip entry '" + name + "' to '" + target + "': ") {
-              fileOutputStream(false)(target)(out => transfer(from, out))
+              fileOutputStream(false)(target.toFile)(out => transfer(from, out))
             }
           }
           if (preserveLastModified)
-            setModifiedTimeOrFalse(target, entry.getTime)
+            setModifiedTimeOrFalse(target.toFile, entry.getTime)
         } else {
           // log.debug("Ignoring zip entry '" + name + "'")
         }
@@ -424,7 +432,7 @@ object IO {
       }
     }
     next()
-    Set() ++ set
+    (Set() ++ set).map(_.toFile)
   }
 
   // TODO: provide a better API to download things.
