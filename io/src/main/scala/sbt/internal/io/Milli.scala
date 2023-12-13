@@ -205,28 +205,28 @@ private abstract class PosixMilliIntUtim[Interface <: Utimensat[Int]: ClassTag]
 
 private class Linux64FileStat extends StatLong(144, 88, 96)
 private trait Linux64 extends Library with Utimensat[Long] {
-  def __xstat64(version: Int, filePath: String, buf: Linux64FileStat): Int
+  def stat(filePath: String, buf: Linux64FileStat): Int
 }
 private object Linux64Milli extends PosixMilliLongUtim[Linux64] {
   protected final val AT_FDCWD: Int = -100
   protected final val UTIME_OMIT: Long = (1L << 30) - 2
   protected def getModifiedTimeNative(filePath: String) = {
     val stat = new Linux64FileStat
-    checkedIO(filePath) { libc.__xstat64(1, filePath, stat) }
+    checkedIO(filePath) { libc.stat(filePath, stat) }
     stat.getModifiedTimeNative
   }
 }
 
 private class Linux32FileStat extends StatInt(88, 64, 68)
 private trait Linux32 extends Library with Utimensat[Int] {
-  def __xstat(version: Int, filePath: String, buf: Linux32FileStat): Int
+  def stat(filePath: String, buf: Linux32FileStat): Int
 }
 private object Linux32Milli extends PosixMilliIntUtim[Linux32] {
   protected final val AT_FDCWD: Int = -100
   protected final val UTIME_OMIT: Int = ((1 << 30) - 2)
   protected def getModifiedTimeNative(filePath: String) = {
     val stat = new Linux32FileStat
-    checkedIO(filePath) { libc.__xstat(3, filePath, stat) }
+    checkedIO(filePath) { libc.stat(filePath, stat) }
     stat.getModifiedTimeNative
   }
 }

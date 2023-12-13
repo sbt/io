@@ -134,6 +134,11 @@ val io = (project in file("io"))
       exclude[MissingClassProblem]("sbt.internal.io.FreeBSD64FileStat"),
       exclude[MissingClassProblem]("sbt.internal.io.FreeBSD64Milli"),
       exclude[MissingClassProblem]("sbt.internal.io.FreeBSD64Milli$"),
+      // Replaced non-standard __xstat64() with conformant stat() calls
+      exclude[DirectMissingMethodProblem]("sbt.internal.io.Linux32.*"),
+      exclude[ReversedMissingMethodProblem]("sbt.internal.io.Linux32.*"),
+      exclude[DirectMissingMethodProblem]("sbt.internal.io.Linux64.*"),
+      exclude[ReversedMissingMethodProblem]("sbt.internal.io.Linux64.*"),
       // protected[this]
       exclude[DirectMissingMethodProblem]("sbt.io.CopyOptions.copy*"),
       // private class
