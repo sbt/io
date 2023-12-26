@@ -558,7 +558,7 @@ object IO {
       isEmpty.getOrElseUpdate(f, dirs(f) && f.isDirectory && (f.listFiles forall visit))
 
     dirs foreach visit
-    for ((f, true) <- isEmpty) f.delete
+    for (case (f, true) <- isEmpty) f.delete
   }
 
   /** Deletes each file or directory (recursively) in `files`. */
