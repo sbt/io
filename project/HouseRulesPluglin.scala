@@ -24,7 +24,6 @@ object HouseRulesPlugin extends AutoPlugin {
       })
       .value
       .toList,
-    scalacOptions ++= "-Yinline-warnings".ifScala211OrMinus.value.toList,
     scalacOptions ++= "-Yno-adapted-args".ifScala212OrMinus.value.toList,
     scalacOptions ++= "-Ywarn-dead-code".ifScala213OrMinus.value.toList,
     scalacOptions ++= "-Ywarn-numeric-widen".ifScala213OrMinus.value.toList,
@@ -46,8 +45,6 @@ object HouseRulesPlugin extends AutoPlugin {
           case (n, _) if n >= 3 => __x
         }
       )
-    def ifScala211OrMinus = ifScalaLte(11)
-    def ifScala211OrPlus = ifScalaGte(11)
     def ifScala212OrMinus = ifScalaLte(12)
     def ifScala213OrMinus = ifScalaLte(13)
   }
