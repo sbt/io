@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.scalatest.flatspec.AnyFlatSpec
 
 final class RetrySpec extends AnyFlatSpec {
-  private val noExcluded: List[Class[_ <: IOException]] = List[Class[_ <: IOException]]()
+  private val noExcluded: List[Class[? <: IOException]] = List[Class[? <: IOException]]()
   "retry" should "throw first exception after number of failures" in {
     val i = new AtomicInteger()
     def throww(): Any = throw new IOException(i.incrementAndGet().toString)

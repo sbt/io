@@ -20,18 +20,18 @@ private[sbt] object Retry {
     try System.getProperty("sbt.io.retry.limit", defaultLimit.toString).toInt
     catch { case NonFatal(_) => defaultLimit }
   }
-  private[sbt] def apply[@specialized T](f: => T, excludedExceptions: Class[_ <: IOException]*): T =
+  private[sbt] def apply[@specialized T](f: => T, excludedExceptions: Class[? <: IOException]*): T =
     apply(f, limit, excludedExceptions: _*)
   private[sbt] def apply[@specialized T](
       f: => T,
       limit: Int,
-      excludedExceptions: Class[_ <: IOException]*,
+      excludedExceptions: Class[? <: IOException]*,
   ): T = apply(f, limit, 100, excludedExceptions: _*)
   private[sbt] def apply[@specialized T](
       f: => T,
       limit: Int,
       sleepInMillis: Long,
-      excludedExceptions: Class[_ <: IOException]*,
+      excludedExceptions: Class[? <: IOException]*,
   ): T = {
     require(limit >= 1, "limit must be 1 or higher: was: " + limit)
     def filter(e: Exception): Boolean = excludedExceptions match {

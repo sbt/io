@@ -139,8 +139,8 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
       ()
     }
     override def isValid: Boolean = true
-    override def pollEvents(): JList[WatchEvent[_]] =
-      pollEventsImpl.asInstanceOf[JList[WatchEvent[_]]]
+    override def pollEvents(): JList[WatchEvent[?]] =
+      pollEventsImpl.asInstanceOf[JList[WatchEvent[?]]]
     override def reset(): Boolean = events.synchronized {
       events.clear()
       true
@@ -181,9 +181,9 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
         Some(this)
       }
       event match {
-        case _: Creation[_] if acceptCreate => offer(event)
-        case _: Deletion[_] if acceptDelete => offer(event)
-        case _: Update[_] if acceptModify   => offer(event)
+        case _: Creation[?] if acceptCreate => offer(event)
+        case _: Deletion[?] if acceptDelete => offer(event)
+        case _: Update[?] if acceptModify   => offer(event)
         case _                              => None
       }
     }
