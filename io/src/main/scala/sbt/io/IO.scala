@@ -63,7 +63,7 @@ object IO {
    * If the location cannot be determined, an error is generated.
    * Note that for JDK 11 onwards, a module will return a jrt path.
    */
-  def classLocationPath(cl: Class[_]): NioPath = {
+  def classLocationPath(cl: Class[?]): NioPath = {
     val u = classLocation(cl)
     val p = u.getProtocol match {
       case FileScheme => Option(toFile(u).toPath)
@@ -87,7 +87,7 @@ object IO {
    * If the location cannot be determined or it is not a file, an error is generated.
    * Note that for JDK 11 onwards, the returned module path cannot be expressed as `File`, so it will return `None`.
    */
-  def classLocationFileOption(cl: Class[_]): Option[File] = {
+  def classLocationFileOption(cl: Class[?]): Option[File] = {
     val u = classLocation(cl)
     urlAsFile(u)
   }
@@ -109,7 +109,7 @@ object IO {
     "classLocationFile may not work on JDK 11. Use classfileLocation, classLocationFileOption, or classLocationPath instead.",
     "1.3.0"
   )
-  def classLocationFile(cl: Class[_]): File =
+  def classLocationFile(cl: Class[?]): File =
     classLocationFileOption(cl).getOrElse(sys.error(s"Unable to create File from $cl"))
 
   /**
@@ -128,7 +128,7 @@ object IO {
    * If the location cannot be determined or it is not a file, an error is generated.
    * Note that for JDK 11 onwards, a module will return a jrt URL such as `jrt:/java.base`.
    */
-  def classLocation(cl: Class[_]): URL = {
+  def classLocation(cl: Class[?]): URL = {
     def localcl: Option[URL] =
       Option(cl.getProtectionDomain.getCodeSource) flatMap { codeSource =>
         Option(codeSource.getLocation)
@@ -187,7 +187,7 @@ object IO {
    * Returns a URL for the classfile containing the given class
    * If the location cannot be determined, an error is generated.
    */
-  def classfileLocation(cl: Class[_]): URL = {
+  def classfileLocation(cl: Class[?]): URL = {
     val clsfile = s"${cl.getName.replace('.', '/')}.class"
     def localcl: Option[URL] =
       Option(cl.getClassLoader) flatMap { classLoader =>
@@ -1232,7 +1232,7 @@ object IO {
    */
   def objectInputStream(wrapped: InputStream, loader: ClassLoader): ObjectInputStream =
     new ObjectInputStream(wrapped) {
-      override def resolveClass(osc: ObjectStreamClass): Class[_] = {
+      override def resolveClass(osc: ObjectStreamClass): Class[?] = {
         val c = Class.forName(osc.getName, false, loader)
         if (c eq null) super.resolveClass(osc) else c
       }
@@ -1491,7 +1491,7 @@ object IO {
     setModifiedTimeOrFalse(targetFile, math.max(last, 0L))
   }
 
-  private val excludeFileNotFound: immutable.Seq[Class[_ <: IOException]] = List(
+  private val excludeFileNotFound: immutable.Seq[Class[? <: IOException]] = List(
     classOf[FileNotFoundException]
   )
 }

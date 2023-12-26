@@ -116,7 +116,7 @@ private[sbt] final class WatchState private (
   }
 
   /** Retrieve events from the `WatchService` */
-  private[sbt] def pollEvents(): Iterable[(Path, WatchEvent[_])] = {
+  private[sbt] def pollEvents(): Iterable[(Path, WatchEvent[?])] = {
     val events = service.pollEvents()
     events.toIterable.flatMap { case (k, evs) =>
       evs.map((k.watchable().asInstanceOf[Path], _))

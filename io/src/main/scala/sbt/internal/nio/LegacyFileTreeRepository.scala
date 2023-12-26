@@ -46,7 +46,7 @@ private[sbt] class LegacyFileTreeRepository(logger: WatchLogger, watchService: W
   private[this] val handle =
     observable.addObserver((event: FileEvent[FileAttributes]) => {
       val attributes = event match {
-        case _: Deletion[_] => NonExistent
+        case _: Deletion[?] => NonExistent
         case _              => event.attributes
       }
       val events: Seq[FileEvent[FileAttributes]] = fileCache.update(event.path, attributes)

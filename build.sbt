@@ -43,7 +43,7 @@ ThisBuild / publishTo := {
   Some("releases" at nexus + "service/local/staging/deploy/maven2")
 }
 
-def commonSettings: Seq[Setting[_]] = Seq(
+def commonSettings: Seq[Setting[?]] = Seq(
   scalaVersion := scala212,
   compile / javacOptions ++= Seq("-Xlint", "-Xlint:-serial"),
   crossScalaVersions := Seq(scala212, scala213, scala3),

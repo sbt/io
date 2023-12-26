@@ -458,16 +458,16 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec with Matchers =>
     }
 
   def watchTest(
-      monitor: FileEventMonitor[FileEvent[_]],
-      filter: FileEvent[_] => Boolean,
-      check: Seq[FileEvent[_]] => Boolean
+      monitor: FileEventMonitor[FileEvent[?]],
+      filter: FileEvent[?] => Boolean,
+      check: Seq[FileEvent[?]] => Boolean
   )(modifier: => Unit): Boolean = {
     modifier
     val events = monitor.poll(maxWait * 2, filter)
     check(events)
   }
 
-  def watchTest(base: File, filter: FileEvent[_] => Boolean, check: Seq[FileEvent[_]] => Boolean)(
+  def watchTest(base: File, filter: FileEvent[?] => Boolean, check: Seq[FileEvent[?]] => Boolean)(
       modifier: => Unit
   ): Boolean = {
     val globs = base.toPath.toRealPath().toFile.scalaSourceGlobs
@@ -496,7 +496,7 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec with Matchers =>
 object EventMonitorSpec {
   type Event = FileEvent[FileAttributes]
   val AllPass: Any => Boolean = ((_: Any) => true).label("AllPass")
-  val NonEmpty: Seq[FileEvent[_]] => Boolean = ((_: Seq[FileEvent[_]]).nonEmpty).label("NonEmpty")
+  val NonEmpty: Seq[FileEvent[?]] => Boolean = ((_: Seq[FileEvent[?]]).nonEmpty).label("NonEmpty")
   private implicit class LabeledFunction[T, R](val f: T => R) extends AnyVal {
     def label(string: String): T => R = new (T => R) {
       override def apply(t: T): R = f(t)
@@ -514,33 +514,33 @@ object EventMonitorSpec {
       realPath(path.getParent, fileName.map(newFileName.resolve) orElse Some(newFileName))
     }
   }
-  def pathFilter(path: Path): FileEvent[_] => Boolean = {
+  def pathFilter(path: Path): FileEvent[?] => Boolean = {
     val real = realPath(path)
-    ((_: FileEvent[_]).path == real).label(s"PathFilter($real)")
+    ((_: FileEvent[?]).path == real).label(s"PathFilter($real)")
   }
-  def contains(path: Path): Seq[FileEvent[_]] => Boolean = {
+  def contains(path: Path): Seq[FileEvent[?]] => Boolean = {
     val real = realPath(path)
-    ((_: Seq[FileEvent[_]]).exists(_.path == real)).label(s"Contains($real)")
+    ((_: Seq[FileEvent[?]]).exists(_.path == real)).label(s"Contains($real)")
   }
-  def excludes(path: Path): Seq[FileEvent[_]] => Boolean = {
+  def excludes(path: Path): Seq[FileEvent[?]] => Boolean = {
     val real = realPath(path)
-    ((s: Seq[FileEvent[_]]) => s.nonEmpty && s.forall(_.path != real)).label(s"Excludes($real)")
+    ((s: Seq[FileEvent[?]]) => s.nonEmpty && s.forall(_.path != real)).label(s"Excludes($real)")
   }
-  def includesOnly(path: Path): Seq[FileEvent[_]] => Boolean = {
+  def includesOnly(path: Path): Seq[FileEvent[?]] => Boolean = {
     val real = realPath(path)
-    ((s: Seq[FileEvent[_]]) => s.nonEmpty && s.forall(_.path == real)).label(s"IncludesOnly($real)")
+    ((s: Seq[FileEvent[?]]) => s.nonEmpty && s.forall(_.path == real)).label(s"IncludesOnly($real)")
   }
-  def isDeletion(path: Path): FileEvent[_] => Boolean = {
+  def isDeletion(path: Path): FileEvent[?] => Boolean = {
     val real = realPath(path)
-    (_: FileEvent[_]) match {
+    (_: FileEvent[?]) match {
       case Deletion(p, _) if p == real => true
       case _                           => false
     }
   }
-  def hasDeletion(path: Path): Seq[FileEvent[_]] => Boolean = {
+  def hasDeletion(path: Path): Seq[FileEvent[?]] => Boolean = {
     val real = realPath(path)
     val deletion = isDeletion(real)
-    ((_: Seq[FileEvent[_]]).exists(deletion)).label(s"HasDeletion($real)")
+    ((_: Seq[FileEvent[?]]).exists(deletion)).label(s"HasDeletion($real)")
   }
 
   trait Logger extends WatchLogger

@@ -17,7 +17,7 @@ import java.nio.file.Files
 
 object IOSpecification extends Properties("IO") {
   property("IO.classLocationPath able to determine containing directories") = forAll(classes) {
-    (c: Class[_]) =>
+    (c: Class[?]) =>
       Try(IO.classLocationPath(c)).toOption.exists {
         case jar if jar.getFileName.toString.endsWith(".jar") =>
           Files.isRegularFile(jar)
@@ -28,7 +28,7 @@ object IOSpecification extends Properties("IO") {
       }
   }
 
-  implicit def classes: Gen[Class[_]] =
+  implicit def classes: Gen[Class[?]] =
     Gen.oneOf(
       this.getClass,
       classOf[java.lang.Integer],
