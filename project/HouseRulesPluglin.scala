@@ -24,6 +24,8 @@ object HouseRulesPlugin extends AutoPlugin {
       })
       .value
       .toList,
+    scalacOptions ++= "-Xsource:3".ifScala213OrMinus.value.toList,
+    scalacOptions ++= "-Wconf:msg=package object inheritance is deprecated:warning".ifScala213OrMinus.value.toList,
     scalacOptions ++= "-Yno-adapted-args".ifScala212OrMinus.value.toList,
     scalacOptions ++= "-Ywarn-dead-code".ifScala213OrMinus.value.toList,
     scalacOptions ++= "-Ywarn-numeric-widen".ifScala213OrMinus.value.toList,

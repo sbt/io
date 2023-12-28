@@ -36,7 +36,7 @@ import scala.util.control.NonFatal
 private abstract class Stat[Time_T](size: Int) extends NativeMapped {
   val buffer = ByteBuffer.allocate(size).order(ByteOrder.nativeOrder())
 
-  def fromNative(nativeValue: Object, context: FromNativeContext) =
+  def fromNative(nativeValue: Object, context: FromNativeContext): Nothing =
     throw new UnsupportedOperationException("Not supported.")
 
   def toNative(): Object = buffer
@@ -149,7 +149,7 @@ private abstract class PosixMilliInt[Interface <: Posix[Int]: ClassTag]
 //
 private abstract class TimeSpec2[Time_T] extends NativeMapped {
   val buffer: Array[Time_T]
-  def fromNative(nativeValue: Object, context: FromNativeContext) =
+  def fromNative(nativeValue: Object, context: FromNativeContext): Nothing =
     throw new UnsupportedOperationException("Not supported.")
   def toNative(): Object = buffer
   def nativeType(): Class[Array[Time_T]] = classOf[Array[Time_T]]
