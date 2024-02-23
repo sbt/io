@@ -103,6 +103,10 @@ val io = (project in file("io"))
           "1.3.0",
           "1.4.0",
           "1.5.0",
+          "1.6.0",
+          "1.7.0",
+          "1.8.0",
+          "1.9.0",
         ) map (version => organization.value %% moduleName.value % version)
     }),
     mimaBinaryIssueFilters ++= Seq(
@@ -130,10 +134,7 @@ val io = (project in file("io"))
       exclude[MissingClassProblem]("sbt.internal.io.JavaMilli$"),
       exclude[MissingClassProblem]("sbt.internal.io.JavaMilli"),
       // These are private classes
-      exclude[MissingClassProblem]("sbt.internal.io.FreeBSD64"),
-      exclude[MissingClassProblem]("sbt.internal.io.FreeBSD64FileStat"),
-      exclude[MissingClassProblem]("sbt.internal.io.FreeBSD64Milli"),
-      exclude[MissingClassProblem]("sbt.internal.io.FreeBSD64Milli$"),
+      exclude[MissingClassProblem]("sbt.internal.io.*"),
       // Replaced non-standard __xstat64() with conformant stat() calls
       exclude[DirectMissingMethodProblem]("sbt.internal.io.Linux32.*"),
       exclude[ReversedMissingMethodProblem]("sbt.internal.io.Linux32.*"),
