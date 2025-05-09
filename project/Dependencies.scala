@@ -4,7 +4,7 @@ import Keys._
 object Dependencies {
   val scala212 = "2.12.20"
   val scala213 = "2.13.16"
-  val scala3 = "3.3.5"
+  val scala3 = "3.3.6"
 
   val scalaCompiler = Def.setting {
     val v = if (scalaBinaryVersion.value == "3") scala213 else scalaVersion.value
