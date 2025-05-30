@@ -44,7 +44,7 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
           case null if exists =>
             add(updateGlob(path), attributes)
             subMap.asScala.map { case (p, a) => Creation(p, a) }.toIndexedSeq
-          case null => Nil // we weren't monitoring this no longer extant path
+          case null           => Nil // we weren't monitoring this no longer extant path
           case prev if exists =>
             Update(path, prev, converter(path)) :: Nil
           case _ =>

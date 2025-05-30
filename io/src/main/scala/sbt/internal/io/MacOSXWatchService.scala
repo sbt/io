@@ -38,7 +38,7 @@ private[sbt] class MacOSXWatchService extends WatchService with Unregisterable {
   override def pollEvents(): Map[WatchKey, immutable.Seq[WatchEvent[JPath]]] = {
     underlying.poll() match {
       case null => Map.empty
-      case k =>
+      case k    =>
         k.watchable() match {
           case p: JPath if keys.contains(p) =>
             val res = k -> k
@@ -64,7 +64,7 @@ private[sbt] class MacOSXWatchService extends WatchService with Unregisterable {
       if (remaining > 0.seconds) {
         underlying.poll((limit - Deadline.now).toNanos, TimeUnit.NANOSECONDS) match {
           case null => null
-          case k =>
+          case k    =>
             k.watchable match {
               case p: JPath if keys.contains(p) => k
               case _                            => impl()
@@ -79,7 +79,7 @@ private[sbt] class MacOSXWatchService extends WatchService with Unregisterable {
     if (!isClosed.get()) {
       keys.get(path) match {
         case Some(k) => k
-        case _ =>
+        case _       =>
           val resolved = resolve(path)
           val parent = path.getParent
           if (!keys.contains(parent)) {
@@ -100,7 +100,7 @@ private[sbt] class MacOSXWatchService extends WatchService with Unregisterable {
           val key =
             parentKeys.remove(resolved) match {
               case Some(k) => k
-              case _ =>
+              case _       =>
                 underlying.register(resolved, events: _*)
             }
           keys.put(resolved, key)

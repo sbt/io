@@ -106,7 +106,7 @@ object PathFilter extends LowPriorityPathFilter {
     def &&(other: PathFilter): PathFilter = pathFilter match {
       case NoPass  => NoPass
       case AllPass => other
-      case f =>
+      case f       =>
         other match {
           case NoPass  => NoPass
           case AllPass => f
@@ -116,7 +116,7 @@ object PathFilter extends LowPriorityPathFilter {
     def ||(other: PathFilter): PathFilter = pathFilter match {
       case NoPass  => other
       case AllPass => AllPass
-      case f =>
+      case f       =>
         other match {
           case NoPass  => f
           case AllPass => AllPass
@@ -157,7 +157,7 @@ object PathFilter extends LowPriorityPathFilter {
     case nf: sbt.io.NotFilter       => !fromFileFilter(nf.fileFilter)
     case af: sbt.io.AndFilter       => fromFileFilter(af.left) && fromFileFilter(af.right)
     case of: sbt.io.OrFilter        => fromFileFilter(of.left) || fromFileFilter(of.right)
-    case filter =>
+    case filter                     =>
       new PathFilter {
         override def accept(path: Path, attributes: FileAttributes): Boolean =
           filter.accept(path.toFile)

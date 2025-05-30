@@ -160,7 +160,7 @@ private[sbt] class NewWatchState(
     try {
       registered.get(path) match {
         case Some(k) => k
-        case None =>
+        case None    =>
           val key = service.register(path, WatchState.events: _*)
           registered.put(path, key).foreach { k =>
             k.reset()
