@@ -235,7 +235,7 @@ object IO {
   def urlAsFile(url: URL): Option[File] =
     url.getProtocol match {
       case FileScheme => Some(toFile(url))
-      case "jar" =>
+      case "jar"      =>
         val path = url.getPath
         val end = path.indexOf('!')
         Some(uriToFile(if (end == -1) path else path.substring(0, end)))
@@ -591,7 +591,7 @@ object IO {
     try {
       FileTreeView.default.list(file.toPath).foreach {
         case (dir, attrs) if attrs.isDirectory => delete(dir.toFile)
-        case (f, _) =>
+        case (f, _)                            =>
           try Files.deleteIfExists(f)
           catch { case _: IOException => }
       }

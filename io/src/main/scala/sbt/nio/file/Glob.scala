@@ -262,7 +262,7 @@ object Glob {
         }
       case Root(leftRoot) =>
         right match {
-          case Root(rightRoot) => leftRoot.compareTo(rightRoot)
+          case Root(rightRoot)              => leftRoot.compareTo(rightRoot)
           case FullFileGlob(leftBase, _, _) =>
             leftRoot.compareTo(leftBase) match {
               case 0 => -1
@@ -327,7 +327,7 @@ object Glob {
       case "allow"       => Ignore
       case "error"       => Error
       case "warn" | null => Warn
-      case p =>
+      case p             =>
         val message = s"Unrecognized option $p passed in for $propName. " +
           "Valid values are: {'allow', 'warn', 'error'}. Setting default to: 'warn'."
         System.err.println(message)
@@ -364,7 +364,7 @@ object Glob {
         option match {
           case Error  => throw new IllegalArgumentException(errorMessage(glob, warn = false))
           case Ignore => path.toAbsolutePath
-          case Warn =>
+          case Warn   =>
             System.err.println(errorMessage(glob, warn = true))
             path.toAbsolutePath
         }
@@ -458,7 +458,7 @@ object Glob {
      */
     def /(relativeGlob: RelativeGlob): Glob = glob match {
       case Pattern(root, relative) => Pattern(root, relative / relativeGlob)
-      case Root(path) =>
+      case Root(path)              =>
         val newRoot = relativeGlob.prefix.map(path.resolve).getOrElse(path)
         relativeGlob.tail match {
           case Nil => Root(newRoot)
@@ -590,7 +590,7 @@ object Glob {
 sealed trait RelativeGlob extends Glob {
   private[file] def matchers: List[RelativeGlob.Matcher]
   private[file] def prefix: Option[Path] = matchers.takeWhile(_.isInstanceOf[PathComponent]) match {
-    case Nil => None
+    case Nil                                                       => None
     case (h: PathComponent) :: (t: List[PathComponent] @unchecked) =>
       Some(Paths.get(h.glob, t.map(_.glob): _*))
     case _ => None
@@ -705,7 +705,7 @@ object RelativeGlob {
   private[file] def parse(glob: String, isRegex: Boolean): RelativeGlob =
     Glob(glob, isRegex) match {
       case r: RelativeGlob => r
-      case _ =>
+      case _               =>
         val msg = s"Couldn't create relativeGlob glob from absolute glob: $glob"
         throw new IllegalArgumentException(msg)
     }
@@ -727,14 +727,14 @@ object RelativeGlob {
     override def matches(path: Path): Boolean = {
       val count = path.getNameCount
       @tailrec def impl(currentIndex: Int, matchers: List[Matcher]): Boolean = matchers match {
-        case RecursiveGlob :: Nil => count > 0
+        case RecursiveGlob :: Nil          => count > 0
         case RecursiveGlob :: matchersTail =>
           currentIndex match {
             case i if i < count => recursiveMatches(matchersTail, i)
             case _              => false
           }
         case m :: Nil if currentIndex == count - 1 => m.matches(path.getFileName)
-        case m :: matchersTail =>
+        case m :: matchersTail                     =>
           currentIndex match {
             case i if i < count && m.matches(path.getName(i)) => impl(i + 1, matchersTail)
             case _                                            => false
@@ -745,7 +745,7 @@ object RelativeGlob {
         remaining match {
           case Nil                => true
           case nameMatcher :: Nil => nameMatcher.matches(path.getFileName)
-          case _ =>
+          case _                  =>
             @tailrec def recursiveImpl(index: Int): Boolean = index match {
               case i if i < count => impl(i, remaining) || recursiveImpl(i + 1)
               case _              => false

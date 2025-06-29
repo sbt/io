@@ -338,7 +338,7 @@ object FileTreeView {
           case _: NotDirectoryException if !visited.contains(path.getParent) =>
             val map = directoryCache match {
               case Some((parent, m)) if parent == path.getParent => m
-              case _ =>
+              case _                                             =>
                 val map = new ConcurrentHashMap[Path, FileAttributes]()
                 try view.list(path.getParent).foreach { case (p, a) => map.put(p, a) }
                 catch {
@@ -360,7 +360,7 @@ object FileTreeView {
           case null =>
             remainingGlobs.poll() match {
               case null =>
-              case g =>
+              case g    =>
                 remainingPaths.add(g.base)
                 fillBuffer()
             }
@@ -368,7 +368,7 @@ object FileTreeView {
             visited.add(path)
             path.getParent match {
               case null =>
-              case p =>
+              case p    =>
                 directoryCache match {
                   case Some((`p`, m)) =>
                     m.get(path) match {

@@ -154,7 +154,7 @@ private[sbt] object FileEventMonitor {
       lock.synchronized(events.putIfAbsent(path, event)) match {
         case Some(d: Deletion[T]) =>
           event match {
-            case _: Deletion[T] =>
+            case _: Deletion[T]         =>
             case Update(_, previous, _) =>
               put(path, Deletion(path, previous, event.occurredAt))
             case _ => put(path, Update(path, d.attributes, event.attributes, event.occurredAt))
@@ -307,7 +307,7 @@ private[sbt] object FileEventMonitor {
       antiEntropyDeadlines.retain((_, deadline) => Deadline.now < deadline + retentionPeriod)
       transformed match {
         case s: Seq[FileEvent[T]] if s.nonEmpty => s
-        case _ =>
+        case _                                  =>
           val limit = duration - (Deadline.now - start)
           if (limit > 0.millis) pollImpl(limit, filter) else Nil
       }
