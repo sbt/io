@@ -292,7 +292,7 @@ object Path extends Mapper {
   def fileProperty(name: String): File = new File(System.getProperty(name))
   def userHome: File = fileProperty("user.home")
 
-  def absolute(file: File): File = new File(file.toURI.normalize).getAbsoluteFile
+  def absolute(file: File): File = new File(file.toPath.normalize.toUri).getAbsoluteFile
   def makeString(paths: Seq[File]): String = makeString(paths, File.pathSeparator)
   def makeString(paths: Seq[File], sep: String): String = {
     val separated = paths.map(_.getAbsolutePath)

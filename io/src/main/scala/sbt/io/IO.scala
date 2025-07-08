@@ -1160,7 +1160,7 @@ object IO {
    */
   def directoryURI(dir: File): URI = {
     assertAbsolute(dir)
-    directoryURI(dir.toURI.normalize)
+    directoryURI(dir.toPath.normalize.toUri)
   }
 
   /**
@@ -1177,7 +1177,7 @@ object IO {
       else
         new URI(str + "/")
 
-    dirURI.normalize
+    new File(dirURI).toPath.normalize.toUri
   }
 
   private[sbt] val isWindows: Boolean =

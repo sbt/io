@@ -6,7 +6,7 @@ ThisBuild / version := {
   (sys.env.get("BUILD_VERSION") orElse sys.props.get("sbt.build.version")) match {
     case Some(v) => v
     case _ =>
-      if ((ThisBuild / isSnapshot).value) "1.6.0-SNAPSHOT"
+      if ((ThisBuild / isSnapshot).value) "1.10.2-SNAPSHOT"
       else old
   }
 }
