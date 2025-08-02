@@ -23,7 +23,7 @@ class FileAttributeSpec extends AnyFlatSpec {
     val file = Files.createFile(dirPath.resolve("file"))
     val link = Files.createSymbolicLink(dirPath.resolve("link"), file)
     FileAttributes(link).toOption match {
-      case None => assert(false)
+      case None    => assert(false)
       case Some(a) =>
         assert(a.isRegularFile)
         assert(a.isSymbolicLink)
@@ -36,7 +36,7 @@ class FileAttributeSpec extends AnyFlatSpec {
     val file = dirPath.resolve("file")
     val link = Files.createSymbolicLink(dirPath.resolve("link"), file)
     FileAttributes(link).toOption match {
-      case None => assert(false)
+      case None    => assert(false)
       case Some(a) =>
         assert(a.isSymbolicLink)
         assert(!a.isRegularFile)
@@ -49,7 +49,7 @@ class FileAttributeSpec extends AnyFlatSpec {
     val subdir = Files.createFile(dirPath.resolve("file"))
     val link = Files.createSymbolicLink(dirPath.resolve("link"), subdir)
     FileAttributes(link, followLinks = false).toOption match {
-      case None => assert(false)
+      case None    => assert(false)
       case Some(a) =>
         assert(a.isSymbolicLink)
         assert(!a.isRegularFile)
@@ -63,7 +63,7 @@ class FileAttributeSpec extends AnyFlatSpec {
       val file = dirPath.resolve("file")
       val link = Files.createSymbolicLink(dirPath.resolve("link"), file)
       FileAttributes(link, followLinks = false).toOption match {
-        case None => assert(false)
+        case None    => assert(false)
         case Some(a) =>
           assert(a.isSymbolicLink)
           assert(!a.isRegularFile)

@@ -30,7 +30,7 @@ private[sbt] object Globs {
   private[sbt] def fileFilterToRelativeGlob(fileFilter: FileFilter): Option[RelativeGlob] =
     fileFilter match {
       case nameFilter: NameFilter => nameFilterToRelativeGlob(nameFilter)
-      case af: AndFilter =>
+      case af: AndFilter          =>
         if (af.left == NothingFilter || af.right == NothingFilter) Some(NoPath)
         else if (af.left == AllPassFilter) fileFilterToRelativeGlob(af.right)
         else if (af.right == AllPassFilter) fileFilterToRelativeGlob(af.left)
@@ -48,7 +48,7 @@ private[sbt] object Globs {
         nf.fileFilter match {
           case NothingFilter => Some(AnyPath)
           case AllPassFilter => Some(NoPath)
-          case f =>
+          case f             =>
             fileFilterToRelativeGlob(f).collect { case m: Matcher =>
               Matcher.not(m)
             }
@@ -73,7 +73,7 @@ private[sbt] object Globs {
     }
   private[sbt] def nameFilterToRelativeGlob(nameFilter: NameFilter): Option[Matcher] =
     nameFilter match {
-      case AllPassFilter => Some(AnyPath)
+      case AllPassFilter     => Some(AnyPath)
       case af: AndNameFilter =>
         if (af.left == NothingFilter || af.right == NothingFilter) Some(NoPath)
         else if (af.left == AllPassFilter) nameFilterToRelativeGlob(af.right)
@@ -87,13 +87,13 @@ private[sbt] object Globs {
             case (Some(l), Some(r))     => Some(Matcher.and(l, r))
             case _                      => None
           }
-      case ef: ExactFilter => Some(Matcher(ef.matchName))
+      case ef: ExactFilter     => Some(Matcher(ef.matchName))
       case ef: ExtensionFilter =>
         ef.extensions match {
           case extensions if extensions.length == 1 => Some(Matcher(s"*.${extensions.head}"))
           case extensions => Some(Matcher(s"*.${extensions.mkString("{", ",", "}")}"))
         }
-      case NothingFilter => Some(NoPath)
+      case NothingFilter     => Some(NoPath)
       case nf: NotNameFilter =>
         if (nf.fileFilter == NothingFilter) Some(AnyPath)
         else nameFilterToRelativeGlob(nf.fileFilter).map(Matcher.not)

@@ -76,7 +76,7 @@ private[sbt] class WatchServiceBackedObservable(
 
       def getFilesForKey(key: WatchKey): Seq[Event] = key match {
         case null => Vector.empty
-        case k =>
+        case k    =>
           val rawEvents = k.synchronized {
             val events = k.pollEvents.asScala.toVector
             k.reset()

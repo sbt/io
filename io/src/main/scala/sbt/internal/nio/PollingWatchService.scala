@@ -71,11 +71,11 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
   ): Option[WatchKey] = {
     pollQueue.poll() match {
       case null => None
-      case key =>
+      case key  =>
         pollQueue.add(key)
         key.poll() match {
           case r if r.isDefined => r
-          case _ =>
+          case _                =>
             if (batchSize > 1) {
               pollImpl(batchSize - 1, duration, deadline)
             } else if (!deadline.isOverdue) {
@@ -97,7 +97,7 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
     ensureNotClosed()
     registered.get(path) match {
       case Some(k) => k
-      case None =>
+      case None    =>
         val newKey = new PollingWatchKey(path, events: _*)
         registered.put(path, newKey)
         pollQueue.add(newKey)
