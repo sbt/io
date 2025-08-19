@@ -513,16 +513,11 @@ object EventMonitorSpec {
       override def toString: String = string
     }
   }
-  @tailrec
   final def realPath(path: Path, fileName: Option[Path] = None): Path = {
-    val res: Path =
-      try path.toRealPath()
-      catch { case _: IOException => null }
-    if (res != null) fileName.fold(res)(res.resolve)
-    else {
-      val newFileName = path.getFileName
-      realPath(path.getParent, fileName.map(newFileName.resolve) orElse Some(newFileName))
-    }
+    val res =
+      if (Files.exists(path)) path.toRealPath()
+      else path.toAbsolutePath()
+    fileName.fold(res)(res.resolve)
   }
   def pathFilter(path: Path): FileEvent[?] => Boolean = {
     val real = realPath(path)
