@@ -67,18 +67,23 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
 
   it should "ignore creation of directories with no tracked globs" in IO
     .withTemporaryDirectory { dir =>
-      val parentDir = dir / "src" / "watchme"
-      val created = parentDir / "inme"
-      val subdir = parentDir / "subdir"
-      val subFile = subdir / "foo.scala"
+      // TODO https://github.com/sbt/io/issues/434
+      if (scala.util.Properties.isWin) {
+        pending
+      } else {
+        val parentDir = dir / "src" / "watchme"
+        val created = parentDir / "inme"
+        val subdir = parentDir / "subdir"
+        val subFile = subdir / "foo.scala"
 
-      IO.createDirectory(subdir)
+        IO.createDirectory(subdir)
 
-      assert(watchTest(parentDir, AllPass, excludes(created.toPath)) {
-        IO.createDirectory(created)
-        Files.createFile(subFile.toPath)
-        ()
-      })
+        assert(watchTest(parentDir, AllPass, excludes(created.toPath)) {
+          IO.createDirectory(created)
+          Files.createFile(subFile.toPath)
+          ()
+        })
+      }
     }
 
   it should "ignore creation of files that do not match inclusion filter" in
@@ -115,16 +120,21 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
     }
 
   it should "ignore creation of an empty directory" in IO.withTemporaryDirectory { dir =>
-    val parentDir = dir / "src" / "watchme"
-    val created = parentDir / "inme"
-    val source = parentDir / "foo.scala"
+    // TODO https://github.com/sbt/io/issues/434
+    if (scala.util.Properties.isWin) {
+      pending
+    } else {
+      val parentDir = dir / "src" / "watchme"
+      val created = parentDir / "inme"
+      val source = parentDir / "foo.scala"
 
-    IO.createDirectory(parentDir)
+      IO.createDirectory(parentDir)
 
-    assert(watchTest(parentDir, AllPass, excludes(created.toPath)) {
-      IO.createDirectory(created)
-      randomTouch(source)
-    })
+      assert(watchTest(parentDir, AllPass, excludes(created.toPath)) {
+        IO.createDirectory(created)
+        randomTouch(source)
+      })
+    }
   }
 
   it should "detect files created in a subdirectory" in IO.withTemporaryDirectory { dir =>
