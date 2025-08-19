@@ -34,7 +34,7 @@ jobs:
             java: 11
             distribution: temurin
             jobtype: 2
-          - os: windows-latest
+          - os: windows-2025
             java: 8
             distribution: zulu
             jobtype: 3
