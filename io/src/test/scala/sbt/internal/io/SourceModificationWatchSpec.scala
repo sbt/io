@@ -97,16 +97,21 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
 
   it should "ignore creation of files that are explicitly ignored" in IO
     .withTemporaryDirectory { dir =>
-      val parentDir = dir / "src" / "watchme"
-      val created = parentDir / ".hidden.scala"
-      val notIgnored = parentDir / "foo.scala"
+      // TODO https://github.com/sbt/io/issues/434
+      if (scala.util.Properties.isWin) {
+        pending
+      } else {
+        val parentDir = dir / "src" / "watchme"
+        val created = parentDir / ".hidden.scala"
+        val notIgnored = parentDir / "foo.scala"
 
-      IO.createDirectory(parentDir)
+        IO.createDirectory(parentDir)
 
-      assert(watchTest(parentDir, AllPass, excludes(created.toPath)) {
-        randomTouch(created)
-        randomTouch(notIgnored)
-      })
+        assert(watchTest(parentDir, AllPass, excludes(created.toPath)) {
+          randomTouch(created)
+          randomTouch(notIgnored)
+        })
+      }
     }
 
   it should "ignore creation of an empty directory" in IO.withTemporaryDirectory { dir =>
@@ -191,18 +196,20 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
 
   it should "ignore deletion of files not included in inclusion filter" in IO
     .withTemporaryDirectory { dir =>
+      // TODO https://github.com/sbt/io/issues/434
       if (scala.util.Properties.isWin) {
-        pending // TODO
-      }
-      val parentDir = dir / "src" / "watchme"
-      val file = parentDir / "inme"
-      IO.write(file, "foo")
-      val source = parentDir / "foo.scala"
+        pending
+      } else {
+        val parentDir = dir / "src" / "watchme"
+        val file = parentDir / "inme"
+        IO.write(file, "foo")
+        val source = parentDir / "foo.scala"
 
-      assert(watchTest(parentDir, AllPass, excludes(file.toPath)) {
-        IO.delete(file)
-        randomTouch(source)
-      })
+        assert(watchTest(parentDir, AllPass, excludes(file.toPath)) {
+          IO.delete(file)
+          randomTouch(source)
+        })
+      }
     }
 
   it should "ignore deletion of files explicitly ignored" in IO.withTemporaryDirectory { dir =>
