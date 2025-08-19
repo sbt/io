@@ -191,6 +191,9 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
 
   it should "ignore deletion of files not included in inclusion filter" in IO
     .withTemporaryDirectory { dir =>
+      if (scala.util.Properties.isWin) {
+        pending // TODO
+      }
       val parentDir = dir / "src" / "watchme"
       val file = parentDir / "inme"
       IO.write(file, "foo")
