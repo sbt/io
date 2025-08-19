@@ -22,7 +22,7 @@ private[sbt] sealed trait FileEvent[+T] {
   private[sbt] def map[U](f: (Path, T) => U): FileEvent[U] = this match {
     case c: Creation[T] => Creation(path, f(path, c.attributes), c.occurredAt)
     case d: Deletion[T] => Deletion(path, f(path, d.attributes), d.occurredAt)
-    case u: Update[T] =>
+    case u: Update[T]   =>
       Update(path, f(path, u.previousAttributes), f(path, u.attributes), u.occurredAt)
   }
 }

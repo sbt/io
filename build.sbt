@@ -5,7 +5,7 @@ ThisBuild / version := {
   val old = (ThisBuild / version).value
   (sys.env.get("BUILD_VERSION") orElse sys.props.get("sbt.build.version")) match {
     case Some(v) => v
-    case _ =>
+    case _       =>
       if ((ThisBuild / isSnapshot).value) "1.6.0-SNAPSHOT"
       else old
   }
@@ -90,7 +90,7 @@ val io = (project in file("io"))
     console / initialCommands += "\nimport sbt.io._, syntax._",
     mimaPreviousArtifacts := (CrossVersion partialVersion scalaVersion.value match {
       case Some((2, n)) if n >= 13 => Set.empty
-      case _ =>
+      case _                       =>
         Set(
           "1.0.0",
           "1.0.1",
