@@ -32,7 +32,7 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
   def pollDelay: FiniteDuration
   def newObservable(glob: Seq[Glob], logger: Logger): Observable[Event]
   def newObservable(file: File): Observable[Event] =
-    newObservable(Seq(Glob(file.toPath.toRealPath(), RecursiveGlob)), NullLogger)
+    newObservable(Seq(Glob(file.toPath.normalize(), RecursiveGlob)), NullLogger)
   private val maxWait = 2 * pollDelay
   private[this] val random = new scala.util.Random()
   private def randomTouch(file: File, add: Boolean = true): Unit = {
@@ -47,7 +47,7 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
     val file = parentDir / "Foo.scala"
 
     writeNewFile(file, "foo")
-    val real = realPath(file.toPath)
+    val real = file.toPath.normalize()
 
     assert(watchTest(parentDir, pathFilter(real), contains(real)) {
       IO.write(file, "bar")
@@ -375,7 +375,7 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
   it should "ignore valid files in non-recursive subdirectories" in IO.withTemporaryDirectory {
     dir =>
       val file = dir / "src" / "Foo.scala"
-      val globs = dir.toPath.toRealPath().toGlob / "*.scala" :: Nil
+      val globs = dir.toPath.normalize().toGlob / "*.scala" :: Nil
       val observable = newObservable(globs, NullLogger)
       val monitor = FileEventMonitor(observable)
       val valid = dir / "foo.scala"
@@ -396,7 +396,7 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
 
     writeNewFile(file, "foo")
 
-    val globs = parentDir.toPath.toRealPath().toFile.scalaSourceGlobs
+    val globs = parentDir.toPath.normalize().toFile.scalaSourceGlobs
     var lines: Seq[String] = Nil
     val logger: WatchLogger = msg => lines.synchronized(lines :+= msg.toString)
     val observable = newObservable(globs, NullLogger)
@@ -415,7 +415,7 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
     .withTemporaryDirectory { dir =>
       val parentDir = dir / "src" / "watchme"
       Files.createDirectories(parentDir.toPath)
-      val realParent = parentDir.toPath.toRealPath()
+      val realParent = parentDir.toPath.normalize()
       val subdirCount = 200
       val subdirFileCount = 4
 
@@ -480,7 +480,7 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
   def watchTest(base: File, filter: FileEvent[?] => Boolean, check: Seq[FileEvent[?]] => Boolean)(
       modifier: => Unit
   ): Boolean = {
-    val globs = base.toPath.toRealPath().toFile.scalaSourceGlobs
+    val globs = base.toPath.normalize().toFile.scalaSourceGlobs
     val logger = new CachingWatchLogger
     val observable: Observable[Event] = newObservable(globs, logger)
     try {
@@ -513,44 +513,33 @@ object EventMonitorSpec {
       override def toString: String = string
     }
   }
-  @tailrec
-  final def realPath(path: Path, fileName: Option[Path] = None): Path = {
-    val res: Path =
-      try path.toRealPath()
-      catch { case _: IOException => null }
-    if (res != null) fileName.fold(res)(res.resolve)
-    else {
-      val newFileName = path.getFileName
-      realPath(path.getParent, fileName.map(newFileName.resolve) orElse Some(newFileName))
-    }
-  }
   def pathFilter(path: Path): FileEvent[?] => Boolean = {
-    val real = realPath(path)
-    ((_: FileEvent[?]).path == real).label(s"PathFilter($real)")
+    val n = path.normalize()
+    ((_: FileEvent[?]).path == n).label(s"PathFilter($n)")
   }
   def contains(path: Path): Seq[FileEvent[?]] => Boolean = {
-    val real = realPath(path)
-    ((_: Seq[FileEvent[?]]).exists(_.path == real)).label(s"Contains($real)")
+    val n = path.normalize()
+    ((_: Seq[FileEvent[?]]).exists(_.path == n)).label(s"Contains($n)")
   }
   def excludes(path: Path): Seq[FileEvent[?]] => Boolean = {
-    val real = realPath(path)
-    ((s: Seq[FileEvent[?]]) => s.nonEmpty && s.forall(_.path != real)).label(s"Excludes($real)")
+    val n = path.normalize()
+    ((s: Seq[FileEvent[?]]) => s.nonEmpty && s.forall(_.path != n)).label(s"Excludes($n)")
   }
   def includesOnly(path: Path): Seq[FileEvent[?]] => Boolean = {
-    val real = realPath(path)
-    ((s: Seq[FileEvent[?]]) => s.nonEmpty && s.forall(_.path == real)).label(s"IncludesOnly($real)")
+    val n = path.normalize()
+    ((s: Seq[FileEvent[?]]) => s.nonEmpty && s.forall(_.path == n)).label(s"IncludesOnly($n)")
   }
   def isDeletion(path: Path): FileEvent[?] => Boolean = {
-    val real = realPath(path)
+    val n = path.normalize()
     (_: FileEvent[?]) match {
-      case Deletion(p, _) if p == real => true
-      case _                           => false
+      case Deletion(p, _) if p == n => true
+      case _                        => false
     }
   }
   def hasDeletion(path: Path): Seq[FileEvent[?]] => Boolean = {
-    val real = realPath(path)
-    val deletion = isDeletion(real)
-    ((_: Seq[FileEvent[?]]).exists(deletion)).label(s"HasDeletion($real)")
+    val n = path.normalize()
+    val deletion = isDeletion(n)
+    ((_: Seq[FileEvent[?]]).exists(deletion)).label(s"HasDeletion($n)")
   }
 
   trait Logger extends WatchLogger
@@ -571,7 +560,7 @@ object EventMonitorSpec {
   }
   implicit class FileOps(val file: File) extends AnyVal {
     def scalaSourceGlobs: Seq[Glob] =
-      Glob(file.toPath.toRealPath(), RecursiveGlob / "[!.]*.scala") :: Nil
+      Glob(file.toPath.normalize(), RecursiveGlob / "[!.]*.scala") :: Nil
   }
   class CachingWatchLogger extends Logger {
     val lines = new scala.collection.mutable.ArrayBuffer[String]
