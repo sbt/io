@@ -280,7 +280,7 @@ object Glob {
   private object Root {
     implicit val ordering: Ordering[Root] = Ordering.by(_.root)
   }
-  private[file] final case object Empty extends RelativeGlob {
+  private[file] case object Empty extends RelativeGlob {
     override private[file] def matchers: List[RelativeGlob.Matcher] = Nil
     override def matches(path: Path): Boolean = false
   }
