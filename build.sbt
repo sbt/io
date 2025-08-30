@@ -88,83 +88,11 @@ val io = (project in file("io"))
     Test / testForkedParallel := true,
     Compile / generateContrabands / sourceManaged := baseDirectory.value / "src" / "main" / "contraband-scala",
     console / initialCommands += "\nimport sbt.io._, syntax._",
-    mimaPreviousArtifacts := (CrossVersion partialVersion scalaVersion.value match {
-      case Some((2, n)) if n >= 13 => Set.empty
-      case _                       =>
-        Set(
-          "1.0.0",
-          "1.0.1",
-          "1.0.2",
-          "1.1.0",
-          "1.1.1",
-          "1.1.2",
-          "1.1.3",
-          "1.1.4",
-          "1.2.0",
-          "1.3.0",
-          "1.4.0",
-          "1.5.0",
-          "1.6.0",
-          "1.7.0",
-          "1.8.0",
-          "1.9.0",
-          "1.10.0",
-        ) map (version => organization.value %% moduleName.value % version)
-    }),
-    mimaBinaryIssueFilters ++= Seq(
-      exclude[FinalClassProblem]("sbt.internal.io.MacJNA$TimeBuf"),
-      // MiMa doesn't treat effectively final members as final
-      // WORKAROUND typesafehub/migration-manager#162
-      exclude[FinalMethodProblem]("sbt.io.SimpleFilter.accept"),
-      exclude[FinalMethodProblem]("sbt.io.SimpleFileFilter.accept"),
-      // MiMa doesn't understand private inner classes?
-      // method this(sbt.io.PollingWatchService,sbt.io.PollingWatchService#PollingThread,java.nio.file.Watchable,java.util.List)Unit in class sbt.io.PollingWatchService#PollingWatchKey does not have a correspondent in current version
-      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingWatchKey.this"),
-      exclude[IncompatibleMethTypeProblem]("sbt.io.PollingWatchService#PollingWatchKey.this"),
-      // This is a private class
-      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingWatchKey.events"),
-      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingWatchKey.offer"),
-      // This is a private class
-      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingThread.events"),
-      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingThread.initDone"),
-      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingThread.initDone_="),
-      exclude[DirectMissingMethodProblem](
-        "sbt.io.PollingWatchService#PollingThread.keysWithEvents"
-      ),
-      exclude[DirectMissingMethodProblem]("sbt.io.PollingWatchService#PollingThread.getFileTimes"),
-      // moved JavaMilli to sbt.io
-      exclude[MissingClassProblem]("sbt.internal.io.JavaMilli$"),
-      exclude[MissingClassProblem]("sbt.internal.io.JavaMilli"),
-      // These are private classes
-      exclude[MissingClassProblem]("sbt.internal.io.*"),
-      // Replaced non-standard __xstat64() with conformant stat() calls
-      exclude[DirectMissingMethodProblem]("sbt.internal.io.Linux32.*"),
-      exclude[ReversedMissingMethodProblem]("sbt.internal.io.Linux32.*"),
-      exclude[DirectMissingMethodProblem]("sbt.internal.io.Linux64.*"),
-      exclude[ReversedMissingMethodProblem]("sbt.internal.io.Linux64.*"),
-      // protected[this]
-      exclude[DirectMissingMethodProblem]("sbt.io.CopyOptions.copy*"),
-      // private class
-      exclude[MissingClassProblem]("sbt.io.Event"),
-      exclude[MissingClassProblem]("sbt.io.Event$"),
-      exclude[MissingClassProblem]("sbt.io.MacOSXWatchKey"),
-      exclude[MissingClassProblem]("sbt.io.PollingWatchEvent"),
-      exclude[MissingClassProblem]("sbt.io.PollingWatchService$PollingWatchKey"),
-      exclude[MissingClassProblem]("sbt.io.PollingWatchService$PollingThread"),
-      exclude[MissingClassProblem]("sbt.io.PollingWatchService$Overflow$"),
-      // private internal classes whose functionality has been replaced
-      exclude[MissingClassProblem]("sbt.internal.io.EventMonitor*"),
-      exclude[DirectMissingMethodProblem]("sbt.internal.io.EventMonitor.legacy"),
-      exclude[DirectMissingMethodProblem]("sbt.internal.io.EventMonitor.applyImpl"),
-      // private classes that have been removed
-      exclude[MissingClassProblem]("sbt.internal.io.Alternatives$"),
-      exclude[MissingClassProblem]("sbt.internal.io.Alternatives"),
-      exclude[DirectMissingMethodProblem]("sbt.io.NothingFilter.unary_-"),
-      exclude[DirectMissingMethodProblem]("sbt.io.AllPassFilter.unary_-"),
-      exclude[IncompatibleSignatureProblem]("sbt.io.PollingWatchService.pollEvents"),
-      exclude[IncompatibleSignatureProblem]("sbt.io.WatchService#WatchServiceAdapter.pollEvents"),
-      exclude[IncompatibleSignatureProblem]("sbt.io.WatchService.pollEvents"),
-    ),
+    mimaPreviousArtifacts := {
+      Set(
+        "1.10.5",
+      ).map(version => organization.value %% moduleName.value % version)
+    },
     BuildInfoPlugin.buildInfoDefaultSettings, // avoids BuildInfo generated in Compile scope
     addBuildInfoToConfig(Test),
     Test / buildInfoKeys := Seq[BuildInfoKey](target),
