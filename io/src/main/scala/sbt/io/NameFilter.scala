@@ -134,7 +134,7 @@ final class ExtensionFilter(val extensions: String*) extends NameFilter {
     case that: ExtensionFilter => this.set == that.set
     case _                     => false
   }
-  override lazy val hashCode: Int = extensions.hashCode
+  override lazy val hashCode: Int = set.hashCode
 
   /** Constructs a filter that accepts a `File` if it matches either this filter or the given `filter`. */
   override def |(filter: NameFilter): NameFilter = filter match {
