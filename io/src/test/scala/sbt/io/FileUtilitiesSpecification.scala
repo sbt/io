@@ -36,7 +36,7 @@ object WriteContentSpecification extends Properties("Write content") {
 
   private def largeUnzip() = {
     testUnzip[Product]
-    testUnzip[scala.tools.nsc.Global]
+    testUnzip[dotty.tools.backend.jvm.BTypes]
     true
   }
 

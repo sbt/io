@@ -4,11 +4,11 @@ import Keys._
 object Dependencies {
   val scala212 = "2.12.21"
   val scala213 = "2.13.18"
-  val scala3 = "3.3.7"
+  val scala3 = "3.7.4"
 
   val scalaCompiler = Def.setting {
-    val v = if (scalaBinaryVersion.value == "3") scala213 else scalaVersion.value
-    "org.scala-lang" % "scala-compiler" % v
+    val v = scalaVersion.value
+    "org.scala-lang" %% "scala3-compiler" % v
   }
 
   val scalaVerify = "com.eed3si9n.verify" %% "verify" % "1.0.0"
