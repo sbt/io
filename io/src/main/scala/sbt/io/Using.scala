@@ -32,10 +32,11 @@ import java.util.jar.{ JarFile, JarInputStream, JarOutputStream }
 import java.util.zip.{ GZIPInputStream, _ }
 
 import sbt.internal.io.ErrorHandling.translate
+import scala.reflect.ClassTag
 
-abstract class Using[Source, T] {
-  protected def open(src: Source): T
-  def apply[R](src: Source)(f: T => R): R = {
+abstract class Using[Source, A1] {
+  protected def open(src: Source): A1
+  def apply[R](src: Source)(f: A1 => R): R = {
     val resource = open(src)
     try {
       f(resource)
@@ -43,18 +44,17 @@ abstract class Using[Source, T] {
       close(resource)
     }
   }
-  protected def close(out: T): Unit
+  protected def close(out: A1): Unit
 }
 
-import scala.reflect.{ Manifest => SManifest }
-private[sbt] abstract class WrapUsing[Source, T](implicit
-    srcMf: SManifest[Source],
-    targetMf: SManifest[T]
-) extends Using[Source, T] {
-  protected def label[S](m: SManifest[S]) = m.runtimeClass.getSimpleName
+private[sbt] abstract class WrapUsing[Source: ClassTag, T: ClassTag] extends Using[Source, T] {
+  protected def label[S: ClassTag]: String =
+    implicitly[ClassTag[S]].runtimeClass.getSimpleName
   protected def openImpl(source: Source): T
   protected final def open(source: Source): T =
-    translate("Error wrapping " + label(srcMf) + " in " + label(targetMf) + ": ")(openImpl(source))
+    translate(s"Error wrapping ${label[Source]} in ${label[T]}: ")(
+      openImpl(source)
+    )
 }
 private[sbt] trait OpenFile[T] extends Using[File, T] {
   protected def openImpl(file: File): T
@@ -69,16 +69,10 @@ private[sbt] trait OpenFile[T] extends Using[File, T] {
 }
 
 object Using {
-  def wrap[Source, T <: AutoCloseable](openF: Source => T)(implicit
-      srcMf: SManifest[Source],
-      targetMf: SManifest[T]
-  ): Using[Source, T] =
+  def wrap[Source: ClassTag, T <: AutoCloseable: ClassTag](openF: Source => T): Using[Source, T] =
     wrap(openF, closeCloseable)
 
-  def wrap[Source, T](openF: Source => T, closeF: T => Unit)(implicit
-      srcMf: SManifest[Source],
-      targetMf: SManifest[T]
-  ): Using[Source, T] =
+  def wrap[Source: ClassTag, T: ClassTag](openF: Source => T, closeF: T => Unit): Using[Source, T] =
     new WrapUsing[Source, T] {
       def openImpl(source: Source) = openF(source)
       def close(t: T) = closeF(t)
