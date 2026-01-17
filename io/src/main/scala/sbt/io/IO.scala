@@ -551,10 +551,10 @@ object IO {
       if (
         empty.nonEmpty
       ) // looks funny, but this is true if at least one of `dirs` is an empty directory
-        {
-          empty foreach { _.delete() }
-          deleteEmpty(parents(empty))
-        }
+      {
+        empty foreach { _.delete() }
+        deleteEmpty(parents(empty))
+      }
     }
 
     delete(files)
