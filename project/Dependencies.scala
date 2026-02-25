@@ -2,7 +2,7 @@ import sbt._
 import Keys._
 
 object Dependencies {
-  val scala3 = "3.7.4"
+  val scala3 = "3.8.2"
 
   val scalaCompiler = Def.setting {
     val v = scalaVersion.value

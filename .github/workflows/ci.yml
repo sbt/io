@@ -13,13 +13,9 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            java: 8
+            java: 17
             distribution: zulu
             jobtype: 1
-          - os: ubuntu-latest
-            java: 11
-            distribution: temurin
-            jobtype: 2
           - os: ubuntu-latest
             java: 17
             distribution: temurin
@@ -29,11 +25,11 @@ jobs:
             distribution: temurin
             jobtype: 2
           - os: macos-latest
-            java: 11
+            java: 17
             distribution: temurin
             jobtype: 2
           - os: windows-2025
-            java: 8
+            java: 17
             distribution: zulu
             jobtype: 3
     runs-on: ${{ matrix.os }}
