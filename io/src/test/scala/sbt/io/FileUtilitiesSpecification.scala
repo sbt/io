@@ -13,6 +13,7 @@ package sbt.io
 
 import java.io.File
 import org.scalacheck._, Arbitrary.arbitrary, Prop._
+import scala.reflect.ClassTag
 
 object WriteContentSpecification extends Properties("Write content") {
   sys.props.put("jna.nosys", "true")
@@ -54,7 +55,7 @@ object WriteContentSpecification extends Properties("Write content") {
     }
   }
 
-  private def testUnzip[T](implicit mf: Manifest[T]) =
+  private def testUnzip[T](implicit mf: ClassTag[T]) =
     unzipFile(IO.classLocationFileOption(mf.runtimeClass).getOrElse(sys.error(s"$mf")))
 
   private def unzipFile(jar: File) = IO.withTemporaryDirectory(tmp => IO.unzip(jar, tmp))
