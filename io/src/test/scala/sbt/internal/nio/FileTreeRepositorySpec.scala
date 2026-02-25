@@ -22,7 +22,7 @@ import sbt.io.IO
 import sbt.nio.file.syntax.pathToPathOps
 import sbt.nio.file.{ AnyPath, FileAttributes, Glob, RecursiveGlob }
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.duration._
 
 object FileTreeRepositorySpec {

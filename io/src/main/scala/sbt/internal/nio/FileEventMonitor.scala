@@ -17,7 +17,7 @@ import java.util.concurrent.{ ArrayBlockingQueue, ConcurrentHashMap, TimeUnit }
 import sbt.internal.nio.FileEvent.{ Creation, Deletion, Update }
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.duration.{ Deadline => _, _ }
 
 /**

@@ -28,7 +28,7 @@ import sbt.io.PathFinder.GlobPathFinder
 import sbt.nio.file.{ AnyPath, FileAttributes, FileTreeView, Glob }
 import sbt.nio.file.Glob.GlobOps
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.mutable
 
 final class RichFile(val asFile: File) extends AnyVal with RichNioPath {
@@ -599,7 +599,7 @@ private abstract class PathFinderImpl extends PathFinder {
    * If the filesystem changes, two calls to this method might be different.
    */
   override final def get(): Seq[File] = {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     val pathSet: mutable.Set[File] = new java.util.LinkedHashSet[File].asScala
     addTo(pathSet)
     pathSet.toSeq

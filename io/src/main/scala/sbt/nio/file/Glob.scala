@@ -20,7 +20,7 @@ import sbt.nio.file.PathFilter.PathFilterExtensions
 import sbt.nio.file.RelativeGlob.{ PathComponent, SingleComponentMatcher }
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Properties
 import scala.util.matching.Regex
 

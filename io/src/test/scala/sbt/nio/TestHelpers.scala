@@ -13,7 +13,7 @@ package sbt.nio
 
 import java.nio.file.FileSystems
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 object TestHelpers {
   val root = FileSystems.getDefault.getRootDirectories.asScala.head

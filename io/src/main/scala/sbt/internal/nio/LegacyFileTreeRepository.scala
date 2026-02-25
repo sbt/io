@@ -21,7 +21,7 @@ import sbt.io._
 import sbt.nio.file.FileAttributes.NonExistent
 import sbt.nio.file.{ FileAttributes, FileTreeView, Glob }
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.duration._
 
 /**

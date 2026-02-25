@@ -22,7 +22,7 @@ import sbt.nio.file.Glob.GlobOps
 import sbt.nio.file.Glob.Root
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 /**
  * Provides a view into the file system that allows retrieval of the children of a particular path.

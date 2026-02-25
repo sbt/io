@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 import sbt.internal.nio
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.{ immutable, mutable }
 import scala.concurrent.duration.{ Duration, FiniteDuration }
 import scala.util.Properties

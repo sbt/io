@@ -22,7 +22,7 @@ import sbt.io._
 import sbt.nio.file._
 import sbt.nio.file.syntax._
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.duration._
 
 class WatchServiceBackedObservableSpec extends AnyFlatSpec {
