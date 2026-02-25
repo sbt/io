@@ -138,37 +138,37 @@ final class ExtensionFilter(val extensions: String*) extends NameFilter {
 
   /** Constructs a filter that accepts a `File` if it matches either this filter or the given `filter`. */
   override def |(filter: NameFilter): NameFilter = filter match {
-    case that: ExtensionFilter => new ExtensionFilter(this.extensions ++ that.extensions: _*)
+    case that: ExtensionFilter => new ExtensionFilter((this.extensions ++ that.extensions)*)
     case _                     => super.|(filter)
   }
 
   /** Constructs a filter that accepts a `File` if it matches both this filter and the given `filter`. */
   override def &(filter: NameFilter): NameFilter = filter match {
-    case that: ExtensionFilter => new ExtensionFilter(this.extensions intersect that.extensions: _*)
+    case that: ExtensionFilter => new ExtensionFilter(this.extensions.intersect(that.extensions)*)
     case _                     => super.&(filter)
   }
 
   /** Constructs a filter that accepts a `File` if it matches this filter but does not match the given `filter`. */
   override def -(filter: NameFilter): NameFilter = filter match {
-    case that: ExtensionFilter => new ExtensionFilter(this.extensions diff that.extensions: _*)
+    case that: ExtensionFilter => new ExtensionFilter(this.extensions.diff(that.extensions)*)
     case _                     => super.-(filter)
   }
 
   /** Constructs a filter that accepts a `File` if it matches either this filter or the given `filter`. */
   override def ||(filter: FileFilter): FileFilter = filter match {
-    case that: ExtensionFilter => new ExtensionFilter(this.extensions ++ that.extensions: _*)
+    case that: ExtensionFilter => new ExtensionFilter((this.extensions ++ that.extensions)*)
     case _                     => super.||(filter)
   }
 
   /** Constructs a filter that accepts a `File` if it matches both this filter and the given `filter`. */
   override def &&(filter: FileFilter): FileFilter = filter match {
-    case that: ExtensionFilter => new ExtensionFilter(this.extensions intersect that.extensions: _*)
+    case that: ExtensionFilter => new ExtensionFilter(this.extensions.intersect(that.extensions)*)
     case _                     => super.&&(filter)
   }
 
   /** Constructs a filter that accepts a `File` if it matches this filter but does not match the given `filter`. */
   override def --(filter: FileFilter): FileFilter = filter match {
-    case that: ExtensionFilter => new ExtensionFilter(this.extensions diff that.extensions: _*)
+    case that: ExtensionFilter => new ExtensionFilter(this.extensions.diff(that.extensions)*)
     case _                     => super.--(filter)
   }
   override def toString: String = s"ExtensionFilter(${extensions mkString ","})"
