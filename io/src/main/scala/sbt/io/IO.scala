@@ -220,12 +220,12 @@ object IO {
       case _ => None
     }
 
-  private[this] def uriToFile(uriString: String): File = uriToFile(new URI(uriString))
+  private def uriToFile(uriString: String): File = uriToFile(new URI(uriString))
 
   /**
    * Converts the given file URI to a File.
    */
-  private[this] def uriToFile(uri: URI): File = {
+  private def uriToFile(uri: URI): File = {
     val part = uri.getSchemeSpecificPart
     // scheme might be omitted for relative URI reference.
     assert(
@@ -1237,7 +1237,7 @@ object IO {
   /** Returns `true` if the filesystem supports user-defined file attribute view. */
   lazy val hasUserDefinedFileAttributeView: Boolean = supportedFileAttributeViews.contains("user")
 
-  private[this] lazy val supportedFileAttributeViews: Set[String] = {
+  private lazy val supportedFileAttributeViews: Set[String] = {
     FileSystems.getDefault.supportedFileAttributeViews.asScala.toSet
   }
 

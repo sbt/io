@@ -320,11 +320,10 @@ object FileTreeView {
     params.foreach(p => remainingGlobs.add(p._3))
     val remainingPaths = new util.LinkedList[Path]()
     new Iterator[(Path, FileAttributes)] {
-      private[this] val buffer = new util.LinkedList[(Path, FileAttributes)]
-      private[this] val maybeAdd: ((Path, FileAttributes)) => Unit = {
-        case pair @ (path, attributes) =>
-          if (totalFilter(path, attributes)) buffer.add(pair)
-          ()
+      private val buffer = new util.LinkedList[(Path, FileAttributes)]
+      private val maybeAdd: ((Path, FileAttributes)) => Unit = { case pair @ (path, attributes) =>
+        if (totalFilter(path, attributes)) buffer.add(pair)
+        ()
       }
       private def listPath(path: Path): Unit = {
         try {

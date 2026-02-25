@@ -174,7 +174,7 @@ abstract class Mapper {
       pair relativeTo(baseDirectory)
   )
 
-  private[this] def fold[A, B, T](zero: A => Option[B], in: Iterable[T])(
+  private def fold[A, B, T](zero: A => Option[B], in: Iterable[T])(
       f: T => A => Option[B]
   ): A => Option[B] =
     in.foldLeft(zero)((mapper, base) => a => f(base)(a) orElse mapper(a))

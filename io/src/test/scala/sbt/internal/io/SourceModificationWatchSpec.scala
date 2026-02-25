@@ -34,7 +34,7 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
   def newObservable(file: File): Observable[Event] =
     newObservable(Seq(Glob(file.toPath.toRealPath(), RecursiveGlob)), NullLogger)
   private val maxWait = 2 * pollDelay
-  private[this] val random = new scala.util.Random()
+  private val random = new scala.util.Random()
   private def randomTouch(file: File, add: Boolean = true): Unit = {
     IO.touch(file)
     val rand = (10000 + random.nextInt(50000)) * (if (add) 1 else -1)

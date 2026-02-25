@@ -83,7 +83,7 @@ private[sbt] final class WatchState private (
     private[sbt] val service: WatchService,
     private[sbt] val registered: Map[Path, WatchKey]
 ) extends AutoCloseable {
-  private[this] val closed = new AtomicBoolean(false)
+  private val closed = new AtomicBoolean(false)
   def accept(p: Path): Boolean = sources.exists(_.accept(p))
   def unregister(path: Path): Unit = service match {
     case s: Unregisterable => s.unregister(path)

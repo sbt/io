@@ -39,7 +39,7 @@ private[nio] object SwovalConverters {
   }
 }
 private[sbt] object SwovalFileTreeView extends FileTreeView.Nio[FileAttributes] {
-  private[this] val view = FileTreeViews.getDefault(true)
+  private val view = FileTreeViews.getDefault(true)
   override def list(path: Path): Seq[(Path, FileAttributes)] =
     Retry(
       {

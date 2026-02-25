@@ -15,9 +15,9 @@ import java.io.Writer
 
 /** A `Writer` that avoids constructing the underlying `Writer` with `make` until a method other than `close` is called on this `Writer`. */
 private[sbt] final class DeferredWriter(make: => Writer) extends Writer {
-  private[this] var opened = false
-  private[this] var delegate0: Writer = _
-  private[this] def delegate: Writer = synchronized {
+  private var opened = false
+  private var delegate0: Writer = _
+  private def delegate: Writer = synchronized {
     if (delegate0 eq null) {
       delegate0 = make
       opened = true

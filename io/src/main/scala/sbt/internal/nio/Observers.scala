@@ -86,9 +86,9 @@ private[sbt] class Observers[T] extends Observer[T] with Observable[T] {
       ()
     }
   }
-  private[this] val id = new AtomicInteger(0)
-  private[this] val observers = new ConcurrentHashMap[Int, Observer[T]]
-  private[this] val observables = new WeakHashMap[AutoCloseable, Unit]
+  private val id = new AtomicInteger(0)
+  private val observers = new ConcurrentHashMap[Int, Observer[T]]
+  private val observables = new WeakHashMap[AutoCloseable, Unit]
 
   private[sbt] def addObservable(observable: Observable[T]): AutoCloseable =
     observables.synchronized {

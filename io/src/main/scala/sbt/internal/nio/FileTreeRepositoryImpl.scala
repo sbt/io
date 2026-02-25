@@ -35,8 +35,8 @@ import scala.util.Properties
  * @tparam T the type of the values.
  */
 private[sbt] class FileTreeRepositoryImpl[T] extends FileTreeRepository[FileAttributes] {
-  private[this] val closed = new AtomicBoolean(false)
-  private[this] val underlying = FileTreeRepositories.get[FileAttributes](
+  private val closed = new AtomicBoolean(false)
+  private val underlying = FileTreeRepositories.get[FileAttributes](
     (typedPath: STypedPath) => {
       FileAttributes(
         isDirectory = typedPath.isDirectory,
@@ -47,9 +47,9 @@ private[sbt] class FileTreeRepositoryImpl[T] extends FileTreeRepository[FileAttr
     },
     true
   )
-  private[this] val observers = new Observers[FileEvent[FileAttributes]]
-  private[this] val registered = ConcurrentHashMap.newKeySet[NioPath].asScala
-  private[this] val isMac = Properties.isMac
+  private val observers = new Observers[FileEvent[FileAttributes]]
+  private val registered = ConcurrentHashMap.newKeySet[NioPath].asScala
+  private val isMac = Properties.isMac
 
   underlying.addCacheObserver(new CacheObserver[FileAttributes] {
     override def onCreate(newEntry: FileTreeDataViews.Entry[FileAttributes]): Unit = {
@@ -140,7 +140,7 @@ private[sbt] class FileTreeRepositoryImpl[T] extends FileTreeRepository[FileAttr
   override def close(): Unit = if (closed.compareAndSet(false, true)) {
     underlying.close()
   }
-  private[this] def throwIfClosed(method: String): Unit =
+  private def throwIfClosed(method: String): Unit =
     if (closed.get()) {
       val ex = new IllegalStateException(s"Tried to invoke $method on closed repository $this")
       ex.printStackTrace()

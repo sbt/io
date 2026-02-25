@@ -31,10 +31,10 @@ import scala.concurrent.duration._
  */
 private[sbt] class LegacyFileTreeRepository(logger: WatchLogger, watchService: WatchService)
     extends FileTreeRepository[FileAttributes] {
-  private[this] val view: FileTreeView.Nio[FileAttributes] = FileTreeView.default
-  private[this] val globs = ConcurrentHashMap.newKeySet[Glob].asScala
-  private[this] val fileCache = new FileCache(p => FileAttributes(p).getOrElse(NonExistent), globs)
-  private[this] val observable
+  private val view: FileTreeView.Nio[FileAttributes] = FileTreeView.default
+  private val globs = ConcurrentHashMap.newKeySet[Glob].asScala
+  private val fileCache = new FileCache(p => FileAttributes(p).getOrElse(NonExistent), globs)
+  private val observable
       : Observable[FileEvent[FileAttributes]] & Registerable[FileEvent[FileAttributes]] =
     new WatchServiceBackedObservable(
       new NewWatchState(globs, watchService, new ConcurrentHashMap[Path, WatchKey].asScala),
@@ -42,8 +42,8 @@ private[sbt] class LegacyFileTreeRepository(logger: WatchLogger, watchService: W
       closeService = true,
       logger
     )
-  private[this] val observers = new Observers[FileEvent[FileAttributes]]
-  private[this] val handle =
+  private val observers = new Observers[FileEvent[FileAttributes]]
+  private val handle =
     observable.addObserver((event: FileEvent[FileAttributes]) => {
       val attributes = event match {
         case _: Deletion[?] => NonExistent
