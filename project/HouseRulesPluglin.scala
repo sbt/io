@@ -12,9 +12,7 @@ object HouseRulesPlugin extends AutoPlugin {
   lazy val baseSettings: Seq[Def.Setting[?]] = Seq(
     scalacOptions ++= Seq("-encoding", "utf8"),
     scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked"),
-    scalacOptions += "-language:higherKinds",
     scalacOptions += "-language:implicitConversions",
-    scalacOptions ++= "-Xfuture".ifScala213OrMinus.value.toList,
     scalacOptions ++= "-Werror"
       .ifScala(v => {
         sys.props.get("sbt.build.fatal") match {
@@ -24,14 +22,6 @@ object HouseRulesPlugin extends AutoPlugin {
       })
       .value
       .toList,
-    scalacOptions ++= "-Xsource:3".ifScala213OrMinus.value.toList,
-    scalacOptions ++= "-Wconf:msg=package object inheritance is deprecated:warning".ifScala213OrMinus.value.toList,
-    scalacOptions ++= "-Yno-adapted-args".ifScala212OrMinus.value.toList,
-    scalacOptions ++= "-Ywarn-dead-code".ifScala213OrMinus.value.toList,
-    scalacOptions ++= "-Ywarn-numeric-widen".ifScala213OrMinus.value.toList,
-    scalacOptions ++= "-Ywarn-value-discard".ifScala213OrMinus.value.toList,
-  ) ++ Seq(Compile, Test).flatMap(c =>
-    (c / console / scalacOptions) --= Seq("-Ywarn-unused-import", "-Xlint")
   )
 
   private def scalaPartV = Def setting (CrossVersion partialVersion scalaVersion.value)
@@ -39,15 +29,5 @@ object HouseRulesPlugin extends AutoPlugin {
   private implicit final class AnyWithIfScala[A](val __x: A) {
     def ifScala(p: Long => Boolean) =
       Def setting (scalaPartV.value collect { case (2, y) if p(y) => __x })
-    def ifScalaLte(v: Long) = ifScala(_ <= v)
-    def ifScalaGte(v: Long) =
-      Def.setting(
-        scalaPartV.value.collect {
-          case (2, y) if y >= v => __x
-          case (n, _) if n >= 3 => __x
-        }
-      )
-    def ifScala212OrMinus = ifScalaLte(12)
-    def ifScala213OrMinus = ifScalaLte(13)
   }
 }
