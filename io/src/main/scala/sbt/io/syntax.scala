@@ -40,5 +40,5 @@ object syntax extends IOSyntax0 {
   def url(s: String): URL = uri(s).toURL
 
   implicit def fileToRichFile(file: File): RichFile = new RichFile(file)
-  implicit def filesToFinder(cc: Traversable[File]): PathFinder = PathFinder.strict(cc)
+  implicit def filesToFinder(cc: Iterable[File]): PathFinder = PathFinder.strict(cc)
 }

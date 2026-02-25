@@ -339,11 +339,11 @@ object PathFinder {
 
   def apply(file: File): PathFinder = new SingleFile(file)
 
-  def apply(files: => Traversable[File]): PathFinder = new PathFinder {
+  def apply(files: => Iterable[File]): PathFinder = new PathFinder {
     override def get(): Seq[File] = files.toIndexedSeq.distinct
   }
 
-  def strict(files: Traversable[File]): PathFinder = apply(files)
+  def strict(files: Iterable[File]): PathFinder = apply(files)
 
   sealed trait Combinator extends Any {
 
@@ -357,7 +357,7 @@ object PathFinder {
      * Applies `mapper` to each path selected by this PathFinder
      * and returns the path paired with the non-empty result.
      * If the result is empty (None) and `errorIfNone` is true, an exception is thrown.
-     * If `errorIfNone` is false, the path is dropped from the returned Traversable.
+     * If `errorIfNone` is false, the path is dropped from the returned Iterable.
      */
     def pair[T](mapper: File => Option[T], errorIfNone: Boolean = true): Seq[(File, T)]
 
@@ -544,7 +544,7 @@ sealed trait PathFinderDefaults extends PathFinder.Combinator {
    * Applies `mapper` to each path selected by this PathFinder
    * and returns the path paired with the non-empty result.
    * If the result is empty (None) and `errorIfNone` is true, an exception is thrown.
-   * If `errorIfNone` is false, the path is dropped from the returned Traversable.
+   * If `errorIfNone` is false, the path is dropped from the returned Iterable.
    */
   def pair[T](mapper: File => Option[T], errorIfNone: Boolean = true): Seq[(File, T)] = {
     val apply = if (errorIfNone) (a: File) => mapper(a).orElse(fail(a)) else mapper
