@@ -29,7 +29,7 @@ ThisBuild / headerLicense := Some(
      |""".stripMargin
   )
 )
-ThisBuild / scalafmtOnCompile := true
+ThisBuild / scalafmtOnCompile := !insideCI.value
 ThisBuild / developers := List(
   Developer("eatkins", "Ethan Atkins", "@eatkins", url("https://www.ethanatkins.com/")),
   Developer("harrah", "Mark Harrah", "@harrah", url("https://github.com/harrah")),
