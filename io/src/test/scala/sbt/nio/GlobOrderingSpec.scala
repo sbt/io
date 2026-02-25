@@ -19,7 +19,7 @@ import sbt.nio.file.RelativeGlob.Matcher
 import sbt.nio.file._
 import sbt.nio.file.syntax._
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 class GlobOrderingSpec extends AnyFlatSpec {
   "Globs" should "be ordered" in IO.withTemporaryDirectory { dir =>

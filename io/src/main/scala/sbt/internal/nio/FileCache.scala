@@ -22,7 +22,7 @@ import sbt.nio.file.FileAttributes.NonExistent
 import sbt.nio.file.{ AnyPath, FileAttributes, FileTreeView, Glob, RecursiveGlob }
 import sbt.nio.file.Glob.{ GlobOps => GlobGlobOps }
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.mutable
 
 private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob]) {
