@@ -628,7 +628,7 @@ private abstract class FilterFiles extends PathFinderImpl with FileFilter {
 
   final def accept(file: File): Boolean = filter.accept(file)
 
-  private[this] val getFiles: (File, FileFilter) => Seq[File] = Path.defaultChildHandler
+  private val getFiles: (File, FileFilter) => Seq[File] = Path.defaultChildHandler
   protected def handleFile(file: File, fileSet: mutable.Set[File]): Unit =
     for (matchedFile <- getFiles(file, this))
       fileSet += new File(file, matchedFile.getName)

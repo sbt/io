@@ -39,12 +39,12 @@ private[sbt] class WatchServiceBackedObservable(
 ) extends Registerable[FileEvent[FileAttributes]]
     with Observable[FileEvent[FileAttributes]] {
   import WatchServiceBackedObservable.eventThreadId
-  private[this] type Event = FileEvent[FileAttributes]
-  private[this] val closed = new AtomicBoolean(false)
-  private[this] val observers = new Observers[FileEvent[FileAttributes]]
-  private[this] val fileCache = new FileCache(p => FileAttributes(p).getOrElse(NonExistent))
-  private[this] val view: FileTreeView.Nio[FileAttributes] = FileTreeView.default
-  private[this] val thread: Thread = {
+  private type Event = FileEvent[FileAttributes]
+  private val closed = new AtomicBoolean(false)
+  private val observers = new Observers[FileEvent[FileAttributes]]
+  private val fileCache = new FileCache(p => FileAttributes(p).getOrElse(NonExistent))
+  private val view: FileTreeView.Nio[FileAttributes] = FileTreeView.default
+  private val thread: Thread = {
     val latch = new CountDownLatch(1)
     new Thread(s"watch-state-event-thread-${eventThreadId.incrementAndGet()}") {
       setDaemon(true)

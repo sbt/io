@@ -29,9 +29,9 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
   def this(converter: Path => T) =
     this(converter, ConcurrentHashMap.newKeySet[Glob].asScala)
   import FileCache._
-  private[this] val files =
+  private val files =
     Collections.synchronizedSortedMap(new ConcurrentSkipListMap[Path, T])
-  private[this] val view: FileTreeView.Nio[FileAttributes] = FileTreeView.default
+  private val view: FileTreeView.Nio[FileAttributes] = FileTreeView.default
   private[nio] def update(
       path: Path,
       attributes: FileAttributes,
@@ -108,12 +108,12 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
       }
     }
   }
-  private[this] def remove(subMap: util.SortedMap[Path, T]): Seq[(Path, T)] = {
+  private def remove(subMap: util.SortedMap[Path, T]): Seq[(Path, T)] = {
     val allEntries = subMap.asScala.toIndexedSeq
     allEntries.foreach { case (p, _) => subMap.remove(p) }
     allEntries
   }
-  private[this] def add(glob: Glob, fileAttributes: FileAttributes): Unit = {
+  private def add(glob: Glob, fileAttributes: FileAttributes): Unit = {
     if (fileAttributes != NonExistent) {
       val newFiles = new util.HashMap[Path, T]
       val asScala = newFiles.asScala
@@ -123,13 +123,13 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
       files.putAll(newFiles)
     }
   }
-  private[this] def globInclude: Path => Boolean = { path =>
+  private def globInclude: Path => Boolean = { path =>
     globs.exists(g => g.matches(path) || g.base == path)
   }
-  private[this] def globExcludes: Path => Boolean = { path =>
+  private def globExcludes: Path => Boolean = { path =>
     !globs.exists(g => g.matches(path) || g.base == path)
   }
-  private[this] def updateGlob(path: Path): Glob = {
+  private def updateGlob(path: Path): Glob = {
     val depth = globs.toIndexedSeq.view
       .map(g =>
         if (path.startsWith(g.base)) {
@@ -147,9 +147,9 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
       case d            => (1 to d).foldLeft(Glob(path)) { case (g, _) => g / AnyPath }
     }
   }
-  private[this] val ceilingChar = (java.io.File.separatorChar.toInt + 1).toChar
+  private val ceilingChar = (java.io.File.separatorChar.toInt + 1).toChar
   // This is a mildly hacky way of specifying an upper bound for children of a path
-  private[this] def ceiling(path: Path): Path = Paths.get(path.toString + ceilingChar)
+  private def ceiling(path: Path): Path = Paths.get(path.toString + ceilingChar)
 }
 private[nio] object FileCache {
   private implicit class GlobOps(val glob: Glob) extends AnyVal {

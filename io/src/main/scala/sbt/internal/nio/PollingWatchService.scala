@@ -33,13 +33,13 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
     extends WatchService
     with Unregisterable {
   def this(delay: FiniteDuration) = this(delay, TimeSource.default)
-  private[this] implicit def ts: TimeSource = timeSource
-  private[this] val closed = new AtomicBoolean(false)
-  private[this] val registered = new ConcurrentHashMap[Path, PollingWatchKey].asScala
-  private[this] val lastModifiedConverter: Path => Long = p => IO.getModifiedTimeOrZero(p.toFile)
-  private[this] val pollQueue: util.Queue[PollingWatchKey] =
+  private implicit def ts: TimeSource = timeSource
+  private val closed = new AtomicBoolean(false)
+  private val registered = new ConcurrentHashMap[Path, PollingWatchKey].asScala
+  private val lastModifiedConverter: Path => Long = p => IO.getModifiedTimeOrZero(p.toFile)
+  private val pollQueue: util.Queue[PollingWatchKey] =
     new LinkedBlockingDeque[PollingWatchKey]
-  private[this] val random = new Random()
+  private val random = new Random()
   override def close(): Unit = if (closed.compareAndSet(false, true)) {
     registered.clear()
   }
@@ -120,19 +120,19 @@ private[sbt] class PollingWatchService(delay: FiniteDuration, timeSource: TimeSo
       private[PollingWatchService] val path: Path,
       eventKinds: WatchEvent.Kind[Path]*
   ) extends WatchKey {
-    private[this] val events =
+    private val events =
       new ArrayBlockingQueue[FileEvent[Long]](256)
-    private[this] val hasOverflow = new AtomicBoolean(false)
-    private[this] lazy val acceptCreate = eventKinds.contains(ENTRY_CREATE)
-    private[this] lazy val acceptDelete = eventKinds.contains(ENTRY_DELETE)
-    private[this] lazy val acceptModify = eventKinds.contains(ENTRY_MODIFY)
-    private[this] val glob = Glob(path, AnyPath)
-    private[this] val fileCache =
+    private val hasOverflow = new AtomicBoolean(false)
+    private lazy val acceptCreate = eventKinds.contains(ENTRY_CREATE)
+    private lazy val acceptDelete = eventKinds.contains(ENTRY_DELETE)
+    private lazy val acceptModify = eventKinds.contains(ENTRY_MODIFY)
+    private val glob = Glob(path, AnyPath)
+    private val fileCache =
       new FileCache[Long](lastModifiedConverter)
     fileCache.register(glob)
-    private[this] def nextPollTime: Deadline =
+    private def nextPollTime: Deadline =
       Deadline.now + random.nextInt(2 * delay.toMillis.toInt).millis
-    private[this] val lastPolled = new AtomicReference(nextPollTime)
+    private val lastPolled = new AtomicReference(nextPollTime)
     override def cancel(): Unit = {
       reset()
       registered.remove(path)

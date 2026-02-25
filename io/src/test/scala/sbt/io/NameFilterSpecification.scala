@@ -43,7 +43,7 @@ object NameFilterSpecification extends Properties("NameFilter") {
    */
   private def stripAsterisksAndControl(s: String) = (s filter validChar).toString
 
-  private[this] def validChar(c: Char) = (
+  private def validChar(c: Char) = (
     !java.lang.Character.isISOControl(c)
       && c != '*'
       && !Character.isHighSurrogate(c)

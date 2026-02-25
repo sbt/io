@@ -83,7 +83,7 @@ sealed trait Glob {
 }
 
 object Glob {
-  private[this] def comp[T](left: T, right: T)(implicit ordering: Ordering[T]): Int =
+  private def comp[T](left: T, right: T)(implicit ordering: Ordering[T]): Int =
     ordering.compare(left, right)
 
   /**
@@ -337,7 +337,7 @@ object Glob {
     private[sbt] case object Error extends RelativeGlobViewOption
     private[sbt] case object Ignore extends RelativeGlobViewOption
   }
-  private[this] def errorMessage(relative: Glob, warn: Boolean): String = {
+  private def errorMessage(relative: Glob, warn: Boolean): String = {
     val prefix = if (warn) "Warning" else "Error"
     val action =
       if (warn) "To disable this warning, "
@@ -528,11 +528,11 @@ object Glob {
      */
     def toGlob: Glob = new PathOps(file.toPath).toGlob
   }
-  private[this] val windowsEscapable = "(){}"
-  private[this] val allMeta = "*{([?"
+  private val windowsEscapable = "(){}"
+  private val allMeta = "*{([?"
   private[file] val hasMeta: String => Boolean = _.exists(allMeta.contains(_))
   private[file] val isWin = Properties.isWin
-  private[this] val splitter: (String, Boolean) => List[String] = {
+  private val splitter: (String, Boolean) => List[String] = {
     if (Glob.isWin) { (glob, isRegex) =>
       {
         val stringBuilder = new StringBuilder(glob.length)
@@ -904,11 +904,11 @@ object RelativeGlob {
     override def hashCode: Int = glob.hashCode
   }
   private final class GlobMatcher(override val glob: String) extends SingleComponentMatcher {
-    private[this] val (prefixString, pattern) = glob.indexOf(":") match {
+    private val (prefixString, pattern) = glob.indexOf(":") match {
       case -1 => ("glob", glob)
       case i  => (glob.substring(0, i), glob.substring(i + 1))
     }
-    private[this] val matcher = FileSystems.getDefault.getPathMatcher(s"$prefixString:$pattern")
+    private val matcher = FileSystems.getDefault.getPathMatcher(s"$prefixString:$pattern")
     override def matches(path: Path): Boolean = matcher.matches(path)
     override def equals(o: Any): Boolean = o match {
       case that: GlobMatcher => this.glob == that.glob

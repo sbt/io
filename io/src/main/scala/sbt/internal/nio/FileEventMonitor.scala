@@ -223,7 +223,7 @@ private[sbt] object FileEventMonitor {
       retentionPeriod: FiniteDuration
   )(implicit timeSource: TimeSource)
       extends FileEventMonitor[FileEvent[T]] {
-    private[this] val antiEntropyDeadlines = new ConcurrentHashMap[JPath, Deadline].asScala
+    private val antiEntropyDeadlines = new ConcurrentHashMap[JPath, Deadline].asScala
     /*
      * It is very common for file writes to be implemented as a move, which manifests as a delete
      * followed by a write. In sbt, this can manifest as continuous builds triggering for the delete
@@ -234,8 +234,8 @@ private[sbt] object FileEventMonitor {
      * creation is detected. This provides a reasonable compromise between low latency and
      * correctness.
      */
-    private[this] val quarantinedEvents = new ConcurrentHashMap[JPath, FileEvent[T]].asScala
-    private[this] def quarantineDuration = {
+    private val quarantinedEvents = new ConcurrentHashMap[JPath, FileEvent[T]].asScala
+    private def quarantineDuration = {
       val now = Deadline.now
       val waits = quarantinedEvents.map(_._2.occurredAt + quarantinePeriod - now).toVector
       if (waits.isEmpty) None else Some(waits.min)
@@ -245,7 +245,7 @@ private[sbt] object FileEventMonitor {
         filter: FileEvent[T] => Boolean
     ): Seq[FileEvent[T]] = pollImpl(duration, filter)
     @tailrec
-    private[this] final def pollImpl(
+    private final def pollImpl(
         duration: Duration,
         filter: FileEvent[T] => Boolean
     ): Seq[FileEvent[T]] = {
