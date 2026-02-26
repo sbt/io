@@ -65,9 +65,9 @@ lazy val ioRoot = (project in file("."))
         |  /_/\____/ 
         |Welcome to the build for sbt/io.
         |""".stripMargin +
-        (if (sys.props("java.specification.version") != "1.8")
+        (if (sys.props("java.specification.version") != "17")
            s"""!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-               |  Java versions is ${sys.props("java.specification.version")}. We recommend 1.8.
+               |  Java versions is ${sys.props("java.specification.version")}. We recommend 17.
                |!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!""".stripMargin
          else "")
     },
