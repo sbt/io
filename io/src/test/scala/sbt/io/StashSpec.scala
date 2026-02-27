@@ -54,7 +54,7 @@ class StashSpec extends AnyFlatSpec with Matchers {
       case _: TestError | _: TestException | _: TestRuntimeException => false
     }
 
-  def allCorrect(s: Seq[File]): Unit = (s.toList zip TestFiles.toList).foreach((correct _).tupled)
+  def allCorrect(s: Seq[File]): Unit = (s.toList zip TestFiles.toList).foreach(correct.tupled)
 
   def correct(check: File, ref: (File, String)): Unit = {
     assert(check.exists)

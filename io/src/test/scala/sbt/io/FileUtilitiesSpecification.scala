@@ -18,12 +18,12 @@ import scala.reflect.ClassTag
 object WriteContentSpecification extends Properties("Write content") {
   sys.props.put("jna.nosys", "true")
 
-  property("Round trip string") = forAll(writeAndCheckString _)
-  property("Round trip bytes") = forAll(writeAndCheckBytes _)
-  property("Write string overwrites") = forAll(overwriteAndCheckStrings _)
-  property("Write bytes overwrites") = forAll(overwriteAndCheckBytes _)
-  property("Append string appends") = forAll(appendAndCheckStrings _)
-  property("Append bytes appends") = forAll(appendAndCheckBytes _)
+  property("Round trip string") = forAll(writeAndCheckString)
+  property("Round trip bytes") = forAll(writeAndCheckBytes)
+  property("Write string overwrites") = forAll(overwriteAndCheckStrings)
+  property("Write bytes overwrites") = forAll(overwriteAndCheckBytes)
+  property("Append string appends") = forAll(appendAndCheckStrings)
+  property("Append bytes appends") = forAll(appendAndCheckBytes)
   property("Unzip doesn't stack overflow") = largeUnzip()
   property("Unzip errors given parent traversal") = testZipSlip()
 
