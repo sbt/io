@@ -111,7 +111,7 @@ private[sbt] class MacOSXWatchService extends WatchService with Unregisterable {
     }
 
   override def unregister(path: JPath): Unit = {
-    keys.remove(resolve(path)) foreach (_.cancel())
+    keys.remove(resolve(path)).foreach(_.cancel())
   }
 
   override def close(): Unit = if (isClosed.compareAndSet(false, true)) {

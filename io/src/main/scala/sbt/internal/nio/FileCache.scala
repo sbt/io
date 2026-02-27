@@ -94,7 +94,7 @@ private[nio] class FileCache[+T](converter: Path => T, globs: mutable.Set[Glob])
       case Int.MaxValue => Glob(glob.base, RecursiveGlob)
       case d            => (1 to d).foldLeft(Glob(glob.base)) { case (g, _) => g / AnyPath }
     }
-    if (!globs.exists(_ covers unfiltered) && globs.add(unfiltered)) {
+    if (!globs.exists(_.covers(unfiltered)) && globs.add(unfiltered)) {
       FileAttributes(glob.base).foreach(add(unfiltered, _))
     }
   }

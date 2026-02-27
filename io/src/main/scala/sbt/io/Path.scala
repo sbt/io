@@ -296,7 +296,7 @@ object Path extends Mapper {
   def makeString(paths: Seq[File]): String = makeString(paths, File.pathSeparator)
   def makeString(paths: Seq[File], sep: String): String = {
     val separated = paths.map(_.getAbsolutePath)
-    separated.find(_ contains sep).foreach(p => sys.error(s"Path '$p' contains separator '$sep'"))
+    separated.find(_.contains(sep)).foreach(p => sys.error(s"Path '$p' contains separator '$sep'"))
     separated.mkString(sep)
   }
   def newerThan(a: File, b: File): Boolean =
@@ -547,7 +547,7 @@ sealed trait PathFinderDefaults extends PathFinder.Combinator {
    * If `errorIfNone` is false, the path is dropped from the returned Traversable.
    */
   def pair[T](mapper: File => Option[T], errorIfNone: Boolean = true): Seq[(File, T)] = {
-    val apply = if (errorIfNone) (a: File) => mapper(a) orElse fail(a) else mapper
+    val apply = if (errorIfNone) (a: File) => mapper(a).orElse(fail(a)) else mapper
     for (file <- get(); mapped <- apply(file)) yield file -> mapped
   }
 
@@ -564,7 +564,7 @@ sealed trait PathFinderDefaults extends PathFinder.Combinator {
    * Only keeps paths for which `f` returns true.
    * It is non-strict, so it is not evaluated until the returned finder is evaluated.
    */
-  override final def filter(f: File => Boolean): PathFinder = PathFinder(get() filter f)
+  override final def filter(f: File => Boolean): PathFinder = PathFinder(get().filter(f))
 
   /** Non-strict flatMap: no evaluation occurs until the returned finder is evaluated. */
   override final def flatMap(f: File => PathFinder): PathFinder =

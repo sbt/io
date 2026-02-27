@@ -61,14 +61,14 @@ private[nio] trait Deadline extends Comparable[Deadline] {
   final def <=(that: Deadline): Boolean = this.compareTo(that) <= 0
   final def >(that: Deadline): Boolean = this.compareTo(that) > 0
   final def >=(that: Deadline): Boolean = this.compareTo(that) >= 0
-  override def compareTo(that: Deadline): Int = this.value compareTo that.value
+  override def compareTo(that: Deadline): Int = this.value.compareTo(that.value)
 }
 private[nio] object Deadline {
   def now(implicit timeSource: TimeSource): Deadline = timeSource.now
   private[nio] object Inf extends Deadline {
     override val value: Duration = Duration.Inf
     override def isOverdue: Boolean = false
-    override def compareTo(o: Deadline): Int = this.value compareTo o.value
+    override def compareTo(o: Deadline): Int = this.value.compareTo(o.value)
     override def +(duration: FiniteDuration): Deadline = this
     override def -(duration: FiniteDuration): Deadline = this
   }

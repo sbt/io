@@ -60,7 +60,7 @@ private[sbt] class WatchServiceBackedObservable(
         } catch {
           case NonFatal(e) =>
             logger.debug(
-              s"Error getting files from ${s.service}: $e\n${e.getStackTrace mkString "\n"}"
+              s"Error getting files from ${s.service}: $e\n${e.getStackTrace.mkString("\n")}"
             )
         }
         if (!closed.get) loopImpl()
@@ -143,7 +143,7 @@ private[sbt] class WatchServiceBackedObservable(
         case Int.MaxValue => Glob(glob.base, RecursiveGlob)
         case d            => (1 to d).foldLeft(Glob(glob.base)) { case (g, _) => g / AnyPath }
       }
-      fileCache.list(updatedGlob) foreach {
+      fileCache.list(updatedGlob).foreach {
         case (path, attrs) if attrs.isDirectory => s.register(path)
         case _                                  =>
       }

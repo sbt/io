@@ -94,7 +94,7 @@ abstract class Mapper {
       if (file == oldBase)
         Some(newBase)
       else
-        IO.relativize(oldBase, file) map (r => new File(newBase, r))
+        IO.relativize(oldBase, file).map(r => new File(newBase, r))
 
   /**
    * Constructs a FileMap that pairs a file with a file with the same name in `newDirectory`.
@@ -140,8 +140,8 @@ abstract class Mapper {
    */
   def directory(baseDirectory: File): Seq[(File, String)] =
     Option(baseDirectory.getParentFile)
-      .map(parent => PathFinder(baseDirectory).allPaths pair relativeTo(parent))
-      .getOrElse(PathFinder(baseDirectory).allPaths pair basic)
+      .map(parent => PathFinder(baseDirectory).allPaths.pair(relativeTo(parent)))
+      .getOrElse(PathFinder(baseDirectory).allPaths.pair(basic))
 
   /**
    * return a Seq of mappings  excluding the directory itself.
@@ -171,11 +171,11 @@ abstract class Mapper {
    */
   def contentOf(baseDirectory: File): Seq[(File, String)] = (
     (PathFinder(baseDirectory).allPaths --- PathFinder(baseDirectory))
-      pair relativeTo(baseDirectory)
+      .pair(relativeTo(baseDirectory))
   )
 
   private def fold[A, B, T](zero: A => Option[B], in: Iterable[T])(
       f: T => A => Option[B]
   ): A => Option[B] =
-    in.foldLeft(zero)((mapper, base) => a => f(base)(a) orElse mapper(a))
+    in.foldLeft(zero)((mapper, base) => a => f(base)(a).orElse(mapper(a)))
 }

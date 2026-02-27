@@ -73,7 +73,7 @@ class StashSpec extends AnyFlatSpec with Matchers {
     "c" -> "",
     "e/g" -> "asdf",
     "a/g/c" -> "other"
-  ) map { case (f, c) => (new File(f), c) }
+  ).map { case (f, c) => (new File(f), c) }
 }
 
 class TestError extends Error

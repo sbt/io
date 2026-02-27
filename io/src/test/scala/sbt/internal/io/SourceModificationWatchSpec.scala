@@ -441,10 +441,10 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
           monitor.drain(maxWait * 4).map(_.path).toSet.intersect(allPaths)
         if (triggeredPaths != allPaths) {
           logger.printLines("Triggered paths did not contain all of the expected paths")
-          val diff = allPaths diff triggeredPaths
+          val diff = allPaths.diff(triggeredPaths)
           if (diff.size > 5)
             println(diff.take(5).mkString("", "\n", s"\n and ${diff.size - 5} more ..."))
-          else println(diff mkString "\n")
+          else println(diff.mkString("\n"))
           // tolerate the failures on linux until we upgrade travis to java 9 or greater
           assert(System.getProperty("os.name", "").startsWith("Linux"))
         }
@@ -514,7 +514,7 @@ object EventMonitorSpec {
     if (res != null) fileName.fold(res)(res.resolve)
     else {
       val newFileName = path.getFileName
-      realPath(path.getParent, fileName.map(newFileName.resolve) orElse Some(newFileName))
+      realPath(path.getParent, fileName.map(newFileName.resolve).orElse(Some(newFileName)))
     }
   }
   def pathFilter(path: Path): FileEvent[?] => Boolean = {
@@ -569,7 +569,7 @@ object EventMonitorSpec {
   class CachingWatchLogger extends Logger {
     val lines = new scala.collection.mutable.ArrayBuffer[String]
     override def debug(msg: Any): Unit = lines.synchronized { lines += msg.toString; () }
-    def printLines(msg: String): Unit = println(s"$msg. Log lines:\n${lines mkString "\n"}")
+    def printLines(msg: String): Unit = println(s"$msg. Log lines:\n${lines.mkString("\n")}")
   }
   implicit class ObservableOps(val observable: Observable[Event] & Registerable[Event])
       extends AnyVal {

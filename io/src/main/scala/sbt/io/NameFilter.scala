@@ -171,7 +171,7 @@ final class ExtensionFilter(val extensions: String*) extends NameFilter {
     case that: ExtensionFilter => new ExtensionFilter(this.extensions.diff(that.extensions)*)
     case _                     => super.--(filter)
   }
-  override def toString: String = s"ExtensionFilter(${extensions mkString ","})"
+  override def toString: String = s"ExtensionFilter(${extensions.mkString(",")})"
 }
 
 object ExtensionFilter {

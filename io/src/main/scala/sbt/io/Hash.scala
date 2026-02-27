@@ -23,8 +23,8 @@ object Hash {
     for (i <- bytes.indices) {
       val b = bytes(i)
       val bi: Int = if (b < 0) b + 256 else b.toInt
-      buffer append toHex((bi >>> 4).asInstanceOf[Byte])
-      buffer append toHex((bi & 0x0f).asInstanceOf[Byte])
+      buffer.append(toHex((bi >>> 4).asInstanceOf[Byte]))
+      buffer.append(toHex((bi & 0x0f).asInstanceOf[Byte]))
     }
     buffer.toString
   }

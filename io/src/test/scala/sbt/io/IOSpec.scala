@@ -28,8 +28,8 @@ class IOSpec extends AnyFunSuite {
     // relativeRootDir referring to io-relativize/inside-dir/../
 
     val rootDir = Files.createTempDirectory("io-relativize").normalize
-    val nestedFile = Files.createFile(rootDir resolve "meh.file").toFile
-    val nestedDir = Files.createDirectory(rootDir resolve "inside-dir").toFile
+    val nestedFile = Files.createFile(rootDir.resolve("meh.file")).toFile
+    val nestedDir = Files.createDirectory(rootDir.resolve("inside-dir")).toFile
 
     val relativeRootDir = new File(nestedDir, "..")
     assert(
