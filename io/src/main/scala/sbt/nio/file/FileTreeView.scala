@@ -327,7 +327,7 @@ object FileTreeView {
       }
       private def listPath(path: Path): Unit = {
         try {
-          view.list(path) foreach {
+          view.list(path).foreach {
             case pair @ (p, attributes) if attributes.isDirectory =>
               if (needListDirectory(p)) remainingPaths.add(p)
               maybeAdd(pair)

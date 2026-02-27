@@ -32,7 +32,7 @@ object WriteContentSpecification extends Properties("Write content") {
   )
 
   implicit lazy val validString: Arbitrary[String] = Arbitrary(
-    arbitrary[List[Char]] map (_.mkString)
+    arbitrary[List[Char]].map(_.mkString)
   )
 
   private def largeUnzip() = {
@@ -72,7 +72,7 @@ object WriteContentSpecification extends Properties("Write content") {
   private def writeAndCheckBytes(b: Array[Byte]) =
     withTemporaryFile { file =>
       IO.write(file, b)
-      IO.readBytes(file) sameElements b
+      IO.readBytes(file).sameElements(b)
     }
 
   private def overwriteAndCheckStrings(a: String, b: String) =
@@ -86,7 +86,7 @@ object WriteContentSpecification extends Properties("Write content") {
     withTemporaryFile { file =>
       IO.write(file, a)
       IO.write(file, b)
-      IO.readBytes(file) sameElements b
+      IO.readBytes(file).sameElements(b)
     }
 
   private def appendAndCheckStrings(a: String, b: String) =
@@ -100,7 +100,7 @@ object WriteContentSpecification extends Properties("Write content") {
     withTemporaryFile { file =>
       IO.append(file, a)
       IO.append(file, b)
-      IO.readBytes(file) sameElements (a ++ b)
+      IO.readBytes(file).sameElements(a ++ b)
     }
 
   private def withTemporaryFile[T](f: File => T): T =

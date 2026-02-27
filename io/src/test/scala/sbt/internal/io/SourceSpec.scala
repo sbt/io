@@ -60,7 +60,7 @@ class SourceSpec extends AnyFlatSpec with Matchers {
       new Source(new File("foo"), AllPassFilter, NothingFilter, false),
       new Object
     )
-    others foreach { src =>
+    others.foreach { src =>
       assert(source != src && src != source)
       assert(source.hashCode != src.hashCode)
     }

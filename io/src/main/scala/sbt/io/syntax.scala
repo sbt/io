@@ -25,7 +25,7 @@ sealed abstract class IOSyntax1 extends BaseSyntax
 
 sealed abstract class IOSyntax0 extends IOSyntax1 {
   @deprecated("Alternative is no longer used in sbt io.", "1.3.0")
-  implicit def alternative[A, B](f: A => Option[B]): Alternative[A, B] = g => a => f(a) orElse g(a)
+  implicit def alternative[A, B](f: A => Option[B]): Alternative[A, B] = g => a => f(a).orElse(g(a))
 }
 
 private[sbt] trait IOSyntax extends BaseSyntax

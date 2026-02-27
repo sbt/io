@@ -41,7 +41,7 @@ object NameFilterSpecification extends Properties("NameFilter") {
    * Raw control characters are stripped because they are not allowed in expressions.
    * Asterisks are stripped because they are added under the control of the tests.
    */
-  private def stripAsterisksAndControl(s: String) = (s filter validChar).toString
+  private def stripAsterisksAndControl(s: String) = s.filter(validChar).toString
 
   private def validChar(c: Char) = (
     !java.lang.Character.isISOControl(c)

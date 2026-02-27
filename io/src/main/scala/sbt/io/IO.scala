@@ -67,7 +67,7 @@ object IO {
     val u = classLocation(cl)
     val p = u.getProtocol match {
       case FileScheme => Option(toFile(u).toPath)
-      case "jar"      => urlAsFile(u) map { _.toPath }
+      case "jar"      => urlAsFile(u).map { _.toPath }
       case "jrt"      => Option(IO.jrtFs.getPath(u.getPath))
       case _          => None
     }
@@ -107,14 +107,14 @@ object IO {
    */
   def classLocation(cl: Class[?]): URL = {
     def localcl: Option[URL] =
-      Option(cl.getProtectionDomain.getCodeSource) flatMap { codeSource =>
+      Option(cl.getProtectionDomain.getCodeSource).flatMap { codeSource =>
         Option(codeSource.getLocation)
       }
     // This assumes that classes without code sources are System classes, and thus located in jars.
     // It returns a URL that looks like jar:file:/Library/Java/JavaVirtualMachines/jdk1.8.0_131.jdk/Contents/Home/jre/lib/rt.jar!/java/lang/Integer.class
     val clsfile = s"${cl.getName.replace('.', '/')}.class"
     def syscl: Option[URL] =
-      Option(ClassLoader.getSystemClassLoader) flatMap { classLoader =>
+      Option(ClassLoader.getSystemClassLoader).flatMap { classLoader =>
         Option(classLoader.getResource(clsfile))
       }
     try {
@@ -168,11 +168,11 @@ object IO {
   def classfileLocation(cl: Class[?]): URL = {
     val clsfile = s"${cl.getName.replace('.', '/')}.class"
     def localcl: Option[URL] =
-      Option(cl.getClassLoader) flatMap { classLoader =>
+      Option(cl.getClassLoader).flatMap { classLoader =>
         Option(classLoader.getResource(clsfile))
       }
     def syscl: Option[URL] =
-      Option(ClassLoader.getSystemClassLoader) flatMap { classLoader =>
+      Option(ClassLoader.getSystemClassLoader).flatMap { classLoader =>
         Option(classLoader.getResource(clsfile))
       }
     try {
@@ -209,7 +209,7 @@ object IO {
     } catch { case _: URISyntaxException => new File(uri.getPath) }
 
   /** Converts the given URL to a File.  If the URL is for an entry in a jar, the File for the jar is returned. */
-  def asFile(url: URL): File = urlAsFile(url) getOrElse sys.error("URL is not a file: " + url)
+  def asFile(url: URL): File = urlAsFile(url).getOrElse(sys.error("URL is not a file: " + url))
   def urlAsFile(url: URL): Option[File] =
     url.getProtocol match {
       case FileScheme => Some(toFile(url))
@@ -236,15 +236,15 @@ object IO {
       s"Expected protocol to be '$FileScheme' or empty in URI $uri"
     )
     Option(uri.getAuthority) match {
-      case None if part startsWith "/" => new File(uri)
-      case _                           =>
+      case None if part.startsWith("/") => new File(uri)
+      case _                            =>
         // https://github.com/sbt/sbt/issues/564
         // https://github.com/sbt/sbt/issues/3086
         // http://blogs.msdn.com/b/ie/archive/2006/12/06/file-uris-in-windows.aspx
         // http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=5086147
         // The specific problem here is that `uri` will have a defined authority component for UNC names like //foo/bar/some/path.jar
         // but the File constructor requires URIs with an undefined authority component.
-        if (!(part startsWith "/") && (part contains ":")) new File("//" + part)
+        if (!part.startsWith("/") && part.contains(":")) new File("//" + part)
         else new File(part)
     }
   }
@@ -279,7 +279,7 @@ object IO {
    * If a file already exists, the last modified time is set to the current time.
    * It is not guaranteed that all files will have the same last modified time after this call.
    */
-  def touch(files: Traversable[File]): Unit = files foreach (f => { touch(f); () })
+  def touch(files: Traversable[File]): Unit = files.foreach(f => { touch(f); () })
 
   /**
    * Creates a file at the given location if it doesn't exist.
@@ -533,9 +533,9 @@ object IO {
   def deleteIfEmpty(dirs: collection.Set[File]): Unit = {
     val isEmpty = new HashMap[File, Boolean]
     def visit(f: File): Boolean =
-      isEmpty.getOrElseUpdate(f, dirs(f) && f.isDirectory && (f.listFiles forall visit))
+      isEmpty.getOrElseUpdate(f, dirs(f) && f.isDirectory && f.listFiles.forall(visit))
 
-    dirs foreach visit
+    dirs.foreach(visit)
     for (case (f, true) <- isEmpty) f.delete
   }
 
@@ -545,14 +545,14 @@ object IO {
   /** Deletes each file or directory in `files` recursively.  Any empty parent directories are deleted, recursively. */
   def deleteFilesEmptyDirs(files: Iterable[File]): Unit = {
     def isEmptyDirectory(dir: File) = dir.isDirectory && listFiles(dir).isEmpty
-    def parents(fs: Set[File]) = fs flatMap (f => Option(f.getParentFile))
+    def parents(fs: Set[File]) = fs.flatMap(f => Option(f.getParentFile))
     @tailrec def deleteEmpty(dirs: Set[File]): Unit = {
-      val empty = dirs filter isEmptyDirectory
+      val empty = dirs.filter(isEmptyDirectory)
       if (
         empty.nonEmpty
       ) // looks funny, but this is true if at least one of `dirs` is an empty directory
       {
-        empty foreach { _.delete() }
+        empty.foreach { _.delete() }
         deleteEmpty(parents(empty))
       }
     }
@@ -671,37 +671,37 @@ object IO {
     val emptyCRC = new CRC32().getValue()
 
     def addDirectoryEntry(name: String) = {
-      output putNextEntry makeDirectoryEntry(name)
+      output.putNextEntry(makeDirectoryEntry(name))
       output.closeEntry()
     }
 
     def makeDirectoryEntry(name: String) = {
       //			log.debug("\tAdding directory " + relativePath + " ...")
       val e = createEntry(name)
-      e setTime time.getOrElse(now)
-      e setSize 0
-      e setMethod ZipEntry.STORED
-      e setCrc emptyCRC
+      e.setTime(time.getOrElse(now))
+      e.setSize(0)
+      e.setMethod(ZipEntry.STORED)
+      e.setCrc(emptyCRC)
       e
     }
 
     def makeFileEntry(file: File, name: String) = {
       //			log.debug("\tAdding " + file + " as " + name + " ...")
       val e = createEntry(name)
-      e setTime time.getOrElse(getModifiedTimeOrZero(file))
+      e.setTime(time.getOrElse(getModifiedTimeOrZero(file)))
       e
     }
     def addFileEntry(file: File, name: String) = {
-      output putNextEntry makeFileEntry(file, name)
+      output.putNextEntry(makeFileEntry(file, name))
       transfer(file, output)
       output.closeEntry()
     }
 
     // Calculate directories and add them to the generated Zip
-    allDirectoryPaths(files) foreach addDirectoryEntry
+    allDirectoryPaths(files).foreach(addDirectoryEntry)
 
     // Add all files to the generated Zip
-    files foreach { case (file, name) => addFileEntry(file, name) }
+    files.foreach { case (file, name) => addFileEntry(file, name) }
   }
 
   // map a path a/b/c to List("a", "b")
@@ -718,7 +718,7 @@ object IO {
 
   // produce a sorted list of all the subdirectories of all provided files
   private def allDirectoryPaths(files: Iterable[(File, String)]) =
-    TreeSet[String]() ++ (files flatMap { case (_, name) => directoryPaths(name) })
+    TreeSet[String]() ++ (files.flatMap { case (_, name) => directoryPaths(name) })
 
   private def normalizeToSlash(name: String) = {
     val sep = File.separatorChar
@@ -739,7 +739,7 @@ object IO {
 
             val os = new JarOutputStream(fileOut)
             val e = new ZipEntry(JarFile.MANIFEST_NAME)
-            e setTime time.getOrElse(System.currentTimeMillis)
+            e.setTime(time.getOrElse(System.currentTimeMillis))
             os.putNextEntry(e)
             mf.write(new BufferedOutputStream(os))
             os.closeEntry()
@@ -783,10 +783,10 @@ object IO {
     }
     val basePath = toAbsolutePath(base).normalize
     val filePath = toAbsolutePath(file).normalize
-    if (filePath startsWith basePath) {
+    if (filePath.startsWith(basePath)) {
       val relativePath =
-        catching(classOf[IllegalArgumentException]) opt (basePath relativize filePath)
-      relativePath map (_.toString)
+        catching(classOf[IllegalArgumentException]).opt(basePath.relativize(filePath))
+      relativePath.map(_.toString)
     } else None
   }
 
@@ -855,7 +855,7 @@ object IO {
       preserveLastModified: Boolean = false,
       preserveExecutable: Boolean = true
   ): Unit = {
-    val sources = PathFinder(source).allPaths pair Path.rebase(source, target)
+    val sources = PathFinder(source).allPaths.pair(Path.rebase(source, target))
     copy(sources, overwrite, preserveLastModified, preserveExecutable)
     ()
   }
@@ -1040,7 +1040,7 @@ object IO {
 
   /** Writes `lines` to `writer` using `writer`'s `println` method. */
   def writeLines(writer: PrintWriter, lines: Seq[String]): Unit =
-    lines foreach writer.println
+    lines.foreach(writer.println)
 
   /**
    * Writes `properties` to the File `to`, using `label` as the comment on the first line.

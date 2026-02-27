@@ -33,8 +33,8 @@ class PathMapperSpec extends flatspec.FixtureAnyFlatSpec with Matchers {
     )
     val target = base / "target" / "scala-2.11" / "classes"
 
-    val mappings = (files --- dirs) pair (file =>
-      rebase(dirs, target)(file) orElse (flat(target): File => Option[File])(file)
+    val mappings = (files --- dirs).pair(file =>
+      rebase(dirs, target)(file).orElse((flat(target): File => Option[File])(file))
     )
 
     mappings shouldBe Seq(
@@ -44,10 +44,10 @@ class PathMapperSpec extends flatspec.FixtureAnyFlatSpec with Matchers {
   }
 
   "directory" should "create mappings including the baseDirectory" in { tempDirectory =>
-    val nestedFile1 = Files.createFile(tempDirectory resolve "file1").toFile
-    val nestedFile2 = Files.createFile(tempDirectory resolve "file2").toFile
-    val nestedDir = Files.createDirectory(tempDirectory resolve "dir1")
-    val nestedDirFile = Files.createDirectory(nestedDir resolve "dir1-file1").toFile
+    val nestedFile1 = Files.createFile(tempDirectory.resolve("file1")).toFile
+    val nestedFile2 = Files.createFile(tempDirectory.resolve("file2")).toFile
+    val nestedDir = Files.createDirectory(tempDirectory.resolve("dir1"))
+    val nestedDirFile = Files.createDirectory(nestedDir.resolve("dir1-file1")).toFile
 
     IO.touch(nestedFile1)
     IO.touch(nestedFile2)
@@ -91,10 +91,10 @@ class PathMapperSpec extends flatspec.FixtureAnyFlatSpec with Matchers {
   }
 
   "contentOf" should "create mappings excluding the baseDirectory" in { tempDirectory =>
-    val nestedFile1 = Files.createFile(tempDirectory resolve "file1").toFile
-    val nestedFile2 = Files.createFile(tempDirectory resolve "file2").toFile
-    val nestedDir = Files.createDirectory(tempDirectory resolve "dir1")
-    val nestedDirFile = Files.createDirectory(nestedDir resolve "dir1-file1").toFile
+    val nestedFile1 = Files.createFile(tempDirectory.resolve("file1")).toFile
+    val nestedFile2 = Files.createFile(tempDirectory.resolve("file2")).toFile
+    val nestedDir = Files.createDirectory(tempDirectory.resolve("dir1"))
+    val nestedDirFile = Files.createDirectory(nestedDir.resolve("dir1-file1")).toFile
 
     IO.touch(nestedFile1)
     IO.touch(nestedFile2)

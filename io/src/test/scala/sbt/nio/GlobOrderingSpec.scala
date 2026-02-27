@@ -71,7 +71,7 @@ class GlobOrderingSpec extends AnyFlatSpec {
       Glob(dir.toPath / "scala", ** / "*.java"),
     )
     val javaGlobs = new java.util.ArrayList((globs ++ globs ++ globs).asJava)
-    1 to 1000 foreach { _ =>
+    (1 to 1000).foreach { _ =>
       java.util.Collections.shuffle(javaGlobs)
       javaGlobs.asScala.sorted
     }

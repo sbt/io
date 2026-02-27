@@ -28,7 +28,7 @@ class IOSyntaxSpec extends AnyFlatSpec with Matchers {
     IO.withTemporaryDirectory { dir =>
       IO.write(new JFile(dir, "foo.txt"), "foo")
       IO.write(new JFile(dir, "bar.json"), "{}")
-      (dir glob "*.txt").get() shouldBe Seq(new JFile(dir, "foo.txt"))
+      dir.glob("*.txt").get() shouldBe Seq(new JFile(dir, "foo.txt"))
     }
   }
   "get" should "work with PathLister and PathFinder" in IO.withTemporaryDirectory { dir =>
