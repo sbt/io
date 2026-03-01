@@ -262,35 +262,36 @@ private[sbt] object FileEventMonitor {
        * Note that this transformation is not purely functional because it has the side effect of
        * modifying the quarantinedEvents and antiEntropyDeadlines maps.
        */
-      val transformed: Seq[FileEvent[T]] = results.flatMap {
-        case event @ FileEvent(path, attributes) =>
-          val occurredAt = event.occurredAt
-          val quarantined = if (event.exists) quarantinedEvents.remove(path) else None
-          quarantined match {
-            case Some(d @ Deletion(_, oldAttributes)) =>
-              antiEntropyDeadlines.put(path, d.occurredAt + period)
-              logger.debug(
-                s"Triggering event for newly created path $path that was previously quarantined."
-              )
-              Some(Update(path, oldAttributes, attributes, d.occurredAt))
-            case _ =>
-              antiEntropyDeadlines.get(path) match {
-                case Some(deadline) if occurredAt < deadline =>
-                  val msg = s"Discarding entry for recently updated path $path. " +
-                    s"This event occurred ${(occurredAt - (deadline - period)).toMillis} ms since " +
-                    "the last event for this path."
-                  logger.debug(msg)
-                  None
-                case _ if !event.exists =>
-                  quarantinedEvents.put(path, event)
-                  logger.debug(s"Quarantining deletion event for path $path for $period")
-                  None
-                case _ =>
-                  antiEntropyDeadlines.put(path, occurredAt + period)
-                  logger.debug(s"Received event for path $path")
-                  Some(event)
-              }
-          }
+      val transformed: Seq[FileEvent[T]] = results.flatMap { event =>
+        val path = event.path
+        val attributes = event.attributes
+        val occurredAt = event.occurredAt
+        val quarantined = if (event.exists) quarantinedEvents.remove(path) else None
+        quarantined match {
+          case Some(d @ Deletion(_, oldAttributes)) =>
+            antiEntropyDeadlines.put(path, d.occurredAt + period)
+            logger.debug(
+              s"Triggering event for newly created path $path that was previously quarantined."
+            )
+            Some(Update(path, oldAttributes, attributes, d.occurredAt))
+          case _ =>
+            antiEntropyDeadlines.get(path) match {
+              case Some(deadline) if occurredAt < deadline =>
+                val msg = s"Discarding entry for recently updated path $path. " +
+                  s"This event occurred ${(occurredAt - (deadline - period)).toMillis} ms since " +
+                  "the last event for this path."
+                logger.debug(msg)
+                None
+              case _ if !event.exists =>
+                quarantinedEvents.put(path, event)
+                logger.debug(s"Quarantining deletion event for path $path for $period")
+                None
+              case _ =>
+                antiEntropyDeadlines.put(path, occurredAt + period)
+                logger.debug(s"Received event for path $path")
+                Some(event)
+            }
+        }
       } ++ quarantinedEvents.collect {
         case (path, event: Deletion[FileEvent[T]] @unchecked)
             if event.occurredAt + quarantinePeriod < Deadline.now =>
