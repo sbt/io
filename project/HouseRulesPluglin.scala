@@ -14,7 +14,6 @@ object HouseRulesPlugin extends AutoPlugin {
     scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked"),
     scalacOptions += "-language:implicitConversions",
     scalacOptions ++= Seq(
-      "-Wconf:msg=Compiler synthesis of Manifest and OptManifest is deprecated:silent",
       "-Wconf:msg=type Traversable in package scala:silent",
     ),
     scalacOptions ++= {

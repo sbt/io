@@ -32,6 +32,8 @@ import java.util.jar.{ JarFile, JarInputStream, JarOutputStream }
 import java.util.zip.{ GZIPInputStream, _ }
 
 import sbt.internal.io.ErrorHandling.translate
+import scala.annotation.targetName
+import scala.reflect.ClassTag
 
 abstract class Using[Source, T] {
   protected def open(src: Source): T
@@ -47,14 +49,22 @@ abstract class Using[Source, T] {
 }
 
 import scala.reflect.{ Manifest => SManifest }
-private[sbt] abstract class WrapUsing[Source, T](implicit
-    srcMf: SManifest[Source],
-    targetMf: SManifest[T]
+private[sbt] abstract class WrapUsing[Source, T](
+    srcLabel: String,
+    targetLabel: String
 ) extends Using[Source, T] {
+  @deprecated
+  def this(
+      srcMf: SManifest[Source],
+      targetMf: SManifest[T]
+  ) = {
+    this(srcMf.runtimeClass.getSimpleName, targetMf.runtimeClass.getSimpleName)
+  }
+  @deprecated
   protected def label[S](m: SManifest[S]) = m.runtimeClass.getSimpleName
   protected def openImpl(source: Source): T
   protected final def open(source: Source): T =
-    translate("Error wrapping " + label(srcMf) + " in " + label(targetMf) + ": ")(openImpl(source))
+    translate("Error wrapping " + srcLabel + " in " + targetLabel + ": ")(openImpl(source))
 }
 private[sbt] trait OpenFile[T] extends Using[File, T] {
   protected def openImpl(file: File): T
@@ -70,16 +80,42 @@ private[sbt] trait OpenFile[T] extends Using[File, T] {
 
 object Using {
   def wrap[Source, T <: AutoCloseable](openF: Source => T)(implicit
+      srcTag: ClassTag[Source],
+      targetTag: ClassTag[T]
+  ): Using[Source, T] =
+    wrap(openF, closeCloseable)
+
+  def wrap[Source, T](openF: Source => T, closeF: T => Unit)(implicit
+      srcTag: ClassTag[Source],
+      targetTag: ClassTag[T]
+  ): Using[Source, T] =
+    new WrapUsing[Source, T](
+      srcTag.runtimeClass.getSimpleName,
+      targetTag.runtimeClass.getSimpleName
+    ) {
+      def openImpl(source: Source) = openF(source)
+
+      def close(t: T) = closeF(t)
+    }
+
+  @deprecated("use wrap", "2.0.0")
+  @targetName("wrap")
+  def wrapDeprecated[Source, T <: AutoCloseable](openF: Source => T)(implicit
       srcMf: SManifest[Source],
       targetMf: SManifest[T]
   ): Using[Source, T] =
     wrap(openF, closeCloseable)
 
-  def wrap[Source, T](openF: Source => T, closeF: T => Unit)(implicit
+  @deprecated("use wrap", "2.0.0")
+  @targetName("wrap")
+  def wrapDeprecated[Source, T](openF: Source => T, closeF: T => Unit)(implicit
       srcMf: SManifest[Source],
       targetMf: SManifest[T]
   ): Using[Source, T] =
-    new WrapUsing[Source, T] {
+    new WrapUsing[Source, T](
+      srcMf.runtimeClass.getSimpleName,
+      targetMf.runtimeClass.getSimpleName
+    ) {
       def openImpl(source: Source) = openF(source)
       def close(t: T) = closeF(t)
     }
