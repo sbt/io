@@ -88,11 +88,9 @@ val io = (project in file("io"))
     Test / testForkedParallel := true,
     Compile / generateContrabands / sourceManaged := baseDirectory.value / "src" / "main" / "contraband-scala",
     console / initialCommands += "\nimport sbt.io._, syntax._",
-    mimaPreviousArtifacts := (CrossVersion partialVersion scalaVersion.value match {
-      case Some((2, n)) if n >= 13 => Set.empty
-      case _                       =>
-        Set().map((version: String) => organization.value %% moduleName.value % version)
-    }),
+    mimaPreviousArtifacts := Set(
+      "1.10.5"
+    ).map((version: String) => organization.value %% moduleName.value % version),
     mimaBinaryIssueFilters ++= Seq(
     ),
     BuildInfoPlugin.buildInfoDefaultSettings, // avoids BuildInfo generated in Compile scope
