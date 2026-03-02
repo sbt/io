@@ -24,6 +24,7 @@ import sbt.nio.file.{ AnyPath, FileAttributes, FileTreeView, Glob, RecursiveGlob
 import sbt.nio.file.Glob.GlobOps
 
 import scala.annotation.tailrec
+import scala.annotation.nowarn
 import scala.jdk.CollectionConverters._
 import scala.collection.{ immutable, mutable }
 import scala.concurrent.duration._
@@ -298,6 +299,7 @@ private[sbt] object WatchState {
     init
   }
 
+  @nowarn("msg=WatchState")
   def empty(globs: Seq[Glob]): WatchState = {
     val service = new WatchService {
       override def init(): Unit = {}

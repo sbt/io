@@ -12,6 +12,7 @@
 package sbt.internal.io
 
 import java.io.IOException
+import scala.annotation.nowarn
 
 private[sbt] object ErrorHandling {
   def translate[T](msg: => String)(f: => T) =
@@ -22,6 +23,7 @@ private[sbt] object ErrorHandling {
       case e: Exception   => throw new TranslatedException(msg + e.toString, e)
     }
 
+  @nowarn("msg=ThreadDeath")
   def wideConvert[T](f: => T): Either[Throwable, T] =
     try {
       Right(f)
