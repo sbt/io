@@ -16,6 +16,7 @@ import java.nio.file.{ Files, Path => NioPath }
 import java.util.regex.Pattern
 
 import sbt.nio.file.{ FileAttributes, PathFilter }
+import scala.collection.immutable.ArraySeq
 
 /** A `java.io.FileFilter` with additional methods for combining filters. */
 trait FileFilter extends java.io.FileFilter {
@@ -386,7 +387,11 @@ object GlobFilter {
           new ExtensionFilter(ext.drop(1))
         case Array(prefix, "") => new PrefixFilter(prefix)
         case Array("", suffix) => new SuffixFilter(suffix)
-        case _ => new PatternFilter(parts, Pattern.compile(parts.map(quote).mkString(".*")))
+        case _                 =>
+          new PatternFilter(
+            ArraySeq.unsafeWrapArray(parts),
+            Pattern.compile(parts.map(quote).mkString(".*"))
+          )
       }
     }
   }
