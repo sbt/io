@@ -305,7 +305,7 @@ private[sbt] object FileEventMonitor {
       // thread polling the events. Because the period between polls could be quite large, it's
       // possible that there are unhandled events that actually occurred within the anti-entropy
       // window for the path. By setting a long retention time, we try to avoid this.
-      antiEntropyDeadlines.retain((_, deadline) => Deadline.now < deadline + retentionPeriod)
+      antiEntropyDeadlines.filterInPlace((_, deadline) => Deadline.now < deadline + retentionPeriod)
       transformed match {
         case s: Seq[FileEvent[T]] if s.nonEmpty => s
         case _                                  =>
