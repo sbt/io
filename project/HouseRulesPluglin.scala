@@ -13,21 +13,17 @@ object HouseRulesPlugin extends AutoPlugin {
     scalacOptions ++= Seq("-encoding", "utf8"),
     scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked"),
     scalacOptions += "-language:implicitConversions",
-    scalacOptions ++= "-Werror"
-      .ifScala(v => {
-        sys.props.get("sbt.build.fatal") match {
-          case Some(_) => java.lang.Boolean.getBoolean("sbt.build.fatal")
-          case _       => v == 12
-        }
-      })
-      .value
-      .toList,
+    scalacOptions ++= Seq(
+      "-Wconf:msg=Compiler synthesis of Manifest and OptManifest is deprecated:silent",
+      "-Wconf:msg=type Traversable in package scala:silent",
+    ),
+    scalacOptions ++= {
+      sys.props.get("sbt.build.fatal") match {
+        case Some("false") =>
+          Nil
+        case _ =>
+          Seq("-Werror")
+      }
+    }
   )
-
-  private def scalaPartV = Def setting (CrossVersion partialVersion scalaVersion.value)
-
-  private implicit final class AnyWithIfScala[A](val __x: A) {
-    def ifScala(p: Long => Boolean) =
-      Def setting (scalaPartV.value collect { case (2, y) if p(y) => __x })
-  }
 }

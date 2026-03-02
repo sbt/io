@@ -274,6 +274,6 @@ class IOSpec extends AnyFunSuite {
   }
 
   def normalizeForWindows(s: String): String = {
-    s.replaceAllLiterally("""\""", "/")
+    s.replace("""\""", "/")
   }
 }
