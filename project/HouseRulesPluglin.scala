@@ -1,6 +1,7 @@
 package iobuild
 
 import sbt._
+import sbt.util.CacheImplicits.given
 import Keys._
 
 object HouseRulesPlugin extends AutoPlugin {
