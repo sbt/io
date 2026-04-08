@@ -301,7 +301,7 @@ object IO {
    * If a file already exists, the last modified time is set to the current time.
    * It is not guaranteed that all files will have the same last modified time after this call.
    */
-  def touch(files: Traversable[File]): Unit = files.foreach(f => { touch(f); () })
+  def touch(files: Iterable[File]): Unit = files.foreach(f => { touch(f); () })
 
   /**
    * Creates a file at the given location if it doesn't exist.
@@ -318,7 +318,7 @@ object IO {
   }
 
   /** Creates directories `dirs` and all parent directories.  It tries to work around a race condition in `File.mkdirs()` by retrying up to a limit. */
-  def createDirectories(dirs: Traversable[File]): Unit =
+  def createDirectories(dirs: Iterable[File]): Unit =
     dirs.foreach(createDirectory)
 
   /** Creates directory `dir` and all parent directories.  It tries to work around a race condition in `File.mkdirs()` by retrying up to a limit. */
@@ -617,7 +617,7 @@ object IO {
   private[sbt] def wrapNull(a: Array[File]) = if (a == null) new Array[File](0) else a
 
   @deprecated("Please specify whether to use a static timestamp", "1.3.2")
-  def jar(sources: Traversable[(File, String)], outputJar: File, manifest: Manifest): Unit =
+  def jar(sources: Iterable[(File, String)], outputJar: File, manifest: Manifest): Unit =
     archive(sources.toSeq, outputJar, Some(manifest), None)
 
   /**
@@ -630,7 +630,7 @@ object IO {
    * @param time static timestamp to use for all entries, if any, in milliseconds since Epoch
    */
   def jar(
-      sources: Traversable[(File, String)],
+      sources: Iterable[(File, String)],
       outputJar: File,
       manifest: Manifest,
       time: Option[Long]
@@ -638,7 +638,7 @@ object IO {
     archive(sources.toSeq, outputJar, Some(manifest), time)
 
   @deprecated("Please specify whether to use a static timestamp", "1.3.2")
-  def zip(sources: Traversable[(File, String)], outputZip: File): Unit =
+  def zip(sources: Iterable[(File, String)], outputZip: File): Unit =
     archive(sources.toSeq, outputZip, None, None)
 
   /**
@@ -649,7 +649,7 @@ object IO {
    * @param outputZip The file to write the zip to.
    * @param time static timestamp to use for all entries, if any.
    */
-  def zip(sources: Traversable[(File, String)], outputZip: File, time: Option[Long]): Unit =
+  def zip(sources: Iterable[(File, String)], outputZip: File, time: Option[Long]): Unit =
     archive(sources.toSeq, outputZip, None, time)
 
   private def archive(
@@ -812,7 +812,7 @@ object IO {
     } else None
   }
 
-  def copy(sources: Traversable[(File, File)]): Set[File] = copy(sources, CopyOptions())
+  def copy(sources: Iterable[(File, File)]): Set[File] = copy(sources, CopyOptions())
 
   /**
    * For each pair in `sources`, copies the contents of the first File (the source) to the location
@@ -823,11 +823,11 @@ object IO {
    * Any parent directories that do not exist are created.
    * The set of all target files is returned, whether or not they were updated by this method.
    */
-  def copy(sources: Traversable[(File, File)], options: CopyOptions): Set[File] =
+  def copy(sources: Iterable[(File, File)], options: CopyOptions): Set[File] =
     copy(sources, options.overwrite, options.preserveLastModified, options.preserveExecutable)
 
   def copy(
-      sources: Traversable[(File, File)],
+      sources: Iterable[(File, File)],
       overwrite: Boolean,
       preserveLastModified: Boolean,
       preserveExecutable: Boolean
@@ -1110,7 +1110,7 @@ object IO {
    * For each pair in `files`, moves the contents of the first File to the location of the second.
    * See `sbt.io.IO$.move(java.io.File,java.io.File):Unit` for the behavior of the individual move operations.
    */
-  def move(files: Traversable[(File, File)]): Unit =
+  def move(files: Iterable[(File, File)]): Unit =
     files.foreach(Function.tupled(move(_, _)))
 
   /**

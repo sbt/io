@@ -106,14 +106,14 @@ abstract class Mapper {
    * Selects all descendants of `base` directory and maps them to a path relative to `base`.
    * `base` itself is not included.
    */
-  def allSubpaths(base: File): Traversable[(File, String)] =
+  def allSubpaths(base: File): Iterable[(File, String)] =
     selectSubpaths(base, AllPassFilter)
 
   /**
    * Selects descendants of `base` directory matching `filter` and maps them to a path relative to `base`.
    * `base` itself is not included.
    */
-  def selectSubpaths(base: File, filter: FileFilter): Traversable[(File, String)] =
+  def selectSubpaths(base: File, filter: FileFilter): Iterable[(File, String)] =
     PathFinder(base).globRecursive(filter).get().collect {
       case f if f != base => f -> base.toPath.relativize(f.toPath).toString
     }

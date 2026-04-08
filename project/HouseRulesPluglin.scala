@@ -16,7 +16,6 @@ object HouseRulesPlugin extends AutoPlugin {
     scalacOptions += "-language:implicitConversions",
     scalacOptions ++= Seq(
       "-Wconf:msg=Compiler synthesis of Manifest and OptManifest is deprecated:silent",
-      "-Wconf:msg=type Traversable in package scala:silent",
     ),
     scalacOptions ++= {
       sys.props.get("sbt.build.fatal") match {
