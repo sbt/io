@@ -80,6 +80,7 @@ val io = (project in file("io"))
   .settings(
     commonSettings,
     name := "IO",
+    exportJars := false,
     libraryDependencies ++= {
       Vector(scalaCompiler.value % Test, scalaVerify % Test, scalaCheck % Test, scalatest % Test)
     } ++ Vector(swovalFiles),

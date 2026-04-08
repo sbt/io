@@ -52,13 +52,13 @@ jobs:
       shell: bash
       run: |
         find **/src/main/contraband-scala -name "*.scala" -delete
-        sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=true generateContrabands mimaReportBinaryIssues scalafmtCheckAll headerCheck Test/headerCheck test doc
+        sbt -v --server -Dfile.encoding=UTF8 -Dsbt.test.fork=true generateContrabands mimaReportBinaryIssues scalafmtCheckAll headerCheck Test/headerCheck test doc
         git diff --exit-code # check contrabands
     - name: Build and test (2)
       if: ${{ matrix.jobtype == 2 }}
       shell: bash
       run: |
-        sbt -v -Dfile.encoding=UTF8 -Dsbt.test.fork=true mimaReportBinaryIssues test
+        sbt -v --server -Dfile.encoding=UTF8 -Dsbt.test.fork=true mimaReportBinaryIssues test
     - name: Build and test (3)
       if: ${{ matrix.jobtype == 3 }}
       shell: bash
