@@ -27,10 +27,12 @@ import sbt.nio.file.FileTreeView
 
 import scala.Function.tupled
 import scala.annotation.tailrec
+import scala.annotation.targetName
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable
 import scala.collection.immutable.TreeSet
 import scala.collection.mutable.{ HashMap, HashSet }
+import scala.reflect.ClassTag
 import scala.reflect.{ Manifest => SManifest }
 import scala.util.control.Exception._
 import scala.util.control.NonFatal
@@ -79,8 +81,18 @@ object IO {
    * If the location cannot be determined, an error is generated.
    * Note that for JDK 11 onwards, a module will return a jrt path.
    */
-  def classLocationPath[A](implicit mf: SManifest[A]): NioPath =
+  @deprecated("use classLocationPath", "2.0.0")
+  @targetName("classLocationPath")
+  def classLocationPathDeprecated[A](implicit mf: SManifest[A]): NioPath =
     classLocationPath(mf.runtimeClass)
+
+  /**
+   * Returns a NIO Path to the directory, Java module, or the JAR file for type `A` (as determined by an ClassTag).
+   * If the location cannot be determined, an error is generated.
+   * Note that for JDK 11 onwards, a module will return a jrt path.
+   */
+  def classLocationPath[A](implicit tag: ClassTag[A]): NioPath =
+    classLocationPath(tag.runtimeClass)
 
   /**
    * Returns the directory, Java module, or the JAR containing the class file `cl`.
@@ -97,8 +109,18 @@ object IO {
    * If the location cannot be determined or it is not a file, an error is generated.
    * Note that for JDK 11 onwards, the returned module path cannot be expressed as `File`, so it will return `None`.
    */
-  def classLocationFileOption[A](implicit mf: SManifest[A]): Option[File] =
+  @deprecated("use classLocationFileOption", "2.0.0")
+  @targetName("classLocationFileOption")
+  def classLocationFileOptionDeprecated[A](implicit mf: SManifest[A]): Option[File] =
     classLocationFileOption(mf.runtimeClass)
+
+  /**
+   * Returns the directory, Java module, or the JAR containing the class file for type `T` (as determined by an ClassTag).
+   * If the location cannot be determined or it is not a file, an error is generated.
+   * Note that for JDK 11 onwards, the returned module path cannot be expressed as `File`, so it will return `None`.
+   */
+  def classLocationFileOption[A](implicit tag: ClassTag[A]): Option[File] =
+    classLocationFileOption(tag.runtimeClass)
 
   /**
    * Returns the directory, Java module, or the JAR file containing the class file `cl`.
@@ -174,14 +196,34 @@ object IO {
    * If the location cannot be determined or it is not a file, an error is generated.
    * Note that for JDK 11 onwards, a module will return a jrt path.
    */
-  def classLocation[A](implicit mf: SManifest[A]): URL =
+  @deprecated("use classLocation", "2.0.0")
+  @targetName("classLocation")
+  def classLocationDeprecated[A](implicit mf: SManifest[A]): URL =
     classLocation(mf.runtimeClass)
+
+  /**
+   * Returns the URL to the directory, Java module, or the JAR file containing the class file `cl`.
+   * If the location cannot be determined or it is not a file, an error is generated.
+   * Note that for JDK 11 onwards, a module will return a jrt path.
+   */
+  def classLocation[A](implicit tag: ClassTag[A]): URL =
+    classLocation(tag.runtimeClass)
 
   /**
    * Returns a URL for the classfile containing the given class file for type `T` (as determined by an implicit Manifest).
    * If the location cannot be determined, an error is generated.
    */
-  def classfileLocation[T](implicit mf: SManifest[T]): URL = classfileLocation(mf.runtimeClass)
+  @deprecated("use classfileLocation", "2.0.0")
+  @targetName("classfileLocation")
+  def classfileLocationDeprecated[T](implicit mf: SManifest[T]): URL = classfileLocation(
+    mf.runtimeClass
+  )
+
+  /**
+   * Returns a URL for the classfile containing the given class file for type `T` (as determined by an ClassTag).
+   * If the location cannot be determined, an error is generated.
+   */
+  def classfileLocation[T](implicit tag: ClassTag[T]): URL = classfileLocation(tag.runtimeClass)
 
   /**
    * Returns a URL for the classfile containing the given class
