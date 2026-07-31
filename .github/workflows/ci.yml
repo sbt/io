@@ -52,7 +52,7 @@ jobs:
         java-version: "${{ matrix.java }}"
         cache: sbt
     - name: Setup sbt
-      uses: sbt/setup-sbt@v1
+      uses: sbt/setup-sbt@v1.5.5
     - name: Build and test (1)
       if: ${{ matrix.jobtype == 1 }}
       shell: bash
