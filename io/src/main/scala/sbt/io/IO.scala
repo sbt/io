@@ -21,6 +21,7 @@ import java.util.jar.{ Attributes, JarEntry, JarFile, JarOutputStream, Manifest 
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
 
 import sbt.internal.io.ErrorHandling.translate
+import sbt.io.parallel.{ ParallelJarOutputStream, ParallelZipOutputStream, ZipSink }
 import sbt.internal.io.{ Milli, Retry }
 import sbt.io.Using._
 import sbt.nio.file.FileTreeView
@@ -31,6 +32,7 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.collection.immutable.TreeSet
 import scala.collection.mutable.{ HashMap, HashSet }
+import scala.concurrent.ExecutionContext
 import scala.reflect.{ Manifest => SManifest }
 import scala.util.control.Exception._
 import scala.util.control.NonFatal
@@ -655,7 +657,7 @@ object IO {
 
   @deprecated("Please specify whether to use a static timestamp", "1.3.2")
   def jar(sources: Traversable[(File, String)], outputJar: File, manifest: Manifest): Unit =
-    archive(sources.toSeq, outputJar, Some(manifest), None)
+    archive(sources.toSeq, outputJar, Some(manifest), None, deflateOn = None)
 
   /**
    * Creates a jar file.
@@ -672,11 +674,49 @@ object IO {
       manifest: Manifest,
       time: Option[Long]
   ): Unit =
-    archive(sources.toSeq, outputJar, Some(manifest), time)
+    archive(sources.toSeq, outputJar, Some(manifest), time, deflateOn = None)
+
+  /**
+   * Where [[zipParallel]] and [[jarParallel]] deflate for a caller that imports it: `commonPool`,
+   * which is what `CompletableFuture` would have chosen anyway. Neither method defaults to it — a
+   * default on an implicit parameter is silently replaced by any context in scope rather than being
+   * the choice it looks like.
+   *
+   * Behind an object of its own, as `ExecutionContext.Implicits.global` is: `IO` is
+   * wildcard-imported, and an implicit `ExecutionContext` there is one every `Future` in the
+   * importing file would take silently or refuse as ambiguous against its own.
+   */
+  object Implicits {
+    implicit val deflateContext: ExecutionContext = ParallelZipOutputStream.commonPoolContext
+  }
+
+  /**
+   * Creates a jar file, deflating its entries in parallel. Byte for byte what `IO.jar` writes, and
+   * usually several times faster where there are entries enough to share out.
+   *
+   * @param sources The files to include in the jar file paired with the entry name in the jar.
+   *                Only the pairs explicitly listed are included.
+   * @param outputJar The file to write the jar to.
+   * @param manifest The manifest for the jar.
+   * @param time static timestamp to use for all entries, if any, in milliseconds since Epoch
+   * @param parallelism how many entries may be in flight at once, not a thread count — how many of
+   *                    them deflate at a time is the context's business. One per processor by default
+   * @param ec where the deflating happens; [[Implicits.deflateContext]] is the one to import for
+   *           `commonPool`. It has to be a context this thread is not itself the whole of: the
+   *           writing thread waits on the deflating once enough entries are in flight
+   */
+  def jarParallel(
+      sources: Traversable[(File, String)],
+      outputJar: File,
+      manifest: Manifest,
+      time: Option[Long],
+      parallelism: Int = ParallelZipOutputStream.DefaultParallelism
+  )(implicit ec: ExecutionContext): Unit =
+    archive(sources.toSeq, outputJar, Some(manifest), time, deflateOn = Some((ec, parallelism)))
 
   @deprecated("Please specify whether to use a static timestamp", "1.3.2")
   def zip(sources: Traversable[(File, String)], outputZip: File): Unit =
-    archive(sources.toSeq, outputZip, None, None)
+    archive(sources.toSeq, outputZip, None, None, deflateOn = None)
 
   /**
    * Creates a zip file.
@@ -687,13 +727,36 @@ object IO {
    * @param time static timestamp to use for all entries, if any.
    */
   def zip(sources: Traversable[(File, String)], outputZip: File, time: Option[Long]): Unit =
-    archive(sources.toSeq, outputZip, None, time)
+    archive(sources.toSeq, outputZip, None, time, deflateOn = None)
+
+  /**
+   * Creates a zip file, deflating its entries in parallel. Byte for byte what `IO.zip` writes, and
+   * usually several times faster where there are entries enough to share out.
+   *
+   * @param sources The files to include in the zip file paired with the entry name in the zip.
+   *                Only the pairs explicitly listed are included.
+   * @param outputZip The file to write the zip to.
+   * @param time static timestamp to use for all entries, if any.
+   * @param parallelism how many entries may be in flight at once, not a thread count — how many of
+   *                    them deflate at a time is the context's business. One per processor by default
+   * @param ec where the deflating happens; [[Implicits.deflateContext]] is the one to import for
+   *           `commonPool`. It has to be a context this thread is not itself the whole of: the
+   *           writing thread waits on the deflating once enough entries are in flight
+   */
+  def zipParallel(
+      sources: Traversable[(File, String)],
+      outputZip: File,
+      time: Option[Long],
+      parallelism: Int = ParallelZipOutputStream.DefaultParallelism
+  )(implicit ec: ExecutionContext): Unit =
+    archive(sources.toSeq, outputZip, None, time, deflateOn = Some((ec, parallelism)))
 
   private def archive(
       sources: Seq[(File, String)],
       outputFile: File,
       manifest: Option[Manifest],
-      time: Option[Long]
+      time: Option[Long],
+      deflateOn: Option[(ExecutionContext, Int)]
   ) = {
     // The zip 'setTime' methods try to convert from the given time to the local time based
     // on java.util.TimeZone.getDefault(). When explicitly specifying the timestamp, we assume
@@ -708,7 +771,7 @@ object IO {
       }
       createDirectory(outputDir)
       writeFileAtomically(outputFile) { staging =>
-        withZipOutput(staging, manifest, localTime) { output =>
+        withZipOutput(staging, manifest, localTime, deflateOn) { output =>
           val createEntry: (String => ZipEntry) =
             if (manifest.isDefined) new JarEntry(_) else new ZipEntry(_)
           writeZip(sources, output, localTime)(createEntry)
@@ -716,7 +779,11 @@ object IO {
       }
     }
   }
-  private def writeZip(sources: Seq[(File, String)], output: ZipOutputStream, time: Option[Long])(
+  private def writeZip(
+      sources: Seq[(File, String)],
+      output: ZipSink,
+      time: Option[Long]
+  )(
       createEntry: String => ZipEntry
   ) = {
     val files = sources
@@ -786,32 +853,38 @@ object IO {
     if (sep == '/') name else name.replace(sep, '/')
   }
 
-  private def withZipOutput(file: File, manifest: Option[Manifest], time: Option[Long])(
-      f: ZipOutputStream => Unit
-  ) = {
+  private def withZipOutput(
+      file: File,
+      manifest: Option[Manifest],
+      time: Option[Long],
+      deflateOn: Option[(ExecutionContext, Int)]
+  )(f: ZipSink => Unit) = {
     fileOutputStream(false)(file) { fileOut =>
-      val (zipOut, _) =
-        manifest match {
-          case Some(mf) =>
-            import Attributes.Name.MANIFEST_VERSION
-            val main = mf.getMainAttributes
-            if (!main.containsKey(MANIFEST_VERSION))
-              main.put(MANIFEST_VERSION, "1.0")
-
-            val os = new JarOutputStream(fileOut)
-            val e = new ZipEntry(JarFile.MANIFEST_NAME)
-            e setTime time.getOrElse(System.currentTimeMillis)
-            os.putNextEntry(e)
-            mf.write(new BufferedOutputStream(os))
-            os.closeEntry()
-
-            (os, "jar")
-          case None => (new ZipOutputStream(fileOut, defaultCharset), "zip")
-        }
+      val zipOut = (manifest, deflateOn) match {
+        case (Some(_), Some((ec, parallelism))) =>
+          new ParallelJarOutputStream(fileOut, parallelism)(ec)
+        case (Some(_), None)                 => ZipSink(new JarOutputStream(fileOut))
+        case (None, Some((ec, parallelism))) =>
+          new ParallelZipOutputStream(fileOut, parallelism)(ec)
+        case (None, None) => ZipSink(new ZipOutputStream(fileOut, defaultCharset))
+      }
+      // written inside the try, so failing to write it never leaves a writer unclosed on a deflater
       try {
+        manifest.foreach { mf =>
+          import Attributes.Name.MANIFEST_VERSION
+          val main = mf.getMainAttributes
+          if (!main.containsKey(MANIFEST_VERSION))
+            main.put(MANIFEST_VERSION, "1.0")
+
+          val e = new ZipEntry(JarFile.MANIFEST_NAME)
+          e setTime time.getOrElse(System.currentTimeMillis)
+          zipOut.putNextEntry(e)
+          mf.write(new BufferedOutputStream(zipOut))
+          zipOut.closeEntry()
+        }
         f(zipOut)
       } finally {
-        zipOut.close
+        zipOut.close()
       }
     }
   }

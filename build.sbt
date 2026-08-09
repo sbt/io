@@ -52,7 +52,7 @@ def commonSettings: Seq[Setting[?]] = Seq(
 )
 
 lazy val ioRoot = (project in file("."))
-  .aggregate(io)
+  .aggregate(io, ioBenchmarks)
   .settings(
     commonSettings,
     name := "IO Root",
@@ -102,4 +102,19 @@ val io = (project in file("io"))
     Test / buildInfoKeys := Seq[BuildInfoKey](target),
     Test / buildInfoPackage := "sbt.internal.io",
     Test / buildInfoUsePackageAsPath := true,
+  )
+
+// Benchmarks for the archive writers. Aggregated so it keeps compiling, but never run by `test`:
+// JMH runs on demand via `ioBenchmarks/Jmh/run`.
+lazy val ioBenchmarks = (project in file("benchmarks"))
+  .dependsOn(io)
+  .enablePlugins(JmhPlugin)
+  .settings(
+    commonSettings,
+    name := "IO Benchmarks",
+    publish / skip := true,
+    // Must cross-build with `io`, even though benchmarks only ever run on one version: `++`
+    // filters projects by crossScalaVersions, so pinning this to 2.12 would leave the benchmark
+    // on 2.12 while `io` moves, turning dependsOn(io) into an external resolve that cannot exist.
+    mimaPreviousArtifacts := Set.empty,
   )
