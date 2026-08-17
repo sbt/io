@@ -342,10 +342,13 @@ private[sbt] class ParallelZipOutputStream(
     def deflate(): Deflated =
       deflateInto(entryDeflater, taken.blocks, taken.used, taken.bytes, into, window)
     val task = new FutureTask[Deflated](() => deflate())
-    // a refused submission never reaches the queue, so its deflater is ended here rather than swept
+    // a submission that was refused was never accepted, and so never runs: this entry reaches
+    // neither the queue `close` sweeps nor a deflating thread, and hands back what it holds here
     try ec.execute(task)
     catch {
       case failed: Throwable =>
+        giveBlocks(taken.blocks)
+        giveBuffer(into)
         entryDeflater.end()
         throw failed
     }
@@ -416,6 +419,9 @@ private[sbt] class ParallelZipOutputStream(
       }
     firstFitting()
   }
+
+  /** What the free list holds, for a suite pinning that a refused entry handed its buffers back. */
+  private[parallel] def recycledBuffers: Int = freeBuffers.size
 
   /**
    * Kept within the bytes the window already bounds, and to no more buffers than are worth scanning.

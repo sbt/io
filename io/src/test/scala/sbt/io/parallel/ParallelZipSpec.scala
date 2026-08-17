@@ -214,6 +214,9 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
     w.write("body".getBytes("UTF-8"), 0, 4)
     // the refusal reaches the caller rather than becoming a future that nothing will ever complete
     intercept[RejectedExecutionException](w.closeEntry())
+    // the entry it never queued is the entry `close` never sweeps, so what it held — the block it
+    // was written into and the buffer it would have deflated to — comes back here or nowhere
+    assert(w.recycledBuffers === 2, "a refused entry dropped its buffers instead of recycling them")
     // and the archive still closes, since a refused entry never joined the queue it would be drained
     // from — it is missing from the archive rather than holding it open
     w.close()
