@@ -17,7 +17,7 @@ import scala.concurrent.duration._
 import scala.util.Properties
 
 object DefaultWatchServiceSpec {
-  val pollDelay = 100.milliseconds
+  val pollDelay = 200.milliseconds
 }
 
 class DefaultWatchServiceSpec

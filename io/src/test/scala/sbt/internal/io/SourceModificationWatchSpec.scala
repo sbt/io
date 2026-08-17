@@ -83,9 +83,6 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
 
   it should "ignore creation of files that do not match inclusion filter" in
     IO.withTemporaryDirectory { dir =>
-      if (scala.util.Properties.isWin) {
-        pending // TODO
-      }
       val parentDir = dir / "src" / "watchme"
       val created = parentDir / "inme"
       val scalaCreated = parentDir / "foo.scala"
@@ -261,9 +258,6 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
 
   it should "ignore deletion of files explicitly ignored in subdirectories" in
     IO.withTemporaryDirectory { dir =>
-      if (scala.util.Properties.isWin) {
-        pending // TODO
-      }
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "subdir"
       val willBeDeleted = subDir / ".hidden.scala"
@@ -278,9 +272,6 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
 
   it should "ignore deletion of empty directories in subdirectories" in IO
     .withTemporaryDirectory { dir =>
-      if (scala.util.Properties.isWin) {
-        pending // TODO
-      }
       val parentDir = dir / "src" / "watchme"
       val subDir = parentDir / "subdir"
       val willBeDeleted = subDir / "inme"
@@ -376,9 +367,6 @@ private[sbt] trait EventMonitorSpec { self: AnyFlatSpec & Matchers =>
 
   it should "ignore valid files in non-recursive subdirectories" in IO.withTemporaryDirectory {
     dir =>
-      if (scala.util.Properties.isWin) {
-        pending // TODO
-      }
       val file = dir / "src" / "Foo.scala"
       val globs = dir.toPath.toRealPath().toGlob / "*.scala" :: Nil
       val observable = newObservable(globs, NullLogger)
@@ -628,13 +616,13 @@ private[sbt] trait RepoEventMonitorSpec extends AnyFlatSpec with Matchers with E
   }
 }
 class FileTreeRepositoryEventMonitorSpec extends RepoEventMonitorSpec {
-  override def pollDelay: FiniteDuration = 100.millis
+  override def pollDelay: FiniteDuration = 200.millis
   override private[sbt] def factory(): FileTreeRepository[FileAttributes] =
     FileTreeRepository.default
 }
 
 class LegacyFileTreeRepositoryEventMonitorSpec extends RepoEventMonitorSpec {
-  override def pollDelay: FiniteDuration = 100.millis
+  override def pollDelay: FiniteDuration = 200.millis
   override private[sbt] def factory(): FileTreeRepository[FileAttributes] =
     FileTreeRepository.legacy
 }
