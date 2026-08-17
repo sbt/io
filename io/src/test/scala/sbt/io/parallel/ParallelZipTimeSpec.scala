@@ -107,10 +107,9 @@ class ParallelZipTimeSpec extends AnyFunSuite with ParallelZipSupport {
   }
 
   test("every second of every year the MS-DOS fields hold is stamped as the reference stamps it") {
-    // From 2044 the seven-bit year, counted from 1980, reaches the sign bit of the packed field, and JDK 8's
-    // `getTime` returns a millisecond less than it was given for every date after that. `getTime` is all a
-    // subclass sees, so re-encoding it would land a whole two-second unit low; the writer has to recover the
-    // field the reference wrote from. This sweep is where that is checked rather than assumed.
+    // from 2044 the seven-bit year reaches the sign bit of the packed field, and JDK 8's `getTime` then
+    // returns a millisecond less than it was given. `getTime` is all a subclass sees, so re-encoding it
+    // would land a whole two-second unit low — the writer has to recover the field the reference wrote
     val divergent = for {
       year <- 1980 to 2099
       second <- Seq(0, 1, 30, 59) // both parities, since the encoding keeps seconds to two
@@ -119,7 +118,7 @@ class ParallelZipTimeSpec extends AnyFunSuite with ParallelZipSupport {
         .atZone(ZoneId.systemDefault())
         .toInstant
         .toEpochMilli
-      ours = stampedWith(millis)(new ParallelZipOutputStream(_))
+      ours = stampedWith(millis)(parallelZip(_))
       reference = stampedWith(millis)(new ZipOutputStream(_))
       if !java.util.Arrays.equals(ours, reference)
     } yield s"$year at :$second (${firstDifference(ours, reference)})"
@@ -201,10 +200,9 @@ class ParallelZipTimeSpec extends AnyFunSuite with ParallelZipSupport {
   test(
     "an entry whose reported time stopped describing its header is still written as the reference does"
   ) {
-    // `ZipEntry.setExtra` parses a 0x000a or 0x5455 field and takes the modification time from it, while the
-    // writer keeps packing the one `setTime` left, so what the entry reports and what its header says come
-    // apart. `setLastModifiedTime` does it with no extra field at all, leaving an entry indistinguishable
-    // from a plain one through any method a subclass can call. Measured on 8, 21 and 26.
+    // `setExtra` parses a 0x000a or 0x5455 field and takes the modification time from it while the writer
+    // keeps packing the one `setTime` left, so what the entry reports and what its header says come apart.
+    // `setLastModifiedTime` does it with no extra field at all. Measured on 8, 21 and 26
     val infoZip = Array[Byte](0x55, 0x54, 0x05, 0x00, 0x01, 0, 0, 0, 0) // mtime 1970
     val perturbed = Seq[(String, ZipEntry => Unit)](
       "setTime then setExtra(NTFS)" -> { e => e.setTime(stamp); e.setExtra(ntfs(0L)) },
@@ -230,8 +228,8 @@ class ParallelZipTimeSpec extends AnyFunSuite with ParallelZipSupport {
   test("a lossy timestamp and a caller's extra field are ordered as the reference orders them") {
     val callerExtra = Array[Byte](0x11, 0x22, 0x02, 0x00, 0xaa.toByte, 0xbb.toByte)
     Seq[(String, ByteArrayOutputStream => ZipSink, ByteArrayOutputStream => ZipSink)](
-      ("zip", new ParallelZipOutputStream(_), new ZipOutputStream(_)),
-      ("jar", new ParallelJarOutputStream(_), new JarOutputStream(_))
+      ("zip", parallelZip(_), new ZipOutputStream(_)),
+      ("jar", parallelJar(_), new JarOutputStream(_))
     ).foreach { case (label, ourWriter, referenceWriter) =>
       sameAsReference(label, ourWriter, referenceWriter) { w =>
         val e = new ZipEntry("a.txt")
@@ -246,7 +244,7 @@ class ParallelZipTimeSpec extends AnyFunSuite with ParallelZipSupport {
   }
 
   test("an entry with no timestamp is stamped with the current one, as the reference stamps it") {
-    val bytes = archive(new ParallelZipOutputStream(_)) { w =>
+    val bytes = archive(parallelZip(_)) { w =>
       val undated = new ZipEntry("a.txt")
       undated.setSize(1)
       assert(undated.getTime === -1L, "this test needs an entry whose time was never set")
@@ -295,7 +293,7 @@ class ParallelZipTimeSpec extends AnyFunSuite with ParallelZipSupport {
           w.write(oneByte, 0, 1)
           w.closeEntry()
         }
-      val x = written(new ParallelZipOutputStream(_))
+      val x = written(parallelZip(_))
       val y = written(new ZipOutputStream(_))
       // where the reference stamps, it stamps the current time on both sides, so the two MS-DOS
       // fields can straddle a tick; everything either side of them has to agree, length included

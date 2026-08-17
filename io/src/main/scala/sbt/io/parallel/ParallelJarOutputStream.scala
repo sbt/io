@@ -13,6 +13,7 @@ package sbt.io.parallel
 
 import java.io.OutputStream
 import java.util.zip.ZipEntry
+import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
 
 import ZipConstants.u16
@@ -23,7 +24,7 @@ import ZipConstants.u16
  */
 private[sbt] final class ParallelJarOutputStream(
     out: OutputStream,
-    parallelism: Int = ParallelZipOutputStream.DefaultParallelism
+    parallelism: Int
 )(implicit ec: ExecutionContext)
     extends ParallelZipOutputStream(out, parallelism)(ec) {
 
@@ -33,10 +34,12 @@ private[sbt] final class ParallelJarOutputStream(
     if (!stamped) {
       stamped = true
       val magic = ParallelJarOutputStream.JarMagicExtra
-      val existing = e.getExtra
       // onto the entry, as `JarOutputStream` stamps it: visible to the caller, validated by `setExtra`
-      if (existing == null) e.setExtra(magic)
-      else if (!ParallelJarOutputStream.hasMagic(existing)) e.setExtra(magic ++ existing)
+      Option(e.getExtra) match {
+        case None                                                    => e.setExtra(magic)
+        case Some(extra) if !ParallelJarOutputStream.hasMagic(extra) => e.setExtra(magic ++ extra)
+        case Some(_)                                                 => ()
+      }
     }
 }
 
@@ -45,13 +48,12 @@ private[sbt] object ParallelJarOutputStream {
   /** Whether an extra field already carries the jar magic id, walked as `JarOutputStream.hasMagic` walks. */
   private[io] def hasMagic(extra: Array[Byte]): Boolean = {
     // id before size, as the JDK does: a truncated trailing fragment of just the id counts as stamped
-    var i = 0
-    while (i + IdBytes <= extra.length) {
-      if (u16(extra, i) == JarMagicId) return true
-      if (i + HeaderBytes > extra.length) return false
-      i += u16(extra, i + IdBytes) + HeaderBytes
-    }
-    false
+    @tailrec def inFieldAt(at: Int): Boolean =
+      if (at + IdBytes > extra.length) false
+      else if (u16(extra, at) == JarMagicId) true
+      else if (at + HeaderBytes > extra.length) false
+      else inFieldAt(at + u16(extra, at + IdBytes) + HeaderBytes)
+    inFieldAt(0)
   }
 
   /** 0xCAFE, the id `JarOutputStream` stamps a jar's first entry with. */

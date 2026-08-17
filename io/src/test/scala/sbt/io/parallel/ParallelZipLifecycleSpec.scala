@@ -103,7 +103,7 @@ class ParallelZipLifecycleSpec extends AnyFunSuite with ParallelZipSupport {
   test("a write with no entry open is refused in the reference's words") {
     def refusal(make: ByteArrayOutputStream => ZipSink): String =
       refusalFrom(make)(_.write(Array[Byte](1), 0, 1))
-    assert(refusal(new ParallelZipOutputStream(_)) === refusal(new ZipOutputStream(_)))
+    assert(refusal(parallelZip(_)) === refusal(new ZipOutputStream(_)))
   }
 
   test("a parallelism past anything the window allows in flight is still constructible") {
@@ -160,13 +160,10 @@ class ParallelZipLifecycleSpec extends AnyFunSuite with ParallelZipSupport {
   test("putNextEntry without closeEntry auto-closes the previous entry, byte for byte") {
     val body = ("class A { def f = 1 } " * 50).getBytes("UTF-8")
     sameAsReference("auto-close") { w =>
-      // write first entry, do NOT call closeEntry
       w.putNextEntry(entry("a.txt", body.length))
       w.write(body, 0, body.length)
-      // putNextEntry auto-closes the previous entry
       w.putNextEntry(entry("b.txt", body.length))
       w.write(body, 0, body.length)
-      // explicit close for the last one
       w.closeEntry()
     }
   }

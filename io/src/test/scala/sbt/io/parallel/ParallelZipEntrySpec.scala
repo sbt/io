@@ -19,16 +19,14 @@ import sbt.io.ZipTestSupport.{ crcOf, firstDifference }
 import ZipConstants.{ u32, CenAttributesOffset, CenMadeByOffset, CenSig }
 
 /**
- * One entry's own record: its method, its three sizes, its name and its comment, as the reference
- * writes them — stored and deflated, declared and left to deflation, and for entries whose fields
- * were set by something other than the caller. Where a field overflows is [[ParallelZipLimitsSpec]];
- * the times and the extra fields carrying them are [[ParallelZipTimeSpec]].
+ * One entry's own record — method, sizes, name and comment — as the reference writes them. Overflow
+ * is [[ParallelZipLimitsSpec]]; times and their extra fields are [[ParallelZipTimeSpec]].
  */
 class ParallelZipEntrySpec extends AnyFunSuite with ParallelZipSupport {
 
   test("ParallelZipOutputStream rejects a repeated entry name") {
     val a = new ByteArrayOutputStream
-    val w = new ParallelZipOutputStream(a)
+    val w = parallelZip(a)
     intercept[ZipException] {
       writeThrough(
         w,
@@ -138,7 +136,7 @@ class ParallelZipEntrySpec extends AnyFunSuite with ParallelZipSupport {
           w.closeEntry()
           w.finish()
         }
-      assert(message(new ParallelZipOutputStream(_)) === message(new ZipOutputStream(_)), what)
+      assert(message(parallelZip(_)) === message(new ZipOutputStream(_)), what)
     }
   }
 
@@ -149,12 +147,11 @@ class ParallelZipEntrySpec extends AnyFunSuite with ParallelZipSupport {
       w.write(body, 0, body.length)
       w.closeEntry()
     }
-    // the reference puts the sizes in the local header and writes no data descriptor for such an entry,
-    // so a writer that always set bit 3 would differ in the flag and in 16 bytes of archive. An entry
-    // declaring all three goes to the reference whatever the streaming threshold is, so both arms below
-    // take that path — the threshold is varied to pin that it makes no difference to the bytes.
+    // the reference puts the sizes in the local header and writes no descriptor for such an entry, so
+    // a writer that always set bit 3 would differ in the flag and in 16 bytes. The threshold is varied
+    // to pin that it makes no difference
     Seq[(String, ByteArrayOutputStream => ZipSink)](
-      "the default threshold" -> (new ParallelZipOutputStream(_)),
+      "the default threshold" -> (parallelZip(_)),
       "a threshold under the entry" -> (out => holdingUpTo(out, 16L))
     ).foreach { case (how, make) => sameAsReference(how, make)(drive) }
   }
@@ -181,7 +178,7 @@ class ParallelZipEntrySpec extends AnyFunSuite with ParallelZipSupport {
       // than a copy of them; the threshold is varied to pin that neither path re-words the refusal
       val expected = message(new ZipOutputStream(_))
       Seq[(String, ByteArrayOutputStream => ZipSink)](
-        "the default threshold" -> (new ParallelZipOutputStream(_)),
+        "the default threshold" -> (parallelZip(_)),
         "a threshold under the entry" -> (out => holdingUpTo(out, 16L))
       ).foreach { case (how, make) =>
         assert(message(make) === expected, s"a wrong $what, $how")
@@ -244,10 +241,9 @@ class ParallelZipEntrySpec extends AnyFunSuite with ParallelZipSupport {
   }
 
   test("an entry read back from an archive is written the way the reference writes it") {
-    // `ZipFile` and `ZipInputStream` fill in size, compressed size and crc without the caller asking, and
-    // measured, JDK 21 and later then write such an entry's sizes in a descriptor where 8 and 11 write them
-    // in the header — and at another level, 8 and 11 refuse it outright. Nothing outside `java.util.zip` can
-    // read the difference off the entry, which is why the reference is asked.
+    // `ZipFile` and `ZipInputStream` fill in the sizes and crc unasked; measured, 21 and later then write
+    // them in a descriptor where 8 and 11 write them in the header. Nothing outside `java.util.zip` can
+    // read that difference off the entry, which is why the reference is asked
     val body = ("object B { val x = 2 } " * 200).getBytes("UTF-8")
     val source = new ByteArrayOutputStream
     val z = new ZipOutputStream(source)
@@ -264,7 +260,7 @@ class ParallelZipEntrySpec extends AnyFunSuite with ParallelZipSupport {
       try {
         val e = in.getNextEntry
         val buf = new Array[Byte](8192)
-        while (in.read(buf) > 0) ()
+        Iterator.continually(in.read(buf)).takeWhile(_ > 0).foreach(_ => ())
         in.closeEntry()
         new ZipEntry(e)
       } finally in.close()
@@ -282,20 +278,21 @@ class ParallelZipEntrySpec extends AnyFunSuite with ParallelZipSupport {
       val out = new ByteArrayOutputStream
       val w = make(out)
       w.setLevel(level)
-      var refusal = ""
-      try {
-        w.putNextEntry(readBack())
-        w.write(body, 0, body.length)
-        w.closeEntry()
-        w.finish()
-      } catch { case e: ZipException => refusal = e.getMessage }
+      val refusal =
+        try {
+          w.putNextEntry(readBack())
+          w.write(body, 0, body.length)
+          w.closeEntry()
+          w.finish()
+          ""
+        } catch { case e: ZipException => e.getMessage }
       try w.close()
       catch { case _: ZipException => () }
       (out.toByteArray, refusal)
     }
 
     Seq(Deflater.DEFAULT_COMPRESSION, 1).foreach { level =>
-      val (ours, ourRefusal) = repack(new ParallelZipOutputStream(_), level)
+      val (ours, ourRefusal) = repack(parallelZip(_), level)
       val (reference, itsRefusal) = repack(new ZipOutputStream(_), level)
       assert(ourRefusal === itsRefusal, s"at level $level")
       assert(
@@ -327,13 +324,13 @@ class ParallelZipEntrySpec extends AnyFunSuite with ParallelZipSupport {
 
     def refusal(make: ByteArrayOutputStream => ZipSink): String =
       refusalFrom(make)(_.putNextEntry(new ZipEntry(read)))
-    assert(refusal(new ParallelZipOutputStream(_)) === refusal(new ZipOutputStream(_)))
+    assert(refusal(parallelZip(_)) === refusal(new ZipOutputStream(_)))
 
     // and the refusal comes where the reference's does, ahead of the name being claimed. Otherwise the
     // header probe reaches the same refusal a moment later, having already left the name behind — which only
     // happens at all for an entry declaring all three sizes, so it is no substitute for refusing here.
     val out = new ByteArrayOutputStream
-    val w = new ParallelZipOutputStream(out)
+    val w = parallelZip(out)
     intercept[ZipException](w.putNextEntry(new ZipEntry(read)))
     val corrected = new ZipEntry(read.getName)
     corrected.setTime(stamp)
@@ -357,14 +354,13 @@ class ParallelZipEntrySpec extends AnyFunSuite with ParallelZipSupport {
         e.getMethod
       } finally w.close()
     }
-    assert(resolved(new ParallelZipOutputStream(_)) === resolved(new ZipOutputStream(_)))
+    assert(resolved(parallelZip(_)) === resolved(new ZipOutputStream(_)))
   }
 
   test("an entry from a ZipFile keeps the platform and permissions the reference keeps") {
-    // `externalFileAttributes` reaches an entry only through `ZipFile`, and only from a central
-    // header whose platform is unix — `ZipInputStream` never sets it, which is why the repack test
-    // above cannot see this. Both fields live only in the central header, so dropping them is not
-    // a refusal but a quietly different archive.
+    // `externalFileAttributes` reaches an entry only through `ZipFile`, and only from a unix central
+    // header — which is why the repack test above cannot see this. Both fields live only in the
+    // central header, so dropping them is a quietly different archive rather than a refusal
     val body = "hello".getBytes("UTF-8")
     val sum = crcOf(body)
     val plain = new ByteArrayOutputStream
@@ -412,16 +408,9 @@ class ParallelZipEntrySpec extends AnyFunSuite with ParallelZipSupport {
   }
 
   test("a stored entry the caller keeps is left as the reference leaves it") {
-    // `ZipFile` assigns a compressed size straight onto the entry, so it arrives set without the
-    // entry recording that a caller set it — and that record is what the reference reads to decide
-    // where the sizes of a later deflated write go. Filling in a field already filled in would
-    // leave the record behind, and the entry would be written differently the second time.
-    //
-    // That record is 21 and later. Before it, an entry carrying all three sizes has them written into
-    // its header whichever way they got there, so the reference refuses the deflated write for having
-    // declared a compressed size that is the stored one — for both writers alike. So the two are
-    // compared on what they left the entry, refusal and all, rather than on bytes that only exist
-    // where the record does.
+    // `ZipFile` sets a compressed size without recording that a caller set it, and 21 and later read
+    // that record to place a later deflated write's sizes. Compared on what each writer left the
+    // entry, refusal and all, since before 21 there is no record to leave
     val body = new Array[Byte](4096)
     new java.util.Random(2).nextBytes(body)
     val sum = crcOf(body)
@@ -466,7 +455,7 @@ class ParallelZipEntrySpec extends AnyFunSuite with ParallelZipSupport {
           Right(out.toByteArray)
         } catch { case refused: ZipException => Left(refused.getMessage) }
       }
-      (reused(new ParallelZipOutputStream(_)), reused(new ZipOutputStream(_))) match {
+      (reused(parallelZip(_)), reused(new ZipOutputStream(_))) match {
         case (Right(ours), Right(reference)) =>
           assert(
             java.util.Arrays.equals(ours, reference),

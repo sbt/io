@@ -41,7 +41,7 @@ class ParallelJarSpec extends AnyFunSuite with ParallelZipSupport {
       ("a.txt", ("hello " * 100).getBytes("UTF-8"), stamp)
     )
     val a = new ByteArrayOutputStream
-    writeThrough(new ParallelJarOutputStream(a), Nil, files, stamp)
+    writeThrough(parallelJar(a), Nil, files, stamp)
     val b = new ByteArrayOutputStream
     writeThrough(new JarOutputStream(b), Nil, files, stamp)
     sameBytes("ParallelJarOutputStream", a.toByteArray, b.toByteArray, "JarOutputStream")
@@ -53,7 +53,7 @@ class ParallelJarSpec extends AnyFunSuite with ParallelZipSupport {
       ("b.txt", "b".getBytes("UTF-8"), stamp)
     )
     val a = new ByteArrayOutputStream
-    writeThrough(new ParallelJarOutputStream(a), Nil, files, stamp)
+    writeThrough(parallelJar(a), Nil, files, stamp)
     val bytes = a.toByteArray
     assert(firstExtra(bytes) === JarMagicExtra.toSeq, "first entry lost its magic")
     // exactly one entry carries an extra field, so the archive holds only the four magic bytes
@@ -67,7 +67,7 @@ class ParallelJarSpec extends AnyFunSuite with ParallelZipSupport {
     val field = Array(0x11.toByte, 0x22.toByte, 0x00.toByte, 0x00.toByte)
     val expected = extraWritten(field)(new JarOutputStream(_))
     assert(
-      extraWritten(field)(new ParallelJarOutputStream(_)) === expected,
+      extraWritten(field)(parallelJar(_)) === expected,
       "the jar writer must stamp the magic the way JarOutputStream does"
     )
   }
@@ -75,7 +75,7 @@ class ParallelJarSpec extends AnyFunSuite with ParallelZipSupport {
   test("the jar writer does not stamp its magic twice") {
     val expected = extraWritten(JarMagicExtra)(new JarOutputStream(_)) // already stamped
     assert(
-      extraWritten(JarMagicExtra)(new ParallelJarOutputStream(_)) === expected,
+      extraWritten(JarMagicExtra)(parallelJar(_)) === expected,
       s"expected $expected, so the magic was stamped onto a field that already had it"
     )
   }
@@ -113,7 +113,7 @@ class ParallelJarSpec extends AnyFunSuite with ParallelZipSupport {
     // a divergence here means the magic did not outlive the refused entry
     sameAsReference(
       "the jar magic over a refused first entry",
-      new ParallelJarOutputStream(_),
+      parallelJar(_),
       new JarOutputStream(_)
     ) { w =>
       val bad = new ZipEntry("bad/")

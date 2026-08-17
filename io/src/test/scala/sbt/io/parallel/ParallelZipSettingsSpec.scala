@@ -23,16 +23,6 @@ import sbt.io.ZipTestSupport.halfCompressible
  */
 class ParallelZipSettingsSpec extends AnyFunSuite with ParallelZipSupport {
 
-  /** Writes `body` to the open entry in `chunk`-sized pieces, since where a write ends reaches the bytes. */
-  private def writeInChunks(w: ZipSink, body: Array[Byte], chunk: Int): Unit = {
-    var off = 0
-    while (off < body.length) {
-      val n = math.min(chunk, body.length - off)
-      w.write(body, off, n)
-      off += n
-    }
-  }
-
   test("setLevel reaches every deflater, byte for byte") {
     val body = ("class A { def f = 1 } " * 400).getBytes("UTF-8")
     Seq(Deflater.DEFAULT_COMPRESSION, 0, 1, 6, 9).foreach { level =>
@@ -44,7 +34,7 @@ class ParallelZipSettingsSpec extends AnyFunSuite with ParallelZipSupport {
       }
     }
     // and an entry already queued keeps the level it was submitted with
-    val bytes = archive(new ParallelZipOutputStream(_)) { w =>
+    val bytes = archive(parallelZip(_)) { w =>
       w.setLevel(9)
       writeOne(w, "a.txt")
       w.setLevel(0)
@@ -67,7 +57,7 @@ class ParallelZipSettingsSpec extends AnyFunSuite with ParallelZipSupport {
         w.closeEntry()
       }
       Seq[(String, ByteArrayOutputStream => ZipSink)](
-        "held" -> (new ParallelZipOutputStream(_)),
+        "held" -> (parallelZip(_)),
         "streamed" -> (out => holdingUpTo(out, 4096L))
       ).foreach { case (how, make) => sameAsReference(s"level $level $how", make)(drive) }
     }
@@ -157,26 +147,18 @@ class ParallelZipSettingsSpec extends AnyFunSuite with ParallelZipSupport {
   }
 
   test("a level set part way through an entry reaches that entry, byte for byte") {
-    // the reference keeps one deflater and `setLevel` reaches it, so the rest of the open entry is
-    // written at the new level. Every pair matters: zlib settles the change by flushing a block,
-    // and how much room it is given to do that reaches the output at every level, not only at 0.
-    //
-    // Both bodies matter, and only the second one can fail. What the change flushes is whatever zlib
-    // still had pending, and how much that is depends on the room the writes before it were given —
-    // so a body has to leave output pending across a write to tell one writer's buffer from another's.
-    // A repetitive one deflates away to almost nothing and an incompressible one is stored block for
-    // block whatever the room; neither leaves much. Half compressible does, but only if the two are
-    // interleaved irregularly: at a fixed stride the blocks land in the same place either way. This
-    // one is what a fuzzer over random sizes and strides settled on, kept at the size it found
+    // zlib settles a level change by flushing whatever it had pending, and how much that is depends
+    // on the room the writes before it were given — so only a body that leaves output pending across
+    // a write tells one writer's buffer from another's. `patchy` is what a fuzzer settled on
     val repetitive =
       ("switch me " * 12000).getBytes("UTF-8") // 120000 bytes, past one deflate block
     val patchy = new Array[Byte](120000)
     val rnd = new java.util.Random(3)
     rnd.nextBytes(patchy)
-    var z = 0
-    while (z < patchy.length) {
-      patchy(z) = 0; z += 1 + rnd.nextInt(3)
-    }
+    Iterator
+      .iterate(0)(_ + 1 + rnd.nextInt(3))
+      .takeWhile(_ < patchy.length)
+      .foreach(patchy(_) = 0)
     val levels = Seq(Deflater.NO_COMPRESSION, 1, 6, 9, Deflater.DEFAULT_COMPRESSION)
     Seq("repetitive" -> repetitive, "patchy" -> patchy).foreach { case (kind, body) =>
       levels.foreach { from =>
@@ -185,16 +167,10 @@ class ParallelZipSettingsSpec extends AnyFunSuite with ParallelZipSupport {
             sameAsReference(s"$kind $from to $to in $chunk-byte writes") { w =>
               w.setLevel(from)
               w.putNextEntry(entry("a.bin", body.length))
-              var off = 0
-              var switched = false
-              while (off < body.length) {
-                if (!switched && off >= body.length / 2) {
-                  w.setLevel(to)
-                  switched = true
-                }
-                val n = math.min(chunk, body.length - off)
-                w.write(body, off, n)
-                off += n
+              val switchAt = body.indices.by(chunk).find(_ >= body.length / 2)
+              body.indices.by(chunk).foreach { off =>
+                if (switchAt.contains(off)) w.setLevel(to)
+                w.write(body, off, math.min(chunk, body.length - off))
               }
               w.closeEntry()
             }

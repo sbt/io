@@ -14,30 +14,42 @@ package sbt.io.parallel
 import java.io.{ ByteArrayInputStream, ByteArrayOutputStream, OutputStream }
 import java.util.zip.{ Deflater, ZipEntry, ZipException, ZipInputStream, ZipOutputStream }
 import org.scalatest.Assertions
+import sbt.io.IO
 import sbt.io.ZipTestSupport.{ crcOf, firstDifference, sameBytes, EmptyCrc }
+import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
 import scala.language.implicitConversions
 
 /**
- * What more than one parallel-zip suite drives the writers with: the pair of adapters that put this
- * writer and the reference behind one interface, the entries and archives they are driven over, and
- * the readers that pick a written archive back apart. A fixture only one aspect needs lives in that
- * aspect's own suite instead.
+ * What more than one parallel-zip suite drives the writers with. A fixture only one aspect needs
+ * lives in that aspect's own suite instead.
  */
 private[parallel] trait ParallelZipSupport extends Assertions {
 
   /**
-   * Where these suites deflate. `commonPool` rather than a pool of their own, which is what the writer
-   * ran on when it took a default, so that the branch choosing between the handover and the writing
-   * thread is reached here exactly as it was. Named `ec` so that a test naming its own context shadows
-   * this one rather than competing with it.
+   * Where these suites deflate: what a caller taking `IO`'s default gets. Named `ec` so that a test
+   * naming its own context shadows this one rather than competing with it.
    */
-  protected implicit val ec: ExecutionContext = ParallelZipOutputStream.commonPoolContext
+  protected implicit val ec: ExecutionContext = IO.Implicits.zipContext
 
   // both writers under one name, so that a test drives the pair of them the same way. The parallel
   // one is a `ZipSink` already; the JDK's is adapted implicitly so that a test names the writer it
   // means — `new ZipOutputStream(out)` — rather than the adapter, which is not what is being tested
   protected implicit def sequentialWriter(z: ZipOutputStream): ZipSink = ZipSink(z)
+
+  /**
+   * The writers under test at the parallelism `IO` gives a caller that names none. The context is
+   * taken here rather than closed over, so a test naming its own still shadows [[ec]].
+   */
+  protected def parallelZip(out: OutputStream)(implicit
+      ec: ExecutionContext
+  ): ParallelZipOutputStream =
+    new ParallelZipOutputStream(out, IO.defaultParallelism)
+
+  protected def parallelJar(out: OutputStream)(implicit
+      ec: ExecutionContext
+  ): ParallelJarOutputStream =
+    new ParallelJarOutputStream(out, IO.defaultParallelism)
 
   /**
    * A writer that streams anything past `hold`, so that a test can drive the streaming path without
@@ -48,8 +60,8 @@ private[parallel] trait ParallelZipSupport extends Assertions {
       out: OutputStream,
       hold: Long,
       window: Long = ParallelZipOutputStream.WindowBytes,
-      parallelism: Int = ParallelZipOutputStream.DefaultParallelism
-  ): ParallelZipOutputStream =
+      parallelism: Int = IO.defaultParallelism
+  )(implicit ec: ExecutionContext): ParallelZipOutputStream =
     new ParallelZipOutputStream(out, parallelism) {
       override protected def maxEntryBytes: Long = hold
       override protected def windowBytes: Long = window
@@ -85,6 +97,13 @@ private[parallel] trait ParallelZipSupport extends Assertions {
     w.closeEntry()
   }
 
+  /**
+   * `body` handed to the open entry in `chunk`-sized writes, the last one whatever is left of it,
+   * since where a write ends reaches the bytes.
+   */
+  protected def writeInChunks(w: ZipSink, body: Array[Byte], chunk: Int): Unit =
+    body.indices.by(chunk).foreach(off => w.write(body, off, math.min(chunk, body.length - off)))
+
   /** One archive: what `make`'s writer leaves in its sink once `drive` has written to it. */
   protected def archive(make: ByteArrayOutputStream => ZipSink)(
       drive: ZipSink => Unit
@@ -104,20 +123,18 @@ private[parallel] trait ParallelZipSupport extends Assertions {
    */
   protected def sameAsReference(
       what: String,
-      ours: ByteArrayOutputStream => ZipSink = new ParallelZipOutputStream(_),
+      ours: ByteArrayOutputStream => ZipSink = parallelZip(_),
       reference: ByteArrayOutputStream => ZipSink = new ZipOutputStream(_)
   )(drive: ZipSink => Unit): Unit =
     sameBytes(what, archive(ours)(drive), archive(reference)(drive), "the reference")
 
   /**
-   * The same driving through both writers where either may refuse it, which is what a field running
-   * past what its header records comes to: they have to agree on the archive, or agree on the
-   * refusal, and one writing what the other refuses is itself the failure. [[sameAsReference]] is
-   * the same comparison where neither is expected to refuse.
+   * The same driving through both writers where either may refuse it: they have to agree on the
+   * archive or agree on the refusal, and one writing what the other refuses is itself the failure.
    */
   protected def sameOutcome(
       what: String,
-      ours: ByteArrayOutputStream => ZipSink = new ParallelZipOutputStream(_),
+      ours: ByteArrayOutputStream => ZipSink = parallelZip(_),
       reference: ByteArrayOutputStream => ZipSink = new ZipOutputStream(_)
   )(drive: ZipSink => Unit): Unit = {
     def attempt(make: ByteArrayOutputStream => ZipSink): Either[String, Array[Byte]] = {
@@ -164,7 +181,7 @@ private[parallel] trait ParallelZipSupport extends Assertions {
   }
 
   protected def parallel(out: OutputStream): ZipSink =
-    new ParallelZipOutputStream(out)
+    parallelZip(out)
   protected def sequential(out: OutputStream): ZipSink = new ZipOutputStream(out)
 
   /**
@@ -202,10 +219,11 @@ private[parallel] trait ParallelZipSupport extends Assertions {
     d.setInput(body)
     d.finish()
     val out = new Array[Byte](body.length + 1024)
-    var n = 0
-    while (!d.finished()) n += d.deflate(out, n, out.length - n)
+    @tailrec def deflatedFrom(n: Int): Int =
+      if (d.finished()) n else deflatedFrom(n + d.deflate(out, n, out.length - n))
+    val compressed = deflatedFrom(0)
     d.end()
-    (n.toLong, crcOf(body))
+    (compressed.toLong, crcOf(body))
   }
 
   protected def declaring(name: String, body: Array[Byte]): ZipEntry = {

@@ -14,29 +14,16 @@ package sbt.io.parallel
 import java.io.{ ByteArrayOutputStream, OutputStream }
 import java.nio.charset.StandardCharsets
 import java.util.zip.{ ZipEntry, ZipException, ZipOutputStream }
+import scala.annotation.tailrec
 import ZipConstants._
 
 /**
  * What a real `ZipOutputStream` would do, asked at run time rather than restated, so that a JDK
- * disagreeing with its predecessors needs no change to either writer. Everything the writers cannot
- * settle for themselves is read from one of these:
+ * disagreeing with its predecessors needs no change to either writer.
  *
- *   - [[header]], an entry's MS-DOS time, its extra field in each header, the platform and
- *     permissions only its central header records, and the time the reference settled on for an
- *     entry carrying none of its own;
- *   - [[declaresSizes]], whether an entry's sizes belong in its local header or in a descriptor;
- *   - [[oversizedCentralHeaderRefusal]], whether a central header past 64 KB is refused, and in what
- *     words;
- *   - [[deflateBuffer]], the room it gives zlib for one `deflate`, which frames the blocks a level
- *     change settles in;
- *   - [[validate]], which puts a setting through a reference so that one it will not take is refused
- *     in this JDK's own words;
- *   - [[fillStoredSizes]], which fills a stored entry's sizes in from each other as it does.
- *
- * A probe is built for the call and closed with it, never kept: it holds a `Deflater`, and that
- * holds native memory nothing but `end` frees. Asking [[header]] costs a probe archive per entry, on
- * the one thread a parallel writer cannot share out — 2.5 µs against 490 µs to deflate a class-sized
- * entry. Remembering it instead would mean keying on the fields it exists because nothing can read.
+ * A probe is built for the call and closed with it, never kept: it holds a `Deflater` and native
+ * memory nothing but `end` frees. [[header]] costs a probe archive per entry — 2.5 µs against 490 µs
+ * to deflate a class-sized entry — and caching it would mean keying on fields nothing can read.
  */
 private[parallel] object ZipReference {
 
@@ -46,15 +33,15 @@ private[parallel] object ZipReference {
    * only the modification time. `madeBy` and `attributes` carry the platform and permissions of an
    * entry that came from a `ZipFile`, which only its central header records.
    */
-  final class Header(
-      val time: Long,
-      val dosTime: Long,
-      val madeBy: Int,
-      val attributes: Long,
-      val local: Array[Byte],
-      val central: Array[Byte],
-      val refusesCentral: Boolean,
-      val centralSlack: Int
+  final case class Header(
+      time: Long,
+      dosTime: Long,
+      madeBy: Int,
+      attributes: Long,
+      local: Array[Byte],
+      central: Array[Byte],
+      refusesCentral: Boolean,
+      centralSlack: Int
   )
 
   /**
@@ -79,15 +66,14 @@ private[parallel] object ZipReference {
       z.putNextEntry(probe)
       val localBytes = out.size
       // 22 and later refuse an oversized central header, leaving only the local field to read
-      var refused = false
-      try {
-        z.closeEntry()
-        z.finish()
-      } catch {
-        case _: ZipException => refused = true
-      }
+      val refused =
+        try {
+          z.closeEntry()
+          z.finish()
+          false
+        } catch { case _: ZipException => true }
       val b = out.bytes
-      val local = extraIn(b, LocBytes, LocNameLengthOffset, LocExtraLengthOffset)
+      val local = extraIn(b, LocBytes, LocNameLengthOffset, LocExtraLengthOffset, at = 0)
       val central =
         if (refused) local
         else extraIn(b, CentralHeaderBytes, CenNameLengthOffset, CenExtraLengthOffset, localBytes)
@@ -102,10 +88,10 @@ private[parallel] object ZipReference {
       val slack =
         if (
           refused || centralBytes + MaxCentralAddition <= MaxFieldBytes ||
-          oversizedCentralHeaderRefusal == null
+          oversizedCentralHeaderRefusal.isEmpty
         ) NoCentralLimit
         else centralSlack(e, out)
-      new Header(probe.getTime, dos, madeBy, attributes, local, central, refused, slack)
+      Header(probe.getTime, dos, madeBy, attributes, local, central, refused, slack)
     } finally closeQuietly(z)
   }
 
@@ -118,27 +104,19 @@ private[parallel] object ZipReference {
    */
   private def centralSlack(e: ZipEntry, out: ProbeSink): Int =
     if (!refusesCentralWith(e, MaxCentralAddition, out)) NoCentralLimit
-    else {
-      var slack = MaxCentralAddition
-      var i = CentralAdditions.length - 2
-      while (i >= 0) {
-        if (refusesCentralWith(e, CentralAdditions(i), out)) slack = CentralAdditions(i)
-        i -= 1
-      }
-      slack
-    }
+    else
+      // the narrowest addition it refuses, the widest one already having been refused above
+      CentralAdditions.init
+        .find(added => refusesCentralWith(e, added, out))
+        .getOrElse(MaxCentralAddition)
 
-  /** Whether the reference refuses this entry's central header with `added` more bytes in it. */
   private def refusesCentralWith(e: ZipEntry, added: Int, out: ProbeSink): Boolean = {
     val probe = new ZipEntry(e)
     probe.setMethod(ZipEntry.STORED)
     probe.setSize(0)
     probe.setCompressedSize(0)
     probe.setCrc(0)
-    val comment = e.getComment match {
-      case null    => ""
-      case comment => comment
-    }
+    val comment = Option(e.getComment).getOrElse("")
     // one byte of utf-8 each, so the header grows by exactly `added`. Within what `setComment`
     // takes, since this is asked only of an entry the reference did not already refuse
     probe.setComment(comment + CommentFiller * added)
@@ -178,19 +156,19 @@ private[parallel] object ZipReference {
    * the reference would go on to read if that same entry were later written again as deflated.
    */
   def fillStoredSizes(e: ZipEntry): Unit = {
-    var size = e.getSize
-    var compressed = e.getCompressedSize
-    if (size == Unset) size = compressed
-    else if (compressed == Unset) compressed = size
-    else if (size != compressed)
+    val declared = e.getSize
+    val declaredCompressed = e.getCompressedSize
+    if (declared != Unset && declaredCompressed != Unset && declared != declaredCompressed)
       throw new ZipException("STORED entry where compressed != uncompressed size")
+    val size = if (declared == Unset) declaredCompressed else declared
+    val compressed = if (declaredCompressed == Unset) declared else declaredCompressed
     if (size == Unset || e.getCrc == Unset)
       throw new ZipException("STORED entry missing size, compressed size, or crc-32")
     // written back only where the reference fills one in from the other, keeping the record
     // `setCompressedSize` leaves to the case it cannot be kept out of. The size guard is not the
     // same test: a compressed size may be negative, where `setSize` refuses what the reference took
-    if (e.getSize == Unset && size >= 0) e.setSize(size)
-    if (e.getCompressedSize == Unset) e.setCompressedSize(compressed)
+    if (declared == Unset && size >= 0) e.setSize(size)
+    if (declaredCompressed == Unset) e.setCompressedSize(compressed)
   }
 
   /**
@@ -223,10 +201,10 @@ private[parallel] object ZipReference {
   }
 
   /**
-   * This JDK's refusal of a central header past 64 KB, or null where it writes one anyway:
+   * This JDK's refusal of a central header past 64 KB, or nothing where it writes one anyway:
    * 8-21 do, 22+ refuse. Probed once so the wording matches the running JDK's.
    */
-  lazy val oversizedCentralHeaderRefusal: String = {
+  lazy val oversizedCentralHeaderRefusal: Option[String] = {
     val roomForName = MaxFieldBytes - CentralHeaderBytes
     val overflowingLength = roomForName / MaxUtf8BytesPerChar + 1
     val wideName = MaxUtf8Char * overflowingLength
@@ -238,8 +216,8 @@ private[parallel] object ZipReference {
       z.putNextEntry(e)
       z.closeEntry()
       z.finish()
-      null
-    } catch { case refused: ZipException => refused.getMessage }
+      None
+    } catch { case refused: ZipException => Some(refused.getMessage) }
     finally closeQuietly(z)
   }
 
@@ -254,19 +232,16 @@ private[parallel] object ZipReference {
    * anything wider. 512 on 8 to 26, settled in two passes.
    */
   lazy val deflateBuffer: Int = {
-    var body = ProbeBodyBytes
-    var widest = widestDeflateWrite(body)
-    var growing = true
-    while (growing && body <= MaxProbeBodyBytes / 2) {
-      body *= 2
-      val again = widestDeflateWrite(body)
-      growing = again > widest
-      if (growing) widest = again
-    }
-    if (widest > 0) widest else FallbackDeflateBuffer
+    @tailrec def settle(body: Int, widest: Int): Int =
+      if (body > MaxProbeBodyBytes / 2) widest
+      else {
+        val again = widestDeflateWrite(body * 2)
+        if (again > widest) settle(body * 2, again) else widest
+      }
+    val measured = settle(ProbeBodyBytes, widestDeflateWrite(ProbeBodyBytes))
+    if (measured > 0) measured else FallbackDeflateBuffer
   }
 
-  /** The widest single write a reference makes deflating `bodyBytes` of incompressible input. */
   private def widestDeflateWrite(bodyBytes: Int): Int = {
     val sink = new WidestWrite
     val z = new ProbeStream(sink)
@@ -276,18 +251,25 @@ private[parallel] object ZipReference {
       val e = new ZipEntry("p")
       e.setTime(0L)
       z.putNextEntry(e)
-      sink.watching = true // so a name or an extra field cannot be mistaken for the buffer
-      z.write(body, 0, body.length)
-      sink.watching = false
+      val widest = sink.measuring(z.write(body, 0, body.length))
       z.closeEntry()
+      widest
     } finally closeQuietly(z)
-    sink.widest
   }
 
   /** Records the widest single write it is given, which is what reveals the buffer behind it. */
   private final class WidestWrite extends OutputStream {
-    var watching = false
-    var widest = 0
+    private var watching = false
+    private var widest = 0
+
+    /** The widest write `writing` makes: those around it are a name or an extra field, not a buffer. */
+    def measuring(writing: => Unit): Int = {
+      watching = true
+      writing
+      watching = false
+      widest
+    }
+
     override def write(b: Int): Unit = ()
     override def write(b: Array[Byte], off: Int, len: Int): Unit =
       if (watching && len > widest) widest = len
@@ -298,7 +280,7 @@ private[parallel] object ZipReference {
       headerBytes: Int,
       nameLengthOffset: Int,
       extraLengthOffset: Int,
-      at: Int = 0
+      at: Int
   ): Array[Byte] = {
     val nameLength = u16(b, at + nameLengthOffset)
     val extraLength = u16(b, at + extraLengthOffset)

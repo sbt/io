@@ -14,12 +14,15 @@ package sbt.io.parallel
 import java.io.{ ByteArrayOutputStream, OutputStream }
 import java.util.concurrent.{
   CompletableFuture,
+  CountDownLatch,
   ExecutorService,
   Executors,
   ForkJoinPool,
   ForkJoinWorkerThread,
+  FutureTask,
   RejectedExecutionException,
-  TimeUnit
+  TimeUnit,
+  TimeoutException
 }
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.{ ZipEntry, ZipOutputStream }
@@ -29,10 +32,8 @@ import sbt.io.ZipTestSupport.sameBytes
 import scala.concurrent.ExecutionContext
 
 /**
- * The archive itself, byte for byte against the `ZipOutputStream` it stands in for: that routing an
- * entry — held, streamed, deflated where it was written, or handed to a context — never reaches the
- * bytes. What one entry's own record says is [[ParallelZipEntrySpec]]; misuse is
- * [[ParallelZipLifecycleSpec]] and [[ParallelZipFailureSpec]].
+ * The archive itself, byte for byte against the `ZipOutputStream` it stands in for: that how an
+ * entry was routed never reaches the bytes. One entry's own record is [[ParallelZipEntrySpec]].
  */
 class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
 
@@ -52,6 +53,11 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
     def reportFailure(cause: Throwable): Unit = throw cause
   }
 
+  private def running(how: Runnable => Unit): ExecutionContext = new ExecutionContext {
+    def execute(runnable: Runnable): Unit = how(runnable)
+    def reportFailure(cause: Throwable): Unit = throw cause
+  }
+
   private object Recording {
     final val ThreadName = "parallel-zip-spec-context"
     def pool(): ExecutorService =
@@ -64,8 +70,7 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
     (1 to count).map { i =>
       val body = new Array[Byte](500 + rnd.nextInt(20000))
       rnd.nextBytes(body)
-      var j = 0
-      while (j < body.length) { body(j) = 0; j += 2 }
+      body.indices.by(2).foreach(body(_) = 0)
       (s"pkg/C$i.class", body, stamp)
     }
   }
@@ -91,7 +96,7 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
     )
     sameBytes(
       "ParallelZipOutputStream",
-      through(new ParallelZipOutputStream(_), dirs, files),
+      through(parallelZip(_), dirs, files),
       through(new ZipOutputStream(_), dirs, files),
       "ZipOutputStream"
     )
@@ -100,7 +105,7 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
   test("ParallelZipOutputStream writes an empty archive") {
     sameBytes(
       "an empty archive",
-      through(new ParallelZipOutputStream(_), Nil, Nil),
+      through(parallelZip(_), Nil, Nil),
       through(new ZipOutputStream(_), Nil, Nil),
       "ZipOutputStream"
     )
@@ -109,28 +114,74 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
   test("ParallelZipOutputStream writes identical bytes at any parallelism") {
     val files = corpus(300, seed = 4)
     val want = through(new ZipOutputStream(_), Seq("pkg/"), files)
-    Seq(1, 2, 8, ParallelZipOutputStream.DefaultParallelism).foreach { p =>
+    Seq(1, 2, 8, IO.defaultParallelism).foreach { p =>
       val ours = through(new ParallelZipOutputStream(_, parallelism = p), Seq("pkg/"), files)
       sameBytes(s"parallelism $p", ours, want, "the reference")
     }
   }
 
   test("an entry deflated on the writing thread produces the same archive, byte for byte") {
-    // `ForkJoinPool.getCommonPoolParallelism` is above 1 wherever these tests run, so overriding the
-    // choice is the only thing that reaches the branch a single-core machine takes, where an entry is
-    // deflated where it was written rather than handed to the pool
-    class OnThisThread(out: ByteArrayOutputStream, hold: Long)
-        extends ParallelZipOutputStream(out) {
-      override protected def maxEntryBytes: Long = hold
-      override protected def deflateOnThisThread: Boolean = true
-    }
+    // a context that runs what it is given right where it was given it, which is what a single-core
+    // machine amounts to: the deflating lands on the writing thread rather than on a pool
+    implicit val ec: ExecutionContext = ExecutionContext.fromExecutor((r: Runnable) => r.run())
     val files = corpus(40, seed = 9)
     val want = through(new ZipOutputStream(_), Seq("pkg/"), files)
-    // held and streamed both, since only the held path reaches the branch and only the archive
+    // held and streamed both, since only the held path hands anything over and only the archive
     // around it proves the two still interleave in order
     Seq(1024L, ParallelZipOutputStream.MaxEntryBytes).foreach { hold =>
-      val ours = through(new OnThisThread(_, hold), Seq("pkg/"), files)
+      val ours = through(holdingUpTo(_, hold), Seq("pkg/"), files)
       sameBytes(s"hold $hold", ours, want, "the reference")
+    }
+  }
+
+  test("a context that never runs what it is given is deflated past rather than waited on") {
+    // the writing thread claims a task the context has not started, so a context that accepts work
+    // and drops it — a common pool at no parallelism is the one in the wild — cannot wedge the writer
+    val dropped = new AtomicInteger
+    implicit val ec: ExecutionContext = new ExecutionContext {
+      def execute(r: Runnable): Unit = { val _ = dropped.incrementAndGet() }
+      def reportFailure(cause: Throwable): Unit = throw cause
+    }
+    val files = corpus(20, seed = 34)
+    sameBytes(
+      "an archive a context contributed nothing to",
+      through(parallelZip(_), Seq("pkg/"), files),
+      through(new ZipOutputStream(_), Seq("pkg/"), files),
+      "the reference"
+    )
+    assert(dropped.get === files.length)
+  }
+
+  test("the writer finishes whatever a context does with the work it is given") {
+    // a wedged writer hangs the suite rather than failing it, so each context is driven on a thread
+    // of its own against a deadline. None of these ever completes a task the writer does not claim
+    val files = corpus(30, seed = 77)
+    val want = through(new ZipOutputStream(_), Seq("pkg/"), files)
+    val occupied = Executors.newFixedThreadPool(1)
+    val busy = new CountDownLatch(1)
+    occupied.execute(() => busy.await())
+    val cases = Seq[(String, ExecutionContext)](
+      "a context that runs nothing" -> running(_ => ()),
+      "a context that runs it where it was given" -> running(_.run()),
+      "a context whose only thread is occupied" -> ExecutionContext.fromExecutor(occupied)
+    )
+    try
+      cases.foreach { case (what, context) =>
+        val archived = new FutureTask[Array[Byte]](() => {
+          implicit val ec: ExecutionContext = context
+          through(parallelZip(_), Seq("pkg/"), files)
+        })
+        val driver = new Thread(archived, "parallel-zip-deadlock-spec")
+        driver.setDaemon(true)
+        driver.start()
+        val ours =
+          try archived.get(30, TimeUnit.SECONDS)
+          catch { case _: TimeoutException => fail(s"$what left the writer waiting") }
+        sameBytes(what, ours, want, "the reference")
+      }
+    finally {
+      busy.countDown()
+      val _ = occupied.shutdownNow()
     }
   }
 
@@ -141,13 +192,13 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
     try {
       sameBytes(
         "entries deflated on the caller's context",
-        through(new ParallelZipOutputStream(_), Seq("pkg/"), files),
+        through(parallelZip(_), Seq("pkg/"), files),
         through(new ZipOutputStream(_), Seq("pkg/"), files),
         "the reference"
       )
-      // and the context was where the deflating happened, rather than a parameter nothing reads: one
-      // handover per file entry, the directory being stored and so streamed, and none of it run
-      // anywhere but the threads this context owns
+      // and every entry was offered to the context rather than to a parameter nothing reads: one
+      // handover per file entry, the directory being stored and so streamed. Which thread deflated
+      // is not asserted — the writing thread claims whatever the context has not started yet
       assert(ec.submitted.get === files.length)
       assert(ec.elsewhere.get === 0)
     } finally { val _ = threads.shutdownNow() }
@@ -158,7 +209,7 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
     val _ = stopped.shutdownNow()
     implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(stopped)
     val out = new ByteArrayOutputStream
-    val w = new ParallelZipOutputStream(out)
+    val w = parallelZip(out)
     w.putNextEntry(entry("a.txt"))
     w.write("body".getBytes("UTF-8"), 0, 4)
     // the refusal reaches the caller rather than becoming a future that nothing will ever complete
@@ -169,36 +220,10 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
     assert(namesIn(out.toByteArray) === Nil)
   }
 
-  test("a context the caller supplied is handed to, whatever commonPool would have said") {
-    // the choice is a fact about `commonPool` — below two cores it gains nothing and on 8 it may run
-    // nothing at all — so it has no bearing on a context that came from somewhere else. Asserted on
-    // the choice rather than through an archive because the machine this runs on has cores, so an
-    // archive would take the same path either way and could not tell a fixed answer from a right one
-    class Peek(out: OutputStream)(implicit ec: ExecutionContext)
-        extends ParallelZipOutputStream(out) {
-      def handsOver: Boolean = !deflateOnThisThread
-    }
-    val threads = Recording.pool()
-    try {
-      val mine: ExecutionContext = ExecutionContext.fromExecutor(threads)
-      assert(new Peek(new ByteArrayOutputStream)(mine).handsOver)
-      // and `commonPool` as a context is still the pool's own business
-      assert(
-        new Peek(new ByteArrayOutputStream)(
-          ParallelZipOutputStream.commonPoolContext
-        ).handsOver === (ForkJoinPool.getCommonPoolParallelism > 1)
-      )
-    } finally { val _ = threads.shutdownNow() }
-  }
-
-  test("the context IO offers is the pool the handover was already using") {
-    // `CompletableFuture` sends work to `commonPool` wherever this writer hands an entry over, and
-    // below two cores it would send it to a thread of its own — which is where the writer deflates
-    // on its own thread instead, so `commonPool` is the whole of what `IO.Implicits.deflateContext` has to name
+  test("the context IO offers is commonPool") {
     assume(ForkJoinPool.getCommonPoolParallelism > 1)
-    assert(IO.Implicits.deflateContext eq ParallelZipOutputStream.commonPoolContext)
     val ran = new CompletableFuture[ForkJoinPool]
-    ParallelZipOutputStream.commonPoolContext.execute { () =>
+    IO.Implicits.zipContext.execute { () =>
       val _ = ran.complete(Thread.currentThread match {
         case worker: ForkJoinWorkerThread => worker.getPool
         case _                            => null
@@ -213,21 +238,15 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
     // has to come out as the reference wrote it, having taken every one of those writes as it came
     val body = new Array[Byte](1100000)
     new java.util.Random(31).nextBytes(body)
-    var i = 0
-    while (i < body.length) { body(i) = 0; i += 3 }
+    body.indices.by(3).foreach(body(_) = 0)
     def archive(make: ByteArrayOutputStream => ZipSink): Array[Byte] = {
       val out = new ByteArrayOutputStream
       val w = make(out)
       val e = new ZipEntry("drip.bin")
       e.setTime(stamp)
       w.putNextEntry(e)
-      var at = 0
-      while (at < body.length) {
-        w.write(
-          body(at) & 0xff
-        ) // a byte at a time, which is what makes the list outweigh the bytes
-        at += 1
-      }
+      // a byte at a time, which is what makes the list of write boundaries outweigh the bytes
+      body.foreach(b => w.write(b & 0xff))
       w.closeEntry()
       w.finish()
       w.close()
@@ -235,7 +254,7 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
     }
     sameBytes(
       "an entry written a byte at a time",
-      archive(new ParallelZipOutputStream(_)),
+      archive(parallelZip(_)),
       archive(new ZipOutputStream(_)),
       "the reference"
     )
@@ -243,13 +262,11 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
 
   test("an entry handed over in one array past the hold threshold is streamed, byte for byte") {
     // the threshold is consulted before the copy, so an entry arriving whole is never held whole
-    // first. What that bounds is memory and is measured against a constrained heap rather than here;
-    // what this pins is that deciding it earlier left the bytes alone, since the deflater now sees
-    // the entry as two calls where it saw one
+    // first. This pins that deciding it earlier left the bytes alone, the deflater now seeing the
+    // entry as two calls where it saw one
     val body = new Array[Byte](256 * 1024)
     new java.util.Random(12).nextBytes(body)
-    var j = 0
-    while (j < body.length) { body(j) = 0; j += 3 }
+    body.indices.by(3).foreach(body(_) = 0)
     def drive(w: ZipSink): Unit = {
       val e = new ZipEntry("big.bin")
       e.setTime(stamp)
@@ -288,18 +305,13 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
       val e = new ZipEntry("a.txt")
       e.setTime(stamp)
       w.putNextEntry(e)
-      var off = 0
-      while (off < body.length) {
-        val n = math.min(777, body.length - off)
-        w.write(body, off, n)
-        off += n
-      }
+      writeInChunks(w, body, 777)
       w.closeEntry()
       w.finish()
       w.close()
     }
     val got = new ByteArrayOutputStream
-    writeUndeclared(new ParallelZipOutputStream(got))
+    writeUndeclared(parallelZip(got))
     val want = new ByteArrayOutputStream
     writeUndeclared(new ZipOutputStream(want))
     sameBytes("an undeclared size", got.toByteArray, want.toByteArray, "the reference")
@@ -313,12 +325,7 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
     e.setTime(stamp)
     // no setSize: the writer only learns the size as bytes arrive, in 8KB pieces
     w.putNextEntry(e)
-    var off = 0
-    while (off < big.length) {
-      val n = math.min(8192, big.length - off)
-      w.write(big, off, n)
-      off += n
-    }
+    writeInChunks(w, big, 8192)
     w.closeEntry()
     w.finish()
     w.close()
@@ -332,17 +339,16 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
   }
 
   test("a corpus mixing one multi-megabyte entry among small ones matches the reference") {
-    // an entry this size is held rather than streamed, and the buffer it deflates into is many times
-    // a block — so the free list, the window's accounting and the block walk are all handed sizes
-    // the single-size fixtures never reach. None of that is meant to touch the bytes, which is what
-    // this pins: the size band between a class file and the streaming threshold, written out whole
+    // the size band between a class file and the streaming threshold: held, with a deflate buffer
+    // many times a block, so the free list, the window accounting and the block walk are all handed
+    // sizes the single-size fixtures never reach
     val big =
       ("big " * 1500000).getBytes("UTF-8") // 6MB, held rather than streamed, and quick to deflate
     val small = corpus(80, seed = 41)
     val files = small.take(40) ++ Seq(("big.bin", big, stamp)) ++ small.drop(40)
     sameBytes(
       "a mixed corpus",
-      through(new ParallelZipOutputStream(_), Seq("pkg/"), files),
+      through(parallelZip(_), Seq("pkg/"), files),
       through(new ZipOutputStream(_), Seq("pkg/"), files),
       "the reference"
     )
@@ -392,11 +398,8 @@ class ParallelZipSpec extends AnyFunSuite with ParallelZipSupport {
     )
   }
 
-  test("DefaultParallelism follows the processor count") {
-    assert(ParallelZipOutputStream.DefaultParallelism >= 1)
-    assert(
-      ParallelZipOutputStream.DefaultParallelism ===
-        math.max(1, Runtime.getRuntime.availableProcessors)
-    )
+  test("IO.defaultParallelism follows the processor count") {
+    assert(IO.defaultParallelism >= 1)
+    assert(IO.defaultParallelism === math.max(1, Runtime.getRuntime.availableProcessors))
   }
 }

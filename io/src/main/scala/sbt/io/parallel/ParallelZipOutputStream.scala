@@ -14,43 +14,27 @@ package sbt.io.parallel
 import java.io.{ BufferedOutputStream, InterruptedIOException, IOException, OutputStream }
 import java.nio.charset.StandardCharsets
 import java.util.{ ArrayDeque, Arrays }
-import java.util.concurrent.{ CompletableFuture, ExecutionException, Executor, ForkJoinPool }
+import java.util.concurrent.{ ExecutionException, FutureTask }
 import java.util.zip.{ CRC32, Deflater, ZipEntry, ZipException }
+import scala.annotation.tailrec
 import scala.collection.mutable.{ HashSet, ListBuffer }
 import scala.concurrent.ExecutionContext
 import ZipConstants._
 
 /**
  * A zip writer that deflates entries in parallel while producing byte-for-byte identical output to
- * `ZipOutputStream`, whose shape it keeps: the same `written` and `locoff` counters, the same
- * `current` entry, and the same `writeLOC`, `writeEXT`, `writeCEN` and `writeEND` records over the
- * same `XEntry`.
- *
- * Where JDK versions disagree, the answer is read from a reference writer at run time rather than
- * restated here, so a new JDK does not need this file changed. [[ZipReference]] is every one of
- * those questions and nothing else. One refusal is this writer's own: an entry opened after
- * `finish`, which the reference appends past the end record.
- *
- * An entry is held in a buffer, deflated on the caller's execution context and appended in order.
- * One that is stored, declares all three sizes, is written at level 0, or outgrows [[maxEntryBytes]]
- * is streamed straight through instead: its sizes belong in its own header, its blocks are framed
- * from the caller's own writes, or it is too large to hold.
- *
- * Buffers and deflaters are recycled on the writing thread, so neither is allocated per entry once
- * an archive is under way.
+ * `ZipOutputStream`. Where JDK versions disagree the answer is read from [[ZipReference]] at run
+ * time, so a new JDK needs no change here.
  *
  * Not thread safe. Names and comments are always UTF-8, as `IO.defaultCharset` is.
  *
- * @param parallelism how many entries may be in flight, not a thread count. Each in-flight entry
- *                    holds a `Deflater`, whose zlib state is around 256 KB of native memory that
- *                    [[windowBytes]] does not account for, and up to 64 more are kept for reuse
- * @param ec where deflation runs. The writing thread waits on it once [[parallelism]] entries are in
- *           flight, so a context served only by that thread has nothing left to make progress with,
- *           and one that drops work without throwing leaves that wait with nothing to end it
+ * @param parallelism how many entries may be in flight, not a thread count; each holds a `Deflater`
+ *                    and around 256 KB of native zlib state
+ * @param ec where deflation is offered; the writing thread deflates whatever it has not started
  */
 private[sbt] class ParallelZipOutputStream(
     to: OutputStream,
-    parallelism: Int = ParallelZipOutputStream.DefaultParallelism
+    parallelism: Int
 )(implicit ec: ExecutionContext)
     extends ZipSink {
   import ParallelZipOutputStream._
@@ -64,27 +48,17 @@ private[sbt] class ParallelZipOutputStream(
   private val xentries = ListBuffer.empty[XEntry]
   private val names = HashSet.empty[String]
 
-  private var current: XEntry = null
+  private var current: Option[XEntry] = None
   private var finished = false
 
   private var level = Deflater.DEFAULT_COMPRESSION
   private var method = ZipEntry.DEFLATED
   private var comment: Array[Byte] = Array.emptyByteArray
 
-  // held as blocks rather than one array grown into: doubling costs 2N allocated and N copied
-  private var blocks = new Array[Array[Byte]](InitialBlocks)
-  private var blockUsed = new Array[Int](InitialBlocks)
-  private var blockCount = 0
-  private var buffered = 0
-  private var holding = false
+  private val held = new HeldEntry(takeBuffer(_))
 
   /** [[maxEntryBytes]], capped at what an `Int` of held bytes holds. Past it an entry is streamed. */
   private def holdCeiling: Long = math.min(maxEntryBytes, Int.MaxValue.toLong)
-
-  // where each write ended: what zlib leaves pending depends on it, and a mid-entry `setLevel`
-  // flushes a block from whatever is pending — so replaying a held entry repeats the caller's calls
-  private var writeLengths = new Array[Int](InitialWrites)
-  private var writeCount = 0
 
   private val oneByte = new Array[Byte](1)
 
@@ -94,15 +68,9 @@ private[sbt] class ParallelZipOutputStream(
   private val inFlight = new ArrayDeque[Pending]
   private var inFlightBytes = 0L
 
-  // `CompletableFuture` hands work to an `Executor`, which an `ExecutionContext` is not
-  private val executor: Executor = (r: Runnable) => ec.execute(r)
-
-  // streaming state — set while an entry is written straight through instead of held
   private var streaming = false
   private val crc = new CRC32
-  private var deflater: Deflater = null
-  private var deflaterLevel = 0
-  private var deflateBuf: Array[Byte] = null
+  private var deflating: Option[Deflating] = None
 
   private val freeBuffers = new ArrayDeque[Array[Byte]]
   private var freeBytes = 0L
@@ -118,26 +86,10 @@ private[sbt] class ParallelZipOutputStream(
   /** Overridden by the jar writer to stamp a jar's first entry before its header is probed. */
   protected def stamp(e: ZipEntry): Unit = ()
 
-  /**
-   * How much held input may be in flight at once, and how large an entry may be before it is
-   * streamed instead of held. Fixed rather than offered to a caller, as `DeflaterOutputStream` fixes
-   * the buffer it deflates through. Overridable only so a test can drive the streaming path without
-   * an archive large enough to reach it: the bytes are the same either way.
-   */
+  /** Fixed rather than offered to a caller; overridable only so a test can drive either path. */
   protected def windowBytes: Long = WindowBytes
 
   protected def maxEntryBytes: Long = MaxEntryBytes
-
-  /**
-   * Whether to deflate where the entry was written rather than handing it to the context. A fact
-   * about `commonPool`, so asked only where `commonPool` is what the work would go to: with no spare
-   * core the handover gains nothing, and on 8 a common pool configured with no parallelism at all
-   * never runs what it is given, so handing an entry over there would not be slow but stuck. A
-   * context the caller supplied is used as given. Overridable so a test can drive either path.
-   */
-  protected def deflateOnThisThread: Boolean =
-    (ec eq ParallelZipOutputStream.commonPoolContext) &&
-      ForkJoinPool.getCommonPoolParallelism <= 1
 
   // ── entry lifecycle ──────────────────────────────────────────────────
 
@@ -146,7 +98,7 @@ private[sbt] class ParallelZipOutputStream(
     // before the entry is looked at, as `JarOutputStream` stamps it: one refused below has still
     // spent the jar's one magic field
     stamp(e)
-    if (current != null) closeEntry()
+    if (current.isDefined) closeEntry()
     if (e.getMethod == Unset) e.setMethod(method)
     val entryMethod = e.getMethod
     val stored = entryMethod == ZipEntry.STORED
@@ -159,7 +111,7 @@ private[sbt] class ParallelZipOutputStream(
     // the reference stamps an entry carrying no time of its own, and only it can tell whether this
     // is one: the field it reads is not the one `getTime` reports
     if (e.getTime != reference.time) e.setTime(reference.time)
-    current = new XEntry(
+    val entry = new XEntry(
       name = utf8(e.getName),
       comment = commentBytes(e),
       reference = reference,
@@ -167,20 +119,15 @@ private[sbt] class ParallelZipOutputStream(
       flag = Utf8Flag | (if (sizesInHeader) 0 else DescriptorFlag),
       crc = e.getCrc,
       csize = e.getCompressedSize,
-      size = e.getSize
+      size = e.getSize,
+      offset = 0L
     )
+    current = Some(entry)
     // level 0 streams: zlib frames a stored block from what it has been handed, so only passing the
     // caller's writes through unchanged reproduces the reference's block boundaries
     val uncompressed = entryMethod == ZipEntry.DEFLATED && level == Deflater.NO_COMPRESSION
-    if (sizesInHeader || uncompressed || e.getSize > maxEntryBytes) startStreaming()
-    else {
-      // a block at a time whatever the entry declares, so any block recycles for any entry
-      holding = true
-      blockCount = 0
-      buffered = 0
-      writeCount = 0
-      addBlock(HoldBlockBytes)
-    }
+    if (sizesInHeader || uncompressed || e.getSize > maxEntryBytes) startStreaming(entry)
+    else held.open()
   }
 
   override def write(b: Int): Unit = {
@@ -193,54 +140,33 @@ private[sbt] class ParallelZipOutputStream(
     if (off < 0 || len < 0 || off > b.length - len) throw new IndexOutOfBoundsException
     else if (len == 0) ()
     else if (streaming) writeStreaming(b, off, len)
-    else if (!holding) throw new ZipException("no current ZIP entry")
-    else if (buffered.toLong + len > holdCeiling || writeCount == MaxHeldWrites) {
+    else if (!held.isOpen) throw new ZipException("no current ZIP entry")
+    else if (held.bytes.toLong + len > holdCeiling || held.writes == MaxHeldWrites) {
       // decided before the copy, or the peak this bounds would be whatever arrived in one array.
       // What was held reaches the deflater as its own call, which is safe only because a held entry
       // is never at level 0: levels 1 to 9 frame blocks from input, not from calls
-      startStreaming()
+      current.foreach(startStreaming)
       writeStreaming(b, off, len)
-    } else {
-      // never split across two blocks: half a call in each of two is not one call to replay
-      val room = blocks(blockCount - 1).length - blockUsed(blockCount - 1)
-      if (len > room) addBlock(len)
-      val at = blockCount - 1
-      System.arraycopy(b, off, blocks(at), blockUsed(at), len)
-      blockUsed(at) += len
-      buffered += len
-      recordWrite(len)
-    }
-  }
-
-  /** A block for at least `atLeast` bytes, which is a whole write's worth or the usual size. */
-  private def addBlock(atLeast: Int): Unit = {
-    if (blockCount == blocks.length) {
-      blocks = Arrays.copyOf(blocks, blocks.length * 2)
-      blockUsed = Arrays.copyOf(blockUsed, blockUsed.length * 2)
-    }
-    blocks(blockCount) = takeBuffer(math.max(atLeast, HoldBlockBytes))
-    blockUsed(blockCount) = 0
-    blockCount += 1
+    } else held.put(b, off, len)
   }
 
   def closeEntry(): Unit =
-    if (current != null) {
+    current.foreach { x =>
       if (streaming) {
         // cleared only once the entry is accepted, as the reference clears it: one it refused stays
         // open, so a caller carrying on is refused against what it has written since
-        closeStreaming(current)
+        closeStreaming(x)
         streaming = false
-        current = null
-      } else if (holding) {
-        val x = current
-        current = null
+        current = None
+      } else if (held.isOpen) {
+        current = None
         submit(x)
       }
     }
 
   def finish(): Unit =
     if (!finished) {
-      if (current != null) closeEntry()
+      if (current.isDefined) closeEntry()
       drainAll()
       val start = written
       xentries.foreach(writeCEN)
@@ -258,19 +184,12 @@ private[sbt] class ParallelZipOutputStream(
     try finish()
     finally
       try {
-        if (deflater != null) {
-          deflater.end()
-          deflater = null
-          deflateBuf = null
-        }
-        // ended by the thread deflating with it: cancelling would complete the future while that
-        // deflation was still running, and end the deflater under it
-        while (!inFlight.isEmpty) {
-          val pending = inFlight.removeFirst()
-          val _ = pending.future.whenComplete((_, _) => pending.deflater.end())
-        }
+        deflating.foreach(_.deflater.end())
+        deflating = None
+        inFlight.forEach(_.endDeflater())
+        inFlight.clear()
         inFlightBytes = 0L
-        while (!freeDeflaters.isEmpty) freeDeflaters.removeFirst().end()
+        endFreeDeflaters()
         freeBuffers.clear()
         freeBytes = 0L
       } finally out.close()
@@ -282,16 +201,15 @@ private[sbt] class ParallelZipOutputStream(
     if (level != this.level) {
       // a held entry has no deflater for `setLevel` to reach, so it streams first: what it holds is
       // replayed at the level it was held at, leaving the same bytes deflated as the reference's
-      if (holding) startStreaming()
-      if (deflater != null) {
-        deflater.setLevel(level)
+      if (held.isOpen) current.foreach(startStreaming)
+      deflating = deflating.map { open =>
+        open.deflater.setLevel(level)
         // zlib settles the change by flushing a block, and the room given for that reaches the
         // output at every level: measured, 64 KB diverges where the reference's own 512 matches
-        deflateBuf = new Array[Byte](ZipReference.deflateBuffer)
-        deflaterLevel = DirtyLevel
+        open.levelChanged(new Array[Byte](ZipReference.deflateBuffer))
       }
       // made at the level being left behind, so none will deflate like one made at this one
-      while (!freeDeflaters.isEmpty) freeDeflaters.removeFirst().end()
+      endFreeDeflaters()
       this.level = level
     }
   }
@@ -302,118 +220,95 @@ private[sbt] class ParallelZipOutputStream(
   }
 
   def setComment(comment: String): Unit =
-    if (comment != null) {
-      ZipReference.validate(_.setComment(comment))
-      this.comment = utf8(comment)
-    } else if (ZipReference.nullCommentClears) this.comment = Array.emptyByteArray
+    Option(comment) match {
+      case Some(text) =>
+        ZipReference.validate(_.setComment(text))
+        this.comment = utf8(text)
+      case None => if (ZipReference.nullCommentClears) this.comment = Array.emptyByteArray
+    }
 
   // ── streaming path ──────────────────────────────────────────────────
 
-  /**
-   * Begins streaming the open entry. Everything queued is appended first, since this entry's header
-   * goes down at the current offset, and whatever was buffered for it leads its content.
-   */
-  private def startStreaming(): Unit = {
+  /** Everything queued is appended first: this entry's header goes down at the current offset. */
+  private def startStreaming(open: XEntry): Unit = {
     drainAll()
-    val x = current
-    val heldBlocks = blockCount
-    val heldWrites = writeCount
-    holding = false
-    blockCount = 0
-    buffered = 0
-    writeCount = 0
-    x.offset = written
+    // emptied before the header goes down, so a failure writing that header leaves nothing held: an
+    // entry both open and held is one `closeEntry` would go on to submit and write a second time
+    val replay = held.take()
+    val x = open.at(written)
+    current = Some(x)
     writeLOC(x)
     streaming = true
     crc.reset()
-    if (x.method == ZipEntry.DEFLATED) {
-      deflaterLevel = level
-      deflater = takeDeflater()
+    deflating =
       // the reference's own buffer: a `deflate` given more room drains more of zlib's pending
       // output, which is what a later `setLevel` on this entry would flush a block from
-      deflateBuf = new Array[Byte](ZipReference.deflateBuffer)
-    }
-    // in the caller's own writes rather than in blocks of ours — see [[writeLengths]]. Where each
-    // sits follows from the lengths, since blocks fill in order and no write spans two
-    var block = 0
-    var at = 0
-    var i = 0
-    while (i < heldWrites) {
-      val len = writeLengths(i)
-      if (at + len > blockUsed(block)) {
-        block += 1
-        at = 0
-      }
-      writeStreaming(blocks(block), at, len)
-      at += len
-      i += 1
-    }
-    var b = 0
-    while (b < heldBlocks) {
-      giveBuffer(blocks(b))
-      blocks(b) = null
-      b += 1
-    }
-  }
-
-  private def recordWrite(len: Int): Unit = {
-    if (writeCount == writeLengths.length)
-      writeLengths = Arrays.copyOf(writeLengths, writeLengths.length * 2)
-    writeLengths(writeCount) = len
-    writeCount += 1
+      if (x.method == ZipEntry.DEFLATED)
+        Some(new Deflating(takeDeflater(), new Array[Byte](ZipReference.deflateBuffer), level))
+      else None
+    replay.replayTo(writeStreaming)
+    giveBlocks(replay.blocks)
   }
 
   private def writeStreaming(b: Array[Byte], off: Int, len: Int): Unit = {
-    if (deflater != null) {
-      // an entry the reference refused keeps the deflater it finished, which takes no more input:
-      // `deflate` would return nothing while `needsInput` stayed false and the loop would not end
-      if (deflater.finished()) throw new IOException("write beyond end of stream")
-      deflater.setInput(b, off, len)
-      while (!deflater.needsInput()) {
-        val n = deflater.deflate(deflateBuf, 0, deflateBuf.length)
-        if (n > 0) writeBytes(deflateBuf, 0, n)
-      }
-    } else {
-      // counted before it is refused, as the reference counts it
-      written += len
-      if (written - locoff > current.size)
-        throw new ZipException("attempt to write past end of STORED entry")
-      out.write(b, off, len)
+    deflating match {
+      case Some(open) =>
+        // an entry the reference refused keeps the deflater it finished, which takes no more input:
+        // `deflate` would return nothing while `needsInput` stayed false and the loop would not end
+        if (open.deflater.finished()) throw new IOException("write beyond end of stream")
+        open.deflater.setInput(b, off, len)
+        drainDeflater(open, () => open.deflater.needsInput())
+      case None =>
+        // counted before it is refused, as the reference counts it
+        written += len
+        if (current.exists(written - locoff > _.size))
+          throw new ZipException("attempt to write past end of STORED entry")
+        out.write(b, off, len)
     }
     crc.update(b, off, len)
   }
 
-  private def closeStreaming(x: XEntry): Unit = {
-    if (x.method == ZipEntry.DEFLATED) {
-      deflater.finish()
-      while (!deflater.finished()) {
-        val n = deflater.deflate(deflateBuf, 0, deflateBuf.length)
-        if (n > 0) writeBytes(deflateBuf, 0, n)
-      }
-      val size = deflater.getBytesRead
-      val csize = deflater.getBytesWritten
-      if ((x.flag & DescriptorFlag) == 0) {
-        if (x.size != size) throw wrongSize("size", x.size, size)
-        if (x.csize != csize) throw wrongSize("compressed size", x.csize, csize)
-        if (x.crc != crc.getValue) throw wrongCrc("CRC-32", x.crc, crc.getValue)
-      } else {
-        x.size = size
-        x.csize = csize
-        x.crc = crc.getValue
-        writeEXT(x)
-      }
-      // handed back only once the entry is accepted, so closing a refused one re-runs the check
-      giveDeflater(deflater, deflaterLevel)
-      deflater = null
-      deflateBuf = null
-    } else {
-      val size = written - locoff
-      if (x.size != size) throw wrongSize("size", x.size, size)
-      // the reference spells the label in lower case on this path and in upper on the other
-      if (x.crc != crc.getValue) throw wrongCrc("crc-32", x.crc, crc.getValue)
+  @tailrec
+  private def drainDeflater(open: Deflating, done: () => Boolean): Unit =
+    if (!done()) {
+      val n = open.deflater.deflate(open.buffer, 0, open.buffer.length)
+      if (n > 0) writeBytes(open.buffer, 0, n)
+      drainDeflater(open, done)
     }
-    val _ = xentries += x
+
+  private def closeStreaming(x: XEntry): Unit = {
+    val recorded =
+      deflating match {
+        case Some(open) =>
+          open.deflater.finish()
+          drainDeflater(open, () => open.deflater.finished())
+          val settled =
+            settleStreamed(x, open.deflater.getBytesRead, open.deflater.getBytesWritten)
+          // handed back only once the entry is accepted, so closing a refused one re-runs the check
+          giveDeflater(open.deflater, open.level)
+          deflating = None
+          settled
+        case None =>
+          val size = written - locoff
+          if (x.size != size) throw wrongSize("size", x.size, size)
+          // the reference spells the label in lower case on this path and in upper on the other
+          if (x.crc != crc.getValue) throw wrongCrc("crc-32", x.crc, crc.getValue)
+          x
+      }
+    val _ = xentries += recorded
   }
+
+  private def settleStreamed(x: XEntry, size: Long, csize: Long): XEntry =
+    if ((x.flag & DescriptorFlag) == 0) {
+      if (x.size != size) throw wrongSize("size", x.size, size)
+      if (x.csize != csize) throw wrongSize("compressed size", x.csize, csize)
+      if (x.crc != crc.getValue) throw wrongCrc("CRC-32", x.crc, crc.getValue)
+      x
+    } else {
+      val settled = x.settled(crc.getValue, csize, size)
+      writeEXT(settled)
+      settled
+    }
 
   /** The reference's wording for a size that did not turn out to be what the entry declared. */
   private def wrongSize(what: String, declared: Long, got: Long): ZipException =
@@ -430,28 +325,13 @@ private[sbt] class ParallelZipOutputStream(
   // ── parallel (buffered) path ─────────────────────────────────────────
 
   private def submit(x: XEntry): Unit = {
-    val count = blockCount
-    val data = Arrays.copyOf(blocks, count)
-    val used = Arrays.copyOf(blockUsed, count)
-    val len = buffered
-    var held = 0L
-    var i = 0
-    while (i < count) {
-      held += data(i).length
-      blocks(i) = null
-      i += 1
-    }
-    holding = false
-    blockCount = 0
-    buffered = 0
-    writeCount = 0
+    // out of the holder before anything else: from here the blocks are this entry's alone, and the
+    // writing thread has no way back to them until the deflating one hands them over
+    val taken = held.take()
     // drained before anything is taken, so this entry gets what the appended one just handed back
-    while (
-      !inFlight.isEmpty &&
-      (inFlight.size >= parallelism || inFlightBytes + held > windowBytes)
-    ) drainOne()
+    makeRoomFor(taken.capacity)
     // before the deflater, so a heap that cannot take it fails with no deflater to strand
-    val bound = math.min(deflatedBound(len.toLong), Int.MaxValue.toLong).toInt
+    val bound = math.min(deflatedBound(taken.bytes.toLong), Int.MaxValue.toLong).toInt
     val into = takeBuffer(bound)
     // still the level this entry was opened at: `setLevel` moves a held entry to the streaming path
     val entryLevel = level
@@ -459,89 +339,82 @@ private[sbt] class ParallelZipOutputStream(
     // a window wider than the reference's is safe here and nowhere else: this entry is deflated
     // whole and on its own, so no level change lands part way through it
     val window = DeflateBlockBytes
-    def deflate(): Array[Byte] = deflateInto(x, entryDeflater, data, used, len, into, window)
-    if (deflateOnThisThread) {
-      // ended here if it fails: this branch never queues, and `close` only sweeps the queue
-      val deflated =
-        try deflate()
-        catch {
-          case failed: Throwable =>
-            entryDeflater.end()
-            throw failed
-        }
-      giveBlocks(data)
-      giveDeflater(entryDeflater, entryLevel)
-      append(x, deflated)
-      giveBuffer(deflated)
-    } else {
-      // a refused submission never reaches the queue either, so its deflater is ended here too
-      val future =
-        try CompletableFuture.supplyAsync(() => deflate(), executor)
-        catch {
-          case failed: Throwable =>
-            entryDeflater.end()
-            throw failed
-        }
-      val _ = inFlight.addLast(new Pending(x, future, data, held, entryDeflater, entryLevel))
-      inFlightBytes += held
+    def deflate(): Deflated =
+      deflateInto(entryDeflater, taken.blocks, taken.used, taken.bytes, into, window)
+    val task = new FutureTask[Deflated](() => deflate())
+    // a refused submission never reaches the queue, so its deflater is ended here rather than swept
+    try ec.execute(task)
+    catch {
+      case failed: Throwable =>
+        entryDeflater.end()
+        throw failed
     }
+    val pending = new Pending(x, task, taken.blocks, taken.capacity, entryDeflater, entryLevel)
+    inFlight.addLast(pending)
+    inFlightBytes += taken.capacity
   }
 
   private def drainOne(): Unit = {
     // left queued until its result is in hand, so a failed deflation still has `close` to end it
     val p = inFlight.getFirst
-    val deflated = await(p.future)
+    val deflated = await(p.claimed())
     val _ = inFlight.removeFirst()
-    inFlightBytes -= p.bytes
+    inFlightBytes -= p.capacity
     giveBlocks(p.input)
     giveDeflater(p.deflater, p.level)
     append(p.entry, deflated)
-    giveBuffer(deflated)
+    giveBuffer(deflated.bytes)
   }
 
-  private def drainAll(): Unit = while (!inFlight.isEmpty) drainOne()
-
-  private def giveBlocks(taken: Array[Array[Byte]]): Unit = {
-    var i = 0
-    while (i < taken.length) {
-      giveBuffer(taken(i))
-      i += 1
+  @tailrec
+  private def drainAll(): Unit =
+    if (!inFlight.isEmpty) {
+      drainOne()
+      drainAll()
     }
-  }
 
-  private def append(x: XEntry, deflated: Array[Byte]): Unit = {
-    x.offset = written
-    writeLOC(x)
-    writeBytes(deflated, 0, x.csize.toInt)
-    writeEXT(x)
-    val _ = xentries += x
+  @tailrec
+  private def makeRoomFor(capacity: Long): Unit =
+    if (
+      !inFlight.isEmpty &&
+      (inFlight.size >= parallelism || inFlightBytes + capacity > windowBytes)
+    ) {
+      drainOne()
+      makeRoomFor(capacity)
+    }
+
+  private def giveBlocks(taken: Array[Array[Byte]]): Unit = taken.foreach(giveBuffer)
+
+  private def append(x: XEntry, deflated: Deflated): Unit = {
+    val placed =
+      x.placed(written, deflated.crc, deflated.csize, deflated.size)
+    writeLOC(placed)
+    writeBytes(deflated.bytes, 0, placed.csize.toInt)
+    writeEXT(placed)
+    val _ = xentries += placed
   }
 
   // ── recycling ────────────────────────────────────────────────────────
 
   /**
-   * A buffer at least this long from what an earlier entry handed back, but not one so much wider
-   * that allocating would have been better: an entry is charged against the in-flight window for
-   * what its blocks measure, so a multi-megabyte buffer taken as a 64 KB block is charged megabytes
-   * for kilobytes. Only decides anything where [[windowBytes]] binds before `parallelism` does,
-   * which takes more cores than a laptop has — measured on 12, the bound moves nothing.
+   * A buffer at least this long from what an earlier entry handed back, but not so much wider that
+   * allocating would have been better: the window charges an entry for what its blocks measure.
    */
   private def takeBuffer(atLeast: Int): Array[Byte] = {
     val most = MaxFitFactor.toLong * rounded(atLeast)
-    var found: Array[Byte] = null
     val each = freeBuffers.iterator
-    while (found == null && each.hasNext) {
-      val b = each.next()
-      if (b.length >= atLeast && b.length <= most) {
-        each.remove()
-        found = b
+    @tailrec def firstFitting(): Array[Byte] =
+      if (!each.hasNext) new Array[Byte](rounded(atLeast))
+      else {
+        val b = each.next()
+        if (b.length < atLeast || b.length > most) firstFitting()
+        else {
+          each.remove()
+          freeBytes -= b.length
+          b
+        }
       }
-    }
-    if (found == null) new Array[Byte](rounded(atLeast))
-    else {
-      freeBytes -= found.length
-      found
-    }
+    firstFitting()
   }
 
   /**
@@ -549,22 +422,27 @@ private[sbt] class ParallelZipOutputStream(
    * The oldest goes to make room: turning the arriving one away would freeze the list as it stands.
    */
   private def giveBuffer(b: Array[Byte]): Unit = {
-    while (
-      !freeBuffers.isEmpty &&
-      (freeBuffers.size >= freeSlots || freeBytes + b.length > windowBytes)
-    ) freeBytes -= freeBuffers.removeLast().length
+    dropOldestUntilRoom(b.length)
     if (freeBytes + b.length <= windowBytes) {
       freeBuffers.addFirst(b)
       freeBytes += b.length
     }
   }
 
+  @tailrec
+  private def dropOldestUntilRoom(arriving: Int): Unit =
+    if (
+      !freeBuffers.isEmpty &&
+      (freeBuffers.size >= freeSlots || freeBytes + arriving > windowBytes)
+    ) {
+      freeBytes -= freeBuffers.removeLast().length
+      dropOldestUntilRoom(arriving)
+    }
+
   private def takeDeflater(): Deflater =
-    freeDeflaters.pollFirst() match {
-      case null => new Deflater(level, true)
-      case d    =>
-        d.reset()
-        d
+    Option(freeDeflaters.pollFirst()).fold(new Deflater(level, true)) { recycled =>
+      recycled.reset()
+      recycled
     }
 
   /**
@@ -574,6 +452,11 @@ private[sbt] class ParallelZipOutputStream(
   private def giveDeflater(d: Deflater, atLevel: Int): Unit =
     if (atLevel == level && freeDeflaters.size < recycled) freeDeflaters.addFirst(d)
     else d.end()
+
+  private def endFreeDeflaters(): Unit = {
+    freeDeflaters.forEach(_.end())
+    freeDeflaters.clear()
+  }
 
   // ── record writers ──────────────────────────────────────────────────
 
@@ -623,9 +506,10 @@ private[sbt] class ParallelZipOutputStream(
     val added = if (moved > 0) ExtraHeaderBytes + moved else 0
     val extraLength = x.reference.central.length + added
     // the reference's own verdict rather than its length weighed again: it weighs the entry's extra
-    // field and not the longer one it writes. The zip64 field its probe could not carry is asked apart
+    // field and not the longer one it writes. The zip64 field its probe could not carry is asked
+    // apart. A JDK with no refusal to give writes an oversized header anyway, and so does this
     if (x.reference.refusesCentral || added >= x.reference.centralSlack)
-      throw new ZipException(ZipReference.oversizedCentralHeaderRefusal)
+      ZipReference.oversizedCentralHeaderRefusal.foreach(refusal => throw new ZipException(refusal))
     // cut to what its length field holds, where the reference cuts it — a name past the field is
     // written whole under a wrapped length instead. The refusal above still weighs the whole comment
     val commentLength = math.min(x.comment.length, MaxFieldBytes)
@@ -706,33 +590,16 @@ private[sbt] object ParallelZipOutputStream {
   // ── defaults ─────────────────────────────────────────────────────────
 
   /**
-   * How much buffered input may be in flight per writer. Bounds retention across entries, not within
-   * one: a single entry is held whole up to [[MaxEntryBytes]]. A fixed size rather than a share of the
-   * heap, as `DeflaterOutputStream` fixes the 512 bytes it deflates through, so that an archive costs
-   * the same to write wherever it is written and one that fits on one machine fits on another.
+   * How much buffered input may be in flight per writer. Fixed rather than a share of the heap, so
+   * an archive that fits on one machine fits on another.
    */
   final val WindowBytes: Long = 16L * 1024 * 1024
 
   /**
-   * Past this an entry is streamed rather than held, however it arrives — in pieces or as a single
-   * array. Held and streamed entries produce identical bytes, so the threshold changes only cost.
-   *
-   * The whole in-flight window, because an entry larger than that cannot share the pipeline with
-   * anything already in it: [[ParallelZipOutputStream.submit]] drains until the window has room, and
-   * for an entry this size that means draining it to nothing.
+   * Past this an entry is streamed rather than held; the bytes are identical either way. The whole
+   * window, since an entry larger than that cannot share the pipeline with anything else.
    */
   final val MaxEntryBytes: Long = WindowBytes
-
-  final val DefaultParallelism: Int = math.max(1, Runtime.getRuntime.availableProcessors)
-
-  /**
-   * `commonPool` as a context, which is what `CompletableFuture` hands to. Named here so that
-   * [[ParallelZipOutputStream.deflateOnThisThread]] can recognise it, since its fallback to a thread
-   * per task below two cores is a fact about this pool and no other. Nothing defaults to it:
-   * `IO.Implicits.deflateContext` is where it is offered to callers.
-   */
-  val commonPoolContext: ExecutionContext =
-    ExecutionContext.fromExecutor(ForkJoinPool.commonPool())
 
   // ── buffer and deflater tuning ───────────────────────────────────────
 
@@ -740,20 +607,14 @@ private[sbt] object ParallelZipOutputStream {
   private final val DeflateBlockBytes = 64 * 1024
   private final val MinBufferBytes = 4096
 
-  /** Room for a held entry's write boundaries before the list has to grow. */
   private final val InitialWrites = 64
 
   /** Under this much a write, the list of where they ended outweighs what they wrote. */
   private final val MinBytesPerHeldWrite = 16
 
   /**
-   * How many of those boundaries an entry may have before it is streamed rather than held. Four
-   * bytes to remember a write is nothing against a large one and four times what a one-byte write
-   * holds. Past this it streams, where boundaries stop needing remembering.
-   *
-   * Declared below its divisor rather than above it: a divisor that stopped being folded to a
-   * literal — a type ascription is enough — would be read here before it was assigned, dividing by
-   * zero as the object loaded.
+   * How many write boundaries an entry may have before it streams instead. Declared below its
+   * divisor: read above it, a divisor no longer folded to a literal would still be zero here.
    */
   private final val MaxHeldWrites = (WindowBytes / MinBytesPerHeldWrite).toInt
 
@@ -763,7 +624,6 @@ private[sbt] object ParallelZipOutputStream {
    */
   private final val HoldBlockBytes = 64 * 1024
 
-  /** Blocks an entry can hold before the list of them has to grow: 1 MB at [[HoldBlockBytes]]. */
   private final val InitialBlocks = 16
   private final val MinGrowthBytes = 64
 
@@ -777,9 +637,8 @@ private[sbt] object ParallelZipOutputStream {
   private final val MaxRecycled = 64
 
   /**
-   * How much wider than what it would have allocated a recycled buffer may be. Wide enough that the
-   * rounding [[rounded]] already does never turns a buffer away, narrow enough that what a buffer
-   * measures stays within a factor of what it carries — which is what the in-flight window counts.
+   * How much wider than it would have allocated a recycled buffer may be: the in-flight window
+   * counts what a buffer measures, not what it carries.
    */
   private final val MaxFitFactor = 2
 
@@ -802,9 +661,8 @@ private[sbt] object ParallelZipOutputStream {
     size + size / DeflateOverheadDivisor + MinDeflateOverheadBytes
 
   /**
-   * Buffer capacities are rounded so that entries of similar size take each other's buffers. To a
-   * power of two while that is cheap, and to whole blocks once it is not: a power of two would leave
-   * the buffer an 8 MB entry deflates into with another 8 MB never used.
+   * Rounded so entries of similar size take each other's buffers: to a power of two while that is
+   * cheap, and to whole blocks once it is not.
    */
   private def rounded(atLeast: Int): Int =
     if (atLeast <= MinBufferBytes) MinBufferBytes
@@ -815,9 +673,8 @@ private[sbt] object ParallelZipOutputStream {
   // ── data classes ─────────────────────────────────────────────────────
 
   /**
-   * One entry's record, as `ZipOutputStream.XEntry` is: what its headers say, and where its local
-   * one went. The crc and the two sizes are what the caller declared until deflation replaces them,
-   * which happens only for an entry whose flag sends them to a data descriptor.
+   * One entry's record, as `ZipOutputStream.XEntry` is. Immutable: what writing settles comes back
+   * as a new record rather than being written into one an entry in flight belongs to.
    */
   private final class XEntry(
       val name: Array[Byte],
@@ -825,84 +682,199 @@ private[sbt] object ParallelZipOutputStream {
       val reference: ZipReference.Header,
       val method: Int,
       val flag: Int,
-      var crc: Long,
-      var csize: Long,
-      var size: Long
+      val crc: Long,
+      val csize: Long,
+      val size: Long,
+      val offset: Long
   ) {
-    var offset = 0L
+
+    def at(offset: Long): XEntry = placed(offset, crc, csize, size)
+
+    def settled(crc: Long, csize: Long, size: Long): XEntry = placed(offset, crc, csize, size)
+
+    def placed(offset: Long, crc: Long, csize: Long, size: Long): XEntry =
+      new XEntry(name, comment, reference, method, flag, crc, csize, size, offset)
+  }
+
+  private final class Deflated(
+      val bytes: Array[Byte],
+      val crc: Long,
+      val size: Long,
+      val csize: Long
+  )
+
+  /** [[DirtyLevel]] once `setLevel` has moved the deflater, since no other entry may reuse it. */
+  private final class Deflating(val deflater: Deflater, val buffer: Array[Byte], val level: Int) {
+
+    def levelChanged(buffer: Array[Byte]): Deflating = new Deflating(deflater, buffer, DirtyLevel)
   }
 
   /** An entry being deflated elsewhere, with everything its append owes back to the free lists. */
   private final class Pending(
       val entry: XEntry,
-      val future: CompletableFuture[Array[Byte]],
+      task: FutureTask[Deflated],
       val input: Array[Array[Byte]],
-      val bytes: Long,
+      val capacity: Long,
       val deflater: Deflater,
       val level: Int
-  )
+  ) {
+
+    /** The deflation, run here if the context has not started it — `run` is a no-op once it has. */
+    def claimed(): FutureTask[Deflated] = {
+      task.run()
+      task
+    }
+
+    /** `cancel(false)` wins only on a task no thread started, so a running deflation keeps its deflater. */
+    def endDeflater(): Unit =
+      if (task.cancel(false) || task.isDone) deflater.end()
+  }
+
+  /**
+   * The entry being written, in blocks rather than one array grown into: doubling costs 2N allocated
+   * and N copied. Blocks leave only through [[take]], so no field here is reached by two threads.
+   */
+  private final class HeldEntry(newBlock: Int => Array[Byte]) {
+    private var blocks = new Array[Array[Byte]](InitialBlocks)
+    private var used = new Array[Int](InitialBlocks)
+    private var count = 0
+    private var heldBytes = 0
+
+    // where each write ended: what zlib leaves pending depends on it, and a mid-entry `setLevel`
+    // flushes a block from whatever is pending — so replaying a held entry repeats the caller's calls
+    private var writeLengths = new Array[Int](InitialWrites)
+    private var writeCount = 0
+
+    /** An open entry has its first block already, so nothing else can be holding none. */
+    def isOpen: Boolean = count > 0
+    def bytes: Int = heldBytes
+    def writes: Int = writeCount
+
+    def open(): Unit = {
+      clear()
+      addBlock(HoldBlockBytes)
+    }
+
+    def put(b: Array[Byte], off: Int, len: Int): Unit = {
+      // never split across two blocks: half a call in each of two is not one call to replay
+      val room = blocks(count - 1).length - used(count - 1)
+      if (len > room) addBlock(len)
+      val at = count - 1
+      Array.copy(b, off, blocks(at), used(at), len)
+      used(at) += len
+      heldBytes += len
+      recordWrite(len)
+    }
+
+    def take(): Taken = {
+      val out = Arrays.copyOf(blocks, count)
+      val taken = new Taken(
+        blocks = out,
+        used = Arrays.copyOf(used, count),
+        writes = Arrays.copyOf(writeLengths, writeCount),
+        bytes = heldBytes,
+        capacity = out.foldLeft(0L)(_ + _.length)
+      )
+      // emptied rather than left behind, so a slot past the count keeps no buffer alive
+      (0 until count).foreach(blocks(_) = null)
+      clear()
+      taken
+    }
+
+    private def clear(): Unit = {
+      count = 0
+      heldBytes = 0
+      writeCount = 0
+    }
+
+    private def addBlock(atLeast: Int): Unit = {
+      if (count == blocks.length) {
+        blocks = Arrays.copyOf(blocks, blocks.length * 2)
+        used = Arrays.copyOf(used, used.length * 2)
+      }
+      blocks(count) = newBlock(math.max(atLeast, HoldBlockBytes))
+      used(count) = 0
+      count += 1
+    }
+
+    private def recordWrite(len: Int): Unit = {
+      if (writeCount == writeLengths.length)
+        writeLengths = Arrays.copyOf(writeLengths, writeLengths.length * 2)
+      writeLengths(writeCount) = len
+      writeCount += 1
+    }
+  }
+
+  /** What [[HeldEntry.take]] hands over, which the caller owns until it gives the blocks back. */
+  private final class Taken(
+      val blocks: Array[Array[Byte]],
+      val used: Array[Int],
+      val writes: Array[Int],
+      val bytes: Int,
+      val capacity: Long
+  ) {
+
+    /** The caller's own writes back, in the calls they arrived in rather than in blocks of ours. */
+    def replayTo(to: (Array[Byte], Int, Int) => Unit): Unit = {
+      // where a write sits follows from the lengths, since blocks fill in order and none spans two
+      @tailrec def next(i: Int, block: Int, at: Int): Unit =
+        if (i < writes.length) {
+          val len = writes(i)
+          val onto = if (at + len > used(block)) block + 1 else block
+          val from = if (onto == block) at else 0
+          to(blocks(onto), from, len)
+          next(i + 1, onto, from + len)
+        }
+      next(0, 0, 0)
+    }
+  }
 
   // ── deflation ────────────────────────────────────────────────────────
 
-  /**
-   * Deflates one entry, off the writing thread. Fills in what only deflation knows — the crc and
-   * both sizes — and returns the buffer holding the result, `into` unless the bound fell short.
-   */
+  private final class Filled(val buffer: Array[Byte], val upTo: Int)
+
+  /** Reads only the blocks it was handed, so what comes back is the whole of the result. */
   private def deflateInto(
-      x: XEntry,
       deflater: Deflater,
       data: Array[Array[Byte]],
       used: Array[Int],
       len: Int,
       into: Array[Byte],
       window: Int
-  ): Array[Byte] = {
+  ): Deflated = {
     val sum = new CRC32
-    var out = into
-    var n = 0
-    def room(): Unit =
-      if (n == out.length) {
-        val half = out.length >> 1
-        out = Arrays.copyOf(out, out.length + half + MinGrowthBytes)
+    @tailrec def drain(done: () => Boolean, filled: Filled): Filled =
+      if (done()) filled
+      else {
+        val room = if (filled.upTo < filled.buffer.length) filled.buffer else grown(filled.buffer)
+        val wrote = deflater.deflate(room, filled.upTo, math.min(window, room.length - filled.upTo))
+        drain(done, new Filled(room, filled.upTo + wrote))
       }
     // block by block, which the entry is in anyway: this deflater sees the whole entry and finishes
     // it, so only the room its output is given frames what it emits
-    var b = 0
-    while (b < data.length) {
+    val deflated = data.indices.foldLeft(new Filled(into, 0)) { (filled, b) =>
       sum.update(data(b), 0, used(b))
       deflater.setInput(data(b), 0, used(b))
-      while (!deflater.needsInput()) {
-        room()
-        n += deflater.deflate(out, n, math.min(window, out.length - n))
-      }
-      b += 1
+      drain(() => deflater.needsInput(), filled)
     }
     deflater.finish()
-    while (!deflater.finished()) {
-      room()
-      n += deflater.deflate(out, n, math.min(window, out.length - n))
-    }
-    x.crc = sum.getValue
-    x.size = len.toLong
-    x.csize = n.toLong
-    out
+    val whole = drain(() => deflater.finished(), deflated)
+    new Deflated(whole.buffer, sum.getValue, len.toLong, whole.upTo.toLong)
   }
 
-  private def await(future: CompletableFuture[Array[Byte]]): Array[Byte] =
-    try future.get()
+  /** Half as much again, so that a bound that fell short is not met one deflate at a time. */
+  private def grown(buffer: Array[Byte]): Array[Byte] =
+    Arrays.copyOf(buffer, buffer.length + (buffer.length >> 1) + MinGrowthBytes)
+
+  private def await(task: FutureTask[Deflated]): Deflated =
+    try task.get()
     catch {
-      case e: ExecutionException =>
-        e.getCause match {
-          case null  => throw e
-          case cause => throw cause
-        }
+      case e: ExecutionException => throw Option(e.getCause).getOrElse(e)
       // `get` throws a checked exception no `OutputStream` caller can catch, and clears the flag on
       // its way out. Both are put back: sbt cancels a task by interrupting it
       case interrupted: InterruptedException =>
         Thread.currentThread().interrupt()
-        val failed = new InterruptedIOException("interrupted while deflating")
-        val _ = failed.initCause(interrupted)
-        throw failed
+        throw new InterruptedIOException("interrupted while deflating").initCause(interrupted)
     }
 
   // ── names and comments ───────────────────────────────────────────────
@@ -910,8 +882,5 @@ private[sbt] object ParallelZipOutputStream {
   private def utf8(name: String): Array[Byte] = name.getBytes(StandardCharsets.UTF_8)
 
   private def commentBytes(e: ZipEntry): Array[Byte] =
-    e.getComment match {
-      case null    => Array.emptyByteArray
-      case comment => utf8(comment)
-    }
+    Option(e.getComment).fold(Array.emptyByteArray)(utf8)
 }

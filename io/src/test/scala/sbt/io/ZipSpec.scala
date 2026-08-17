@@ -13,11 +13,12 @@ package sbt.io
 
 import java.io.{ BufferedOutputStream, File, FileOutputStream }
 import java.nio.file.Files
-import java.util.concurrent.{ CountDownLatch, Executors, TimeUnit }
+import java.util.concurrent.{ Executors, Future }
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.jar.{ Attributes, JarEntry, JarFile, JarOutputStream, Manifest }
 import java.util.zip.{ ZipEntry, ZipException, ZipFile, ZipOutputStream }
 import scala.collection.immutable.TreeSet
+import scala.collection.mutable.ListBuffer
 import scala.concurrent.ExecutionContext
 import org.scalatest.funsuite.AnyFunSuite
 import sbt.io.parallel.ParallelJarOutputStream.JarMagicExtra
@@ -27,15 +28,9 @@ import sbt.io.syntax._
 import ZipTestSupport.{ firstDifference, firstExtra, hasSignature, sameBytes, EmptyCrc }
 
 /**
- * Pins the bytes `IO.zip` and `IO.jar` produce. The references drive `ZipOutputStream` and
- * `JarOutputStream` directly, so what is pinned is the entry walk around them — the directory entries
- * `IO` synthesises, the order it adds them in, and the timestamp it shifts — rather than the writer,
- * and any divergence shows up as unequal bytes rather than as a subtly different archive.
- *
- * Every fixture is then written a third time through `IO.zipParallel` or `IO.jarParallel` and
- * compared with what `IO.zip` and `IO.jar` wrote, so the parallel writers are held to these same
- * archives over all of it. The writers themselves are driven directly by the suites in
- * `sbt.io.parallel`.
+ * Pins the bytes `IO.zip` and `IO.jar` produce: the references drive the JDK writers directly, so
+ * what is pinned is `IO`'s entry walk around them. Every fixture is written a third time through
+ * `IO.zipParallel` or `IO.jarParallel` and compared, holding those to the same archives.
  */
 class ZipSpec extends AnyFunSuite {
 
@@ -44,7 +39,7 @@ class ZipSpec extends AnyFunSuite {
    * shadows this rather than competing with it, and taken at each call site rather than inside the
    * helpers, so that a test's context is the one that reaches `IO`.
    */
-  private implicit val ec: ExecutionContext = IO.Implicits.deflateContext
+  private implicit val ec: ExecutionContext = IO.Implicits.zipContext
 
   private val fixedTime = Some(1262304000000L) // 2010-01-01T00:00:00Z
 
@@ -234,7 +229,7 @@ class ZipSpec extends AnyFunSuite {
       // a window far larger than the entry limit: the entry must still be streamed, not held
       val fileOut = new BufferedOutputStream(new FileOutputStream(actual), 1 << 16)
       try {
-        val w = new ParallelZipOutputStream(fileOut) {
+        val w = new ParallelZipOutputStream(fileOut, IO.defaultParallelism) {
           override protected def windowBytes: Long = 1024L * 1024L
           override protected def maxEntryBytes: Long = 1024L
         }
@@ -320,9 +315,7 @@ class ZipSpec extends AnyFunSuite {
   }
 
   test("zipParallel deflates on a context the caller passed, byte for byte") {
-    // the implicit is what a caller has to do to move the deflating off `commonPool`, and every other
-    // fixture here imports the one `IO` offers, so this is the one that pins a context reaching `IO` at
-    // all. Counted rather than assumed: an archive written on the wrong context has the same bytes, so
+    // counted rather than assumed: an archive written on the wrong context has the same bytes, so
     // the comparison alone would pass just as well if nothing the caller said had been read
     val threads = Executors.newFixedThreadPool(3)
     val handovers = new AtomicInteger
@@ -347,37 +340,31 @@ class ZipSpec extends AnyFunSuite {
 
   test("zipParallel holds no more in flight than the parallelism the caller passed") {
     // the archive is the same at any parallelism, so bytes cannot show whether the parameter arrived.
-    // Each handover waits for one more than the limit to arrive: a writer holding to it never trips
-    // the latch and peaks at exactly the limit, one ignoring it trips it and peaks above
+    // Nothing here runs what it is given, so a task is finished only once the writer has claimed it —
+    // which leaves the unfinished ones as exactly what the writer is holding
     val parallelism = 2
-    val threads = Executors.newCachedThreadPool()
-    val overLimit = new CountDownLatch(parallelism + 1)
-    val inFlight = new AtomicInteger
+    val handed = ListBuffer.empty[Runnable]
     val peak = new AtomicInteger
     implicit val ec: ExecutionContext = new ExecutionContext {
       def execute(runnable: Runnable): Unit = {
-        val held = inFlight.incrementAndGet()
-        val _ = peak.getAndUpdate(most => math.max(most, held))
-        overLimit.countDown()
-        threads.execute { () =>
-          val _ = overLimit.await(1, TimeUnit.SECONDS)
-          try runnable.run()
-          finally { val _ = inFlight.decrementAndGet() }
+        handed += runnable
+        val held = handed.count {
+          case deflating: Future[?] => !deflating.isDone
+          case _                    => true
         }
+        val _ = peak.getAndUpdate(most => math.max(most, held))
       }
       def reportFailure(cause: Throwable): Unit = throw cause
     }
-    try
-      IO.withTemporaryDirectory { dir =>
-        val sources = (1 to 6).map { i =>
-          val f = dir / s"C$i.class"
-          write(f, s"class C$i " * 20)
-          f -> s"C$i.class"
-        }
-        IO.zipParallel(sources, dir / "out.zip", fixedTime, parallelism)
-        assert(peak.get === parallelism, s"the writer held ${peak.get} entries in flight at once")
+    IO.withTemporaryDirectory { dir =>
+      val sources = (1 to 6).map { i =>
+        val f = dir / s"C$i.class"
+        write(f, s"class C$i " * 20)
+        f -> s"C$i.class"
       }
-    finally { val _ = threads.shutdownNow() }
+      IO.zipParallel(sources, dir / "out.zip", fixedTime, parallelism)
+      assert(peak.get === parallelism, s"the writer held ${peak.get} entries in flight at once")
+    }
   }
 
   test("zip round-trips through unzip") {
@@ -442,11 +429,8 @@ class ZipSpec extends AnyFunSuite {
   private def write(file: File, content: String): Unit = IO.write(file, content)
 
   /**
-   * Archives `build`'s files three ways and compares the bytes twice: `IO`'s writer against the
-   * reference, which pins the entry walk, and then `IO`'s parallel writer against `IO`'s own, which
-   * is the claim that makes the parallel one worth having. Both run over every fixture in this
-   * suite rather than over a set of their own, since the two questions are asked of the same
-   * archives — the second is only interesting where the first has already passed.
+   * Archives `build`'s files three ways and compares twice: `IO`'s writer against the reference,
+   * which pins the entry walk, then `IO`'s parallel writer against `IO`'s own.
    */
   private def checkArchive(
       what: String,

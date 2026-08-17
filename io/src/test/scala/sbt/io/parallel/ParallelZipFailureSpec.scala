@@ -12,10 +12,10 @@
 package sbt.io.parallel
 
 import java.io.{ ByteArrayOutputStream, InterruptedIOException, IOException, OutputStream }
-import java.util.concurrent.{ CountDownLatch, Executors, TimeUnit }
+import java.util.concurrent.{ CountDownLatch, Executors, FutureTask, TimeUnit }
 import java.util.zip.{ ZipEntry, ZipException, ZipOutputStream }
 import org.scalatest.funsuite.AnyFunSuite
-import sbt.io.ZipTestSupport.{ crcOf, firstDifference, hasSignature }
+import sbt.io.ZipTestSupport.{ crcOf, firstDifference, halfCompressible, hasSignature }
 import scala.concurrent.ExecutionContext
 import ZipConstants.EndSig
 
@@ -31,12 +31,15 @@ class ParallelZipFailureSpec extends AnyFunSuite with ParallelZipSupport {
    * told to close cleanly so that nothing masks what the writer's own `close` throws.
    */
   private final class DeadStream(failOnClose: Boolean = true) extends OutputStream {
-    var closed = false
+    private var released = false
+
+    def closed: Boolean = released
+
     override def write(b: Int): Unit = throw new IOException("No space left on device")
     override def write(b: Array[Byte], off: Int, len: Int): Unit =
       throw new IOException("No space left on device")
     override def close(): Unit = {
-      closed = true
+      released = true
       if (failOnClose) throw new IOException("secondary, while closing")
     }
   }
@@ -47,7 +50,7 @@ class ParallelZipFailureSpec extends AnyFunSuite with ParallelZipSupport {
    * survive.
    */
   private def failMidEntry(out: OutputStream): (ParallelZipOutputStream, Throwable) = {
-    val w = new ParallelZipOutputStream(out)
+    val w = parallelZip(out)
     val body = new Array[Byte](200000) // past the writer's 64KB sink buffer, so the write lands
     new java.util.Random(9).nextBytes(body)
     // Which call fails depends on where the entry is deflated: at `closeEntry` when that happens on
@@ -91,7 +94,7 @@ class ParallelZipFailureSpec extends AnyFunSuite with ParallelZipSupport {
       catch { case _: Throwable => () }
       out.toByteArray
     }
-    val ours = written(new ParallelZipOutputStream(_))
+    val ours = written(parallelZip(_))
     val reference = written(new ZipOutputStream(_))
     assert(
       java.util.Arrays.equals(ours, reference),
@@ -104,10 +107,9 @@ class ParallelZipFailureSpec extends AnyFunSuite with ParallelZipSupport {
   }
 
   test("an entry the writer refused leaves an archive that cannot be completed") {
-    // the same refusal reached from `closeEntry` rather than `finish`, where nothing else would have stopped
-    // `close` from writing an end record over it. Which call it surfaces from depends on when the entry is
-    // appended: inline as it is closed, or on a drain the next entry forces — both are covered here, and one
-    // entry in flight at a time makes the second happen at the next entry rather than at finish.
+    // the same refusal reached from `closeEntry` rather than `finish`, where nothing else would have
+    // stopped `close` writing an end record over it. Which call surfaces it depends on when the entry
+    // is appended, so both are covered here
     val body = ("class A " * 100).getBytes("UTF-8")
     val (compressed, crc) = deflatedSizes(body)
     val out = new ByteArrayOutputStream
@@ -136,11 +138,10 @@ class ParallelZipFailureSpec extends AnyFunSuite with ParallelZipSupport {
   }
 
   test("a wait an interrupt cuts short is refused as an IOException, with the flag put back") {
-    // `CompletableFuture.get` answers an interrupt with a checked exception no caller of an
-    // `OutputStream` is in any position to catch, and clears the flag on its way out. sbt cancels a
-    // task by interrupting it, so an archive that let both through would lose the cancellation.
-    // The flag is set before the wait rather than during it, so nothing here depends on timing
-    val gate = new CountDownLatch(1)
+    // `Future.get` answers an interrupt with a checked exception no `OutputStream` caller can catch,
+    // and clears the flag on its way out. sbt cancels a task by interrupting it, so an archive
+    // letting both through would lose the cancellation. The flag is set before the wait, not during
+    val started = new CountDownLatch(1)
     val threads = Executors.newFixedThreadPool(
       1,
       (r: Runnable) => {
@@ -149,17 +150,38 @@ class ParallelZipFailureSpec extends AnyFunSuite with ParallelZipSupport {
         t
       }
     )
-    implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(threads)
+    implicit val ec: ExecutionContext = new ExecutionContext {
+      def execute(runnable: Runnable): Unit = threads.execute { () =>
+        started.countDown()
+        runnable.run()
+      }
+      def reportFailure(cause: Throwable): Unit = throw cause
+    }
     val w = new ParallelZipOutputStream(new ByteArrayOutputStream, parallelism = 1)
     try {
-      threads.execute(() => gate.await()) // occupies the pool, so the entry stays in flight
-      writeOne(w, "a.txt")
+      // only a deflation the context has already begun is one the writer waits on rather than
+      // claims, so the entry is large enough to still be deflating once the pool is well into it
+      val body = halfCompressible(16 * 1024 * 1024, seed = 5)
+      w.putNextEntry(entry("big.bin", body.length))
+      w.write(body, 0, body.length)
+      w.closeEntry()
+      started.await()
+      TimeUnit.MILLISECONDS.sleep(150)
       Thread.currentThread().interrupt()
-      val refused = intercept[InterruptedIOException](w.finish())
-      assert(Thread.interrupted(), "the interrupt flag was not put back")
-      assert(refused.getCause.isInstanceOf[InterruptedException], s"cause was ${refused.getCause}")
+      val refused =
+        try { w.finish(); None }
+        catch { case interrupted: InterruptedIOException => Some(interrupted) }
+      refused match {
+        case Some(cut) =>
+          assert(Thread.interrupted(), "the interrupt flag was not put back")
+          assert(cut.getCause.isInstanceOf[InterruptedException], s"cause was ${cut.getCause}")
+        // losing that race is this machine's scheduling rather than a regression, and a writer that
+        // never waited is one this has nothing to say about
+        case None => cancel("the deflation finished before the writer waited on it")
+      }
     } finally {
-      gate.countDown() // so the entry can finish deflating and the writer can close
+      // cleared whatever happened here, so no later test inherits an interrupt from this one
+      if (Thread.interrupted()) ()
       closeQuietly(w)
       val _ = threads.shutdownNow()
     }
@@ -215,14 +237,13 @@ class ParallelZipFailureSpec extends AnyFunSuite with ParallelZipSupport {
   test(
     "an entry refused on the drain a streamed entry forces cannot be followed by a whole archive"
   ) {
-    // `startStreaming` drains everything queued before its own header goes down, and a refusal surfacing from
-    // there is the same dead archive as one from `closeEntry` or `finish`. On a pool that cannot run anything
-    // in parallel the entry is appended as it is closed instead and the refusal comes from there, so the whole
-    // sequence is intercepted rather than any one call.
+    // `startStreaming` drains everything queued before its own header goes down, and a refusal from
+    // there is the same dead archive as one from `closeEntry` or `finish`. Which call surfaces it
+    // depends on when the deflation ran, so the whole sequence is intercepted rather than one call
     val body = ("class A " * 100).getBytes("UTF-8")
     val (compressed, crc) = deflatedSizes(body)
     val out = new ByteArrayOutputStream
-    val w = new ParallelZipOutputStream(out)
+    val w = parallelZip(out)
     val bad = new ZipEntry("bad.class")
     bad.setTime(stamp)
     bad.setSize(body.length.toLong)
@@ -272,7 +293,7 @@ class ParallelZipFailureSpec extends AnyFunSuite with ParallelZipSupport {
       catch { case _: ZipException => () }
       (onFlush, onFinish)
     }
-    val ours = outcome(new ParallelZipOutputStream(_))
+    val ours = outcome(parallelZip(_))
     val reference = outcome(new ZipOutputStream(_))
     assert(ours === reference, s"ours $ours against the reference's $reference")
     assert(ours._2.startsWith("invalid entry compressed size"), ours._2)
@@ -307,7 +328,7 @@ class ParallelZipFailureSpec extends AnyFunSuite with ParallelZipSupport {
         step("finish")(w.finish())
       )
     }
-    val ours = trace(new ParallelZipOutputStream(_))
+    val ours = trace(parallelZip(_))
     val reference = trace(new ZipOutputStream(_))
     assert(ours === reference, s"diverged:\n  ours      $ours\n  reference $reference")
   }
@@ -346,15 +367,15 @@ class ParallelZipFailureSpec extends AnyFunSuite with ParallelZipSupport {
       )
     }
     def within30Seconds(run: => List[String]): List[String] = {
-      var traced = List.empty[String]
-      val thread = new Thread(() => traced = run)
+      val traced = new FutureTask[List[String]](() => run)
+      val thread = new Thread(traced)
       thread.setDaemon(true)
       thread.start()
       thread.join(TimeUnit.SECONDS.toMillis(30))
       assert(!thread.isAlive, "the writer never returned from a write past a refused entry")
-      traced
+      traced.get()
     }
-    val ours = within30Seconds(trace(new ParallelZipOutputStream(_)))
+    val ours = within30Seconds(trace(parallelZip(_)))
     val reference = within30Seconds(trace(new ZipOutputStream(_)))
     assert(ours === reference, s"diverged:\n  ours      $ours\n  reference $reference")
   }

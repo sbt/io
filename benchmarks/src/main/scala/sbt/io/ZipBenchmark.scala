@@ -20,50 +20,22 @@ import org.openjdk.jmh.annotations._
 import sbt.io.parallel.ParallelZipOutputStream
 import scala.concurrent.ExecutionContext
 // the arms that do not name a context take the one `IO` offers, which is what a caller gets by default
-import IO.Implicits.deflateContext
+import IO.Implicits.zipContext
 
 /**
- * Compares `IO.zipParallel` and `IO.jarParallel` against `IO.zip` and `IO.jar`.
+ * Compares `IO.zipParallel` and `IO.jarParallel` against `IO.zip` and `IO.jar`, through `IO` rather
+ * than the writers underneath so an arm measures what a caller gets.
  *
- * Through `IO` rather than through the writers underneath it, so that an arm measures what a caller
- * gets: the same entry walk, the same synthesised directory entries, the same atomic write, and entries
- * built the one way `IO` builds them. A benchmark driving the writers itself has to restate all of
- * that, and any detail it restates differently is a detail it stops measuring — an entry told its size
- * is routed on that size, so telling it would send a large one down a path `IO` never takes.
+ * The `oneThread` arms isolate constant-factor cost from the parallelism win. They are not the same
+ * stream — this writer buffers its sink in 64 KB against the reference's 512 — so slower than
+ * sequential there is a signal and faster is not one. The `mixed` arms are the size band where the
+ * in-flight window rather than `parallelism` decides when to drain.
  *
- * The `oneThread` arms isolate the writer's constant-factor cost from the parallelism win: deflation
- * runs inline on the calling thread, so it is the same work with the handover machinery still in the
- * way. Slower than the sequential arm there means overhead that parallelism is merely masking, which
- * would show up as a regression for anyone on a single core. They are not the same stream, though:
- * the parallel writer buffers its sink in 64 KB where the reference writes through
- * `DeflaterOutputStream`'s 512 into the 8 KB `IO` hands it, so an `oneThread` arm carries a
- * syscall-rate advantage that has nothing to do with the handover. Slower than sequential there is a
- * signal; faster is not one.
+ * Allocation is checked in setup rather than left to `-prof gc`, and a bound past its ratio stops
+ * the run: sbt still calls that a success, so an empty result table is what says it happened.
  *
- * The `mixed` arms are the size band neither of the other two covers: entries of a few megabytes,
- * held rather than streamed, so each leaves behind a buffer many times a block. What the free list
- * does with one only decides anything once the in-flight window rather than `parallelism` is what
- * says when to drain, which takes more cores than a laptop has — measured on 12, these track the
- * small-entry arms whatever the free list does. They are here so that a machine where the window
- * does bind has an arm that would show it.
- *
- * Allocation is the other half of the comparison, and it is checked rather than left to whoever
- * remembers `-prof gc`: the setup writes one archive each way before any timing runs and measures the
- * bytes allocated across every thread that took part. The parallel writer has to hold each entry to
- * hand it to another thread, where the sequential one streams through a fixed buffer, so it recycles
- * those buffers instead of allocating per entry — the bounds are what that recycling is worth. Passing
- * one stops the setup, which leaves the run with no numbers at all, for any arm; sbt still calls that a
- * success, so it is the empty result table and the ratio printed above it that say what happened.
- * `-prof gc` still gives the same figures per timed arm, and agrees with these to within a percent.
- *
- * Sized for a dev loop at about three minutes: an iteration lasts a second rather than JMH's default ten
- * and there are three of them rather than eight. One archive here takes between a third of a second and
- * three, so an iteration is a whole number of archives either way and the shorter budget costs coverage
- * of the corpus, not of the code.
- *
- * For a number worth quoting rather than comparing, raise them back — `-wi 3 -i 5 -r 5` at least — and
- * run it on a quiet machine: a laptop's own background load moves these arms by more than most changes
- * to the writer do.
+ * Sized for a dev loop at about three minutes. For a number worth quoting raise them back —
+ * `-wi 3 -i 5 -r 5` at least — and run it on a quiet machine.
  */
 @BenchmarkMode(Array(Mode.AverageTime))
 @Fork(1)
@@ -148,10 +120,8 @@ class ZipBenchmark {
   def tearDown(): Unit = IO.delete(temp)
 
   /**
-   * Bytes allocated writing one archive each way, checked before anything is timed. Measured across
-   * every thread rather than the calling one, since the whole point is that the deflating happens
-   * somewhere else; the pool is warmed first so its threads exist before the first reading, and a
-   * thread that came and went in between would take its count with it.
+   * Bytes allocated writing one archive each way, before anything is timed. Across every thread, the
+   * pool warmed first: a thread that came and went between readings would take its count with it.
    */
   private def checkAllocation(): Unit = {
     val checks = Seq[(String, File => Unit)](
@@ -262,11 +232,9 @@ object ZipBenchmark {
   private final val ManyEntriesAllocationRatio = 1.5
 
   /**
-   * And for one entry larger than the threshold, as a multiple of what the writer holds rather than of
-   * the sequential arm, which allocates almost nothing there. Holding an entry in the blocks it
-   * arrived in costs what it holds and no more: measured at 1.01. Growing into one array by doubling
-   * would be twice that, and holding to a threshold set past the in-flight window several times that
-   * again — this is what keeps either from coming back unnoticed.
+   * For one entry past the threshold, as a multiple of what the writer holds rather than of the
+   * sequential arm, which allocates almost nothing there. Measured at 1.01; doubling into one array
+   * would be twice that.
    */
   private final val BigEntryAllocationRatio = 1.5
 

@@ -40,6 +40,10 @@ class ParallelZipLimitsSpec extends AnyFunSuite with ParallelZipSupport {
   /** What "中" takes in utf-8, which is how a name reaches past a length field that counts bytes. */
   private final val Utf8BytesPerWideChar = 3
 
+  /** `chunk` over and over until `size` bytes have gone by, which is how a 4 GB fixture is made. */
+  private def perChunk(size: Long, chunk: Array[Byte])(use: Array[Byte] => Unit): Unit =
+    (0L until size by chunk.length.toLong).foreach(_ => use(chunk))
+
   /**
    * Compares archives too large to hold: every byte through a digest, and the tail kept so that a
    * divergence in the records that carry zip64 says something more useful than a hash mismatch.
@@ -92,8 +96,7 @@ class ParallelZipLimitsSpec extends AnyFunSuite with ParallelZipSupport {
     val size = 0x100000000L
     val chunk = new Array[Byte](1 << 16)
     val crc = new CRC32
-    var counted = 0L
-    while (counted < size) { crc.update(chunk, 0, chunk.length); counted += chunk.length }
+    perChunk(size, chunk)(crc.update(_, 0, chunk.length))
     def archive(make: OutputStream => ZipSink): Ends = {
       val out = new Ends
       val w = make(out)
@@ -104,14 +107,13 @@ class ParallelZipLimitsSpec extends AnyFunSuite with ParallelZipSupport {
       e.setCompressedSize(size)
       e.setCrc(crc.getValue)
       w.putNextEntry(e)
-      var written = 0L
-      while (written < size) { w.write(chunk, 0, chunk.length); written += chunk.length }
+      perChunk(size, chunk)(w.write(_, 0, chunk.length))
       w.closeEntry()
       w.finish()
       w.close()
       out
     }
-    val ours = archive(new ParallelZipOutputStream(_))
+    val ours = archive(parallelZip(_))
     val reference = archive(new ZipOutputStream(_))
     ours.mustMatch(reference)
     assert(ours.contains(Zip64EndSig.toInt, twoBytes = false), "no zip64 end record")
@@ -135,11 +137,9 @@ class ParallelZipLimitsSpec extends AnyFunSuite with ParallelZipSupport {
   }
 
   test("a central header only the timestamp field pushes past 64 KB goes the reference's way") {
-    // the reference weighs its own 64 KB check before it prepends the info-zip timestamp field, so the
-    // extra field it writes is 9 bytes longer than the one it weighed, and a header of 65527 to 65535
-    // bytes is one it writes and a writer weighing what was written would refuse. Only an entry
-    // carrying file times has that field, which is why the two cases above do not reach this.
-    // `atLimit` is the widest name the check takes without it, and the run spans either side
+    // the reference weighs its 64 KB check before prepending the info-zip field, so what it writes is
+    // 9 bytes longer than what it weighed and a header of 65527 to 65535 bytes is one it writes but a
+    // writer weighing the written header would refuse. Only an entry carrying file times has that field
     val atLimit = (MaxFieldBytes - CentralHeaderBytes) / Utf8BytesPerWideChar
     Seq(atLimit - 3, atLimit - 1, atLimit, atLimit + 1).foreach { chars =>
       Seq(true, false).foreach { withFileTime =>
@@ -158,10 +158,9 @@ class ParallelZipLimitsSpec extends AnyFunSuite with ParallelZipSupport {
   }
 
   test("an entry comment past 64 KB of utf-8 goes the way the reference takes it") {
-    // the one length a header records that the reference cuts rather than wraps: a name past 65535 bytes is
-    // written whole under a wrapped length (above), where a comment is written short and its length pinned
-    // at 65535. `ZipEntry.setComment` takes it unchecked on 8 through 21; 22 and later refuse either the
-    // comment or the header it would make, so what there is to agree on moves from the bytes to the refusal
+    // the one length the reference cuts rather than wraps: a comment is written short with its length
+    // pinned at 65535, where a name past 65535 bytes is written whole under a wrapped length. 22 and
+    // later refuse it, so what there is to agree on moves from the bytes to the refusal
     val comment = "中" * 30000 // 90000 utf-8 bytes
     def commented(): Option[ZipEntry] = {
       val e = entry("a.txt")
@@ -199,7 +198,7 @@ class ParallelZipLimitsSpec extends AnyFunSuite with ParallelZipSupport {
     def refusal(open: ZipEntry => Unit): String =
       intercept[IllegalArgumentException](open(filled().get)).getMessage
     val reference = refusal(new JarOutputStream(new ByteArrayOutputStream).putNextEntry(_))
-    val ours = refusal(new ParallelJarOutputStream(new ByteArrayOutputStream).putNextEntry(_))
+    val ours = refusal(parallelJar(new ByteArrayOutputStream).putNextEntry(_))
     assert(
       ours === reference,
       "the refusal has to be the one ZipEntry.setExtra gives the reference"
@@ -220,17 +219,13 @@ class ParallelZipLimitsSpec extends AnyFunSuite with ParallelZipSupport {
       e.setSize(size) // past DefaultMaxEntryBytes, so ours streams it rather than holding it
       w.putNextEntry(e)
       val chunk = new Array[Byte](1 << 16)
-      var written = 0L
-      while (written < size) {
-        w.write(chunk, 0, chunk.length)
-        written += chunk.length
-      }
+      perChunk(size, chunk)(w.write(_, 0, chunk.length))
       w.closeEntry()
       w.finish()
       w.close()
       out
     }
-    val ours = archive(new ParallelZipOutputStream(_))
+    val ours = archive(parallelZip(_))
     val reference = archive(new ZipOutputStream(_))
     ours.mustMatch(reference)
     assert(
@@ -249,11 +244,7 @@ class ParallelZipLimitsSpec extends AnyFunSuite with ParallelZipSupport {
       w.setLevel(Deflater.NO_COMPRESSION)
       w.putNextEntry(entry("huge.bin", 0)) // undeclared size, so ours streams it
       val chunk = new Array[Byte](1 << 16)
-      var written = 0L
-      while (written < 0x100000000L) {
-        w.write(chunk, 0, chunk.length)
-        written += chunk.length
-      }
+      perChunk(0x100000000L, chunk)(w.write(_, 0, chunk.length))
       w.closeEntry()
       writeOne(w, "after.txt") // its offset is past 4 GB, and so is the directory's
       w.finish()
@@ -273,15 +264,12 @@ class ParallelZipLimitsSpec extends AnyFunSuite with ParallelZipSupport {
     // directory entries keep it cheap: nothing to deflate. 65534 is the most a plain end record counts and
     // 65535 is where the reference starts writing a zip64 one beside it, so both sides of that are here.
     Seq(0xfffe -> false, 0xffff -> true, 0x10000 -> true).foreach { case (count, zip64) =>
-      def drive(w: ZipSink): Unit = {
-        var i = 0
-        while (i < count) {
+      def drive(w: ZipSink): Unit =
+        (0 until count).foreach { i =>
           w.putNextEntry(directoryEntry(f"d$i%05d/"))
           w.closeEntry()
-          i += 1
         }
-      }
-      val ours = archive(new ParallelZipOutputStream(_))(drive)
+      val ours = archive(parallelZip(_))(drive)
       sameBytes(s"$count entries", ours, archive(new ZipOutputStream(_))(drive), "the reference")
       assert(
         hasSignature(ours, Zip64EndSig.toInt) === zip64,
@@ -294,14 +282,10 @@ class ParallelZipLimitsSpec extends AnyFunSuite with ParallelZipSupport {
   test("an archive past 65535 entries gets the reference's end records, byte for byte") {
     val count = 0x10000 + 1 // one past what the 16 bit entry count holds
     def drive(w: ZipSink): Unit = {
-      var i = 0
-      while (i < count) {
-        w.putNextEntry(directoryEntry(s"d$i/"))
-        i += 1
-      }
+      (0 until count).foreach(i => w.putNextEntry(directoryEntry(s"d$i/")))
       w.closeEntry()
     }
-    val ours = archive(new ParallelZipOutputStream(_))(drive)
+    val ours = archive(parallelZip(_))(drive)
     sameBytes(
       "an archive past 65535 entries",
       ours,

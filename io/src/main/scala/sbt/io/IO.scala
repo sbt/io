@@ -17,6 +17,7 @@ import java.nio.charset.Charset
 import java.nio.file.attribute.PosixFilePermissions
 import java.nio.file.{ Path => NioPath, _ }
 import java.util.{ Locale, Properties, UUID }
+import java.util.concurrent.ForkJoinPool
 import java.util.jar.{ Attributes, JarEntry, JarFile, JarOutputStream, Manifest }
 import java.util.zip.{ CRC32, ZipEntry, ZipInputStream, ZipOutputStream }
 
@@ -57,6 +58,12 @@ object IO {
   val Newline = System.getProperty("line.separator")
 
   val utf8 = Charset.forName("UTF-8")
+
+  /**
+   * How much of an archive a method that works on several parts at once takes on at a time, where
+   * the caller names no number of its own: one per processor.
+   */
+  val defaultParallelism: Int = math.max(1, Runtime.getRuntime.availableProcessors)
 
   private lazy val jrtFs = FileSystems.getFileSystem(URI.create("jrt:/"))
 
@@ -677,22 +684,42 @@ object IO {
     archive(sources.toSeq, outputJar, Some(manifest), time, deflateOn = None)
 
   /**
-   * Where [[zipParallel]] and [[jarParallel]] deflate for a caller that imports it: `commonPool`,
-   * which is what `CompletableFuture` would have chosen anyway. Neither method defaults to it — a
-   * default on an implicit parameter is silently replaced by any context in scope rather than being
-   * the choice it looks like.
+   * Where `zipParallel` and `jarParallel` compress for a caller that imports it. Neither method
+   * defaults to it — a default on an implicit parameter is silently replaced by any context in
+   * scope rather than being the choice it looks like.
    *
    * Behind an object of its own, as `ExecutionContext.Implicits.global` is: `IO` is
    * wildcard-imported, and an implicit `ExecutionContext` there is one every `Future` in the
    * importing file would take silently or refuse as ambiguous against its own.
    */
   object Implicits {
-    implicit val deflateContext: ExecutionContext = ParallelZipOutputStream.commonPoolContext
+    implicit val zipContext: ExecutionContext =
+      ExecutionContext.fromExecutor(ForkJoinPool.commonPool())
   }
 
   /**
-   * Creates a jar file, deflating its entries in parallel. Byte for byte what `IO.jar` writes, and
-   * usually several times faster where there are entries enough to share out.
+   * Creates a jar file, compressing its entries in parallel, one per processor in flight at a time.
+   * Byte for byte what `IO.jar` writes, and usually several times faster where there are entries
+   * enough to share out.
+   *
+   * @param sources The files to include in the jar file paired with the entry name in the jar.
+   *                Only the pairs explicitly listed are included.
+   * @param outputJar The file to write the jar to.
+   * @param manifest The manifest for the jar.
+   * @param time static timestamp to use for all entries, if any, in milliseconds since Epoch
+   * @param ec where the compressing happens; [[Implicits.zipContext]] is the one to import for
+   *           `commonPool`
+   */
+  def jarParallel(
+      sources: Traversable[(File, String)],
+      outputJar: File,
+      manifest: Manifest,
+      time: Option[Long]
+  )(implicit ec: ExecutionContext): Unit =
+    jarParallel(sources, outputJar, manifest, time, defaultParallelism)
+
+  /**
+   * Creates a jar file, compressing its entries in parallel.
    *
    * @param sources The files to include in the jar file paired with the entry name in the jar.
    *                Only the pairs explicitly listed are included.
@@ -700,17 +727,16 @@ object IO {
    * @param manifest The manifest for the jar.
    * @param time static timestamp to use for all entries, if any, in milliseconds since Epoch
    * @param parallelism how many entries may be in flight at once, not a thread count — how many of
-   *                    them deflate at a time is the context's business. One per processor by default
-   * @param ec where the deflating happens; [[Implicits.deflateContext]] is the one to import for
-   *           `commonPool`. It has to be a context this thread is not itself the whole of: the
-   *           writing thread waits on the deflating once enough entries are in flight
+   *                    them compress at a time is the context's business
+   * @param ec where the compressing happens; [[Implicits.zipContext]] is the one to import for
+   *           `commonPool`
    */
   def jarParallel(
       sources: Traversable[(File, String)],
       outputJar: File,
       manifest: Manifest,
       time: Option[Long],
-      parallelism: Int = ParallelZipOutputStream.DefaultParallelism
+      parallelism: Int
   )(implicit ec: ExecutionContext): Unit =
     archive(sources.toSeq, outputJar, Some(manifest), time, deflateOn = Some((ec, parallelism)))
 
@@ -730,24 +756,41 @@ object IO {
     archive(sources.toSeq, outputZip, None, time, deflateOn = None)
 
   /**
-   * Creates a zip file, deflating its entries in parallel. Byte for byte what `IO.zip` writes, and
-   * usually several times faster where there are entries enough to share out.
+   * Creates a zip file, compressing its entries in parallel, one per processor in flight at a time.
+   * Byte for byte what `IO.zip` writes, and usually several times faster where there are entries
+   * enough to share out.
+   *
+   * @param sources The files to include in the zip file paired with the entry name in the zip.
+   *                Only the pairs explicitly listed are included.
+   * @param outputZip The file to write the zip to.
+   * @param time static timestamp to use for all entries, if any.
+   * @param ec where the compressing happens; [[Implicits.zipContext]] is the one to import for
+   *           `commonPool`
+   */
+  def zipParallel(
+      sources: Traversable[(File, String)],
+      outputZip: File,
+      time: Option[Long]
+  )(implicit ec: ExecutionContext): Unit =
+    zipParallel(sources, outputZip, time, defaultParallelism)
+
+  /**
+   * Creates a zip file, compressing its entries in parallel.
    *
    * @param sources The files to include in the zip file paired with the entry name in the zip.
    *                Only the pairs explicitly listed are included.
    * @param outputZip The file to write the zip to.
    * @param time static timestamp to use for all entries, if any.
    * @param parallelism how many entries may be in flight at once, not a thread count — how many of
-   *                    them deflate at a time is the context's business. One per processor by default
-   * @param ec where the deflating happens; [[Implicits.deflateContext]] is the one to import for
-   *           `commonPool`. It has to be a context this thread is not itself the whole of: the
-   *           writing thread waits on the deflating once enough entries are in flight
+   *                    them compress at a time is the context's business
+   * @param ec where the compressing happens; [[Implicits.zipContext]] is the one to import for
+   *           `commonPool`
    */
   def zipParallel(
       sources: Traversable[(File, String)],
       outputZip: File,
       time: Option[Long],
-      parallelism: Int = ParallelZipOutputStream.DefaultParallelism
+      parallelism: Int
   )(implicit ec: ExecutionContext): Unit =
     archive(sources.toSeq, outputZip, None, time, deflateOn = Some((ec, parallelism)))
 

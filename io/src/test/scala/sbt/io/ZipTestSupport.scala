@@ -43,11 +43,7 @@ private[io] object ZipTestSupport {
   def halfCompressible(bytes: Int, seed: Long, stride: Int = 2): Array[Byte] = {
     val body = new Array[Byte](bytes)
     new java.util.Random(seed).nextBytes(body)
-    var i = 0
-    while (i < bytes) {
-      body(i) = 0
-      i += stride
-    }
+    body.indices.by(stride).foreach(body(_) = 0)
     body
   }
 
@@ -62,10 +58,10 @@ private[io] object ZipTestSupport {
   /** Where two archives diverge, for a failure message. */
   def firstDifference(a: Array[Byte], b: Array[Byte]): String = {
     val n = math.min(a.length, b.length)
-    var i = 0
-    while (i < n && a(i) == b(i)) i += 1
-    if (i == n) s"byte $i (one is a prefix of the other)"
-    else f"byte $i (0x${a(i) & 0xff}%02x vs 0x${b(i) & 0xff}%02x)"
+    (0 until n).find(i => a(i) != b(i)) match {
+      case None    => s"byte $n (one is a prefix of the other)"
+      case Some(i) => f"byte $i (0x${a(i) & 0xff}%02x vs 0x${b(i) & 0xff}%02x)"
+    }
   }
 
   /** The extra field written into the first local header. */
