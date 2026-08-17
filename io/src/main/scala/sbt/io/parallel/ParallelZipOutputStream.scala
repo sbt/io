@@ -91,6 +91,9 @@ private[sbt] class ParallelZipOutputStream(
 
   protected def maxEntryBytes: Long = MaxEntryBytes
 
+  /** Overridable so a suite can hand out a deflater it is able to block inside. */
+  protected def newDeflater(atLevel: Int): Deflater = new Deflater(atLevel, true)
+
   // ── entry lifecycle ──────────────────────────────────────────────────
 
   def putNextEntry(e: ZipEntry): Unit = {
@@ -446,7 +449,7 @@ private[sbt] class ParallelZipOutputStream(
     }
 
   private def takeDeflater(): Deflater =
-    Option(freeDeflaters.pollFirst()).fold(new Deflater(level, true)) { recycled =>
+    Option(freeDeflaters.pollFirst()).fold(newDeflater(level)) { recycled =>
       recycled.reset()
       recycled
     }
@@ -731,9 +734,26 @@ private[sbt] object ParallelZipOutputStream {
       task
     }
 
-    /** `cancel(false)` wins only on a task no thread started, so a running deflation keeps its deflater. */
-    def endDeflater(): Unit =
-      if (task.cancel(false) || task.isDone) deflater.end()
+    /**
+     * Ends the deflater for an entry `close` will never append, once the deflation is over — run
+     * here if nothing else ran it. Ending one part way through a `deflate` would leave the call
+     * after it on a closed deflater, so an interrupt does not cut the wait short.
+     */
+    def endDeflater(): Unit = {
+      if (settled(false)) Thread.currentThread().interrupt()
+      deflater.end()
+    }
+
+    /** The deflation's outcome is discarded; whether waiting for it was interrupted is not. */
+    @tailrec private def settled(interrupted: Boolean): Boolean = {
+      val cut =
+        try { val _ = claimed().get(); false }
+        catch {
+          case _: InterruptedException => true
+          case _: Throwable            => false
+        }
+      if (cut) settled(true) else interrupted
+    }
   }
 
   /**

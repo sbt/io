@@ -12,8 +12,16 @@
 package sbt.io.parallel
 
 import java.io.{ ByteArrayOutputStream, InterruptedIOException, IOException, OutputStream }
-import java.util.concurrent.{ CountDownLatch, Executors, FutureTask, TimeUnit }
-import java.util.zip.{ ZipEntry, ZipException, ZipOutputStream }
+import java.util.concurrent.{
+  CountDownLatch,
+  ExecutionException,
+  Executors,
+  FutureTask,
+  TimeUnit,
+  TimeoutException
+}
+import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
+import java.util.zip.{ Deflater, ZipEntry, ZipException, ZipOutputStream }
 import org.scalatest.funsuite.AnyFunSuite
 import sbt.io.ZipTestSupport.{ crcOf, firstDifference, halfCompressible, hasSignature }
 import scala.concurrent.ExecutionContext
@@ -378,5 +386,61 @@ class ParallelZipFailureSpec extends AnyFunSuite with ParallelZipSupport {
     val ours = within30Seconds(trace(parallelZip(_)))
     val reference = within30Seconds(trace(new ZipOutputStream(_)))
     assert(ours === reference, s"diverged:\n  ours      $ours\n  reference $reference")
+  }
+
+  test("a deflation still running when close sweeps it is waited out, and its deflater ended") {
+    // `close` only sweeps entries `finish` never appended, so the first entry's deflation fails to
+    // bring finish down with the second still in flight. That second one is held inside `deflate`,
+    // which is what makes this a running deflation rather than a race against one
+    val inside = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+    val failing = new Deflater(Deflater.DEFAULT_COMPRESSION, true) {
+      override def deflate(b: Array[Byte], off: Int, len: Int): Int =
+        throw new IllegalStateException("deflation refused")
+    }
+    final class Blocking extends Deflater(Deflater.DEFAULT_COMPRESSION, true) {
+      val ended = new AtomicBoolean
+      override def deflate(b: Array[Byte], off: Int, len: Int): Int = {
+        inside.countDown()
+        release.await()
+        super.deflate(b, off, len)
+      }
+      override def end(): Unit = {
+        ended.set(true)
+        super.end()
+      }
+    }
+    val blocking = new Blocking
+    val handed = new AtomicInteger
+    val threads = Executors.newFixedThreadPool(2)
+    implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(threads)
+    val w = new ParallelZipOutputStream(new ByteArrayOutputStream, parallelism = 2) {
+      override protected def newDeflater(atLevel: Int): Deflater =
+        if (handed.getAndIncrement() == 0) failing else blocking
+    }
+    try {
+      Seq("first.txt", "second.txt").foreach(writeOne(w, _))
+      inside.await()
+      val closing = new FutureTask[Unit](() => w.close())
+      val closer = new Thread(closing, "parallel-zip-close-spec")
+      closer.setDaemon(true)
+      closer.start()
+      // it cannot get past the held deflation, so this deadline expires rather than the sweep
+      // reaching a deflater another thread is still inside
+      try closing.get(2, TimeUnit.SECONDS)
+      catch { case _: TimeoutException | _: ExecutionException => () }
+      assert(
+        !blocking.ended.get,
+        "the sweep ended a deflater another thread was still inside `deflate` on"
+      )
+      release.countDown()
+      try closing.get(30, TimeUnit.SECONDS)
+      catch { case _: TimeoutException | _: ExecutionException => () }
+      assert(closing.isDone, "close never returned once the deflation it waited on finished")
+      assert(blocking.ended.get, "a deflation still running at close left its deflater unended")
+    } finally {
+      release.countDown()
+      val _ = threads.shutdownNow()
+    }
   }
 }
