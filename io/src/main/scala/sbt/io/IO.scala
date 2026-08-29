@@ -14,7 +14,13 @@ package sbt.io
 import java.io._
 import java.net.{ URI, URISyntaxException, URL }
 import java.nio.charset.Charset
-import java.nio.file.attribute.PosixFilePermissions
+import java.nio.file.attribute.{
+  AclEntry,
+  AclEntryPermission,
+  AclEntryType,
+  PosixFilePermissions,
+  UserPrincipal
+}
 import java.nio.file.{ Path => NioPath, _ }
 import java.util.{ Locale, Properties, UUID }
 import java.util.concurrent.ForkJoinPool
@@ -475,7 +481,35 @@ object IO {
    * `write` returns successfully. If `write` throws, `to` is left untouched and the
    * staging file is removed.
    */
-  def writeFileAtomically[T](to: File)(write: File => T): T = {
+  def writeFileAtomically[T](to: File)(write: File => T): T =
+    writeFileAtomically(to, ownerOnly = false)(write)
+
+  /**
+   * Stages a write to a sibling temp file and atomically replaces `to` only after
+   * `write` returns successfully. If `write` throws, `to` is left untouched and the
+   * staging file is removed.
+   *
+   * @param ownerOnly
+   *   if true, no content written out could be read by anyone other than its owner
+   */
+  def writeFileAtomically[T](to: File, ownerOnly: Boolean)(write: File => T): T =
+    writeStaged(to, ownerOnly, replace = true)(write)
+
+  /**
+   * Like `writeFileAtomically`, except that it refuses a `to` that already exists and
+   * throws `FileAlreadyExistsException`.
+   *
+   * @param ownerOnly
+   *   if true, no content written out could be read by anyone other than its owner
+   */
+  def createFileAtomically[T](to: File, ownerOnly: Boolean)(write: File => T): T =
+    writeStaged(to, ownerOnly, replace = false)(write)
+
+  private def writeStaged[T](
+      to: File,
+      ownerOnly: Boolean,
+      replace: Boolean
+  )(write: File => T): T = {
     val parent = Option(to.getAbsoluteFile.getParentFile).getOrElse(new File("."))
     createDirectory(parent)
 
@@ -488,7 +522,7 @@ object IO {
 
     val toPath = to.toPath
     val staging = stagingFile.toPath
-    touch(stagingFile)
+    if (ownerOnly) createForOwner(staging) else touch(stagingFile)
 
     def retry(func: => NioPath): NioPath = Retry(
       func,
@@ -498,17 +532,48 @@ object IO {
     )
     def move(options: CopyOption*): NioPath = retry(Files.move(staging, toPath, options*))
     def replaceFile(): NioPath =
+      // ATOMIC_MOVE uses POSIX rename, so it can only be used with `replace`
       try move(StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
       catch { case _: AtomicMoveNotSupportedException => move(StandardCopyOption.REPLACE_EXISTING) }
+    def createLink(): NioPath =
+      // Files.move with ATOMIC_MOVE possibly replaces and without has a race condition
+      try retry(Files.createLink(toPath, staging)) // try this first
+      catch {
+        case e @ (_: UnsupportedOperationException | _: IOException)
+            if !e.isInstanceOf[FileAlreadyExistsException] =>
+          move()
+      }
 
     try {
       val result = write(stagingFile)
-      replaceFile()
+      if (replace)
+        replaceFile()
+      else
+        createLink()
       result
     } finally {
       Files.deleteIfExists(staging)
       ()
     }
+  }
+
+  /** Creates `path` such that only its owner can read and write it. */
+  private def createForOwner(path: NioPath): Unit = {
+    if (isPosix) {
+      val ownerOnly = PosixFilePermissions.fromString("rw-------")
+      Files.createFile(path, PosixFilePermissions.asFileAttribute(ownerOnly))
+    } else {
+      Files.createFile(path)
+      if (hasAclFileAttributeView) {
+        val view = Path(path.toFile).aclFileAttributeView
+        val acl = AclEntry.newBuilder
+        acl.setPrincipal(view.getOwner)
+        acl.setPermissions(AclEntryPermission.values()*)
+        acl.setType(AclEntryType.ALLOW)
+        view.setAcl(java.util.Collections.singletonList(acl.build))
+      }
+    }
+    ()
   }
 
   /**
