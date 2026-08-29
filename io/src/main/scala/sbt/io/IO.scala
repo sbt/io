@@ -478,25 +478,32 @@ object IO {
   def writeFileAtomically[T](to: File)(write: File => T): T = {
     val parent = Option(to.getAbsoluteFile.getParentFile).getOrElse(new File("."))
     createDirectory(parent)
-    val name = to.getName
-    val prefix = if (name.length >= 3) s"${name}." else s"sbt-${name}."
-    val u = UUID.randomUUID().toString().take(8)
-    val staging = new File(parent, s"${prefix}${u}.tmp").toPath()
-    touch(staging.toFile())
+
+    val stagingFile = {
+      val name = to.getName
+      val prefix = if (name.length >= 3) s"${name}." else s"sbt-${name}."
+      val u = UUID.randomUUID().toString().take(8)
+      new File(parent, s"${prefix}${u}.tmp")
+    }
+
+    val toPath = to.toPath
+    val staging = stagingFile.toPath
+    touch(stagingFile)
+
     try {
-      val result = write(staging.toFile())
+      val result = write(stagingFile)
       try
         Retry(
           Files.move(
             staging,
-            to.toPath(),
+            toPath,
             StandardCopyOption.REPLACE_EXISTING,
             StandardCopyOption.ATOMIC_MOVE
           )
         )
       catch {
         case _: AtomicMoveNotSupportedException =>
-          Retry(Files.move(staging, to.toPath(), StandardCopyOption.REPLACE_EXISTING))
+          Retry(Files.move(staging, toPath, StandardCopyOption.REPLACE_EXISTING))
       }
       result
     } finally {
