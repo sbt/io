@@ -490,21 +490,20 @@ object IO {
     val staging = stagingFile.toPath
     touch(stagingFile)
 
+    def retry(func: => NioPath): NioPath = Retry(
+      func,
+      classOf[FileAlreadyExistsException],
+      classOf[AtomicMoveNotSupportedException],
+      classOf[UnsupportedOperationException]
+    )
+    def move(options: CopyOption*): NioPath = retry(Files.move(staging, toPath, options*))
+    def replaceFile(): NioPath =
+      try move(StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+      catch { case _: AtomicMoveNotSupportedException => move(StandardCopyOption.REPLACE_EXISTING) }
+
     try {
       val result = write(stagingFile)
-      try
-        Retry(
-          Files.move(
-            staging,
-            toPath,
-            StandardCopyOption.REPLACE_EXISTING,
-            StandardCopyOption.ATOMIC_MOVE
-          )
-        )
-      catch {
-        case _: AtomicMoveNotSupportedException =>
-          Retry(Files.move(staging, toPath, StandardCopyOption.REPLACE_EXISTING))
-      }
+      replaceFile()
       result
     } finally {
       Files.deleteIfExists(staging)
