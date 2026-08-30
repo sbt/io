@@ -539,6 +539,10 @@ object IO {
       // Files.move with ATOMIC_MOVE possibly replaces and without has a race condition
       try retry(Files.createLink(toPath, staging)) // try this first
       catch {
+        case _: AccessDeniedException =>
+          transferAndClose(new FileInputStream(staging.toFile()), new FileOutputStream(to, false))
+          Files.deleteIfExists(staging)
+          ()
         case e @ (_: UnsupportedOperationException | _: IOException)
             if !e.isInstanceOf[FileAlreadyExistsException] =>
           move()
