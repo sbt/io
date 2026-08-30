@@ -12,11 +12,82 @@
 package sbt.io
 
 import java.io.File
-import java.nio.file.Files
+import java.nio.file.{ FileAlreadyExistsException, Files }
+import java.nio.file.attribute.PosixFilePermission.{ OWNER_READ, OWNER_WRITE }
+import scala.collection.JavaConverters._
 import org.scalatest.funsuite.AnyFunSuite
 import sbt.io.syntax._
 
 class IOSpec extends AnyFunSuite {
+
+  test("createFileAtomically should write a file that is not there") {
+    IO.withTemporaryDirectory { dir =>
+      val target = new File(dir, "out.json")
+      IO.createFileAtomically(target, ownerOnly = false)(staging => IO.write(staging, "content"))
+      assert(IO.read(target) === "content")
+      assert(dir.listFiles.map(_.getName).toList === List("out.json"))
+    }
+  }
+
+  test("createFileAtomically should refuse a file that is there") {
+    IO.withTemporaryDirectory { dir =>
+      val target = new File(dir, "out.json")
+      IO.write(target, "first")
+      assertThrows[FileAlreadyExistsException] {
+        IO.createFileAtomically(target, ownerOnly = false)(staging => IO.write(staging, "second"))
+      }
+      assert(IO.read(target) === "first")
+      assert(dir.listFiles.map(_.getName).toList === List("out.json"))
+    }
+  }
+
+  test("createFileAtomically should let one writer of many create the file") {
+    IO.withTemporaryDirectory { dir =>
+      val writers = 8
+      val pool = java.util.concurrent.Executors.newFixedThreadPool(writers)
+      try {
+        val winners = (0 until 20).map { round =>
+          val target = new File(dir, s"target$round")
+          val go = new java.util.concurrent.CountDownLatch(1)
+          val won = new java.util.concurrent.atomic.AtomicInteger
+          val running = (0 until writers).map { writer =>
+            pool.submit(new Runnable {
+              def run(): Unit = {
+                go.await()
+                try {
+                  IO.createFileAtomically(target, ownerOnly = false)(staging =>
+                    IO.write(staging, s"writer $writer")
+                  )
+                  won.incrementAndGet()
+                  ()
+                } catch { case _: FileAlreadyExistsException => () }
+              }
+            })
+          }
+          go.countDown()
+          running.foreach(_.get())
+          assert(IO.read(target).startsWith("writer "))
+          won.get
+        }
+        assert(winners.toList === List.fill(20)(1))
+      } finally {
+        pool.shutdown()
+        ()
+      }
+    }
+  }
+
+  test("writeFileAtomically should keep a file to its owner when asked") {
+    if (IO.isPosix) {
+      IO.withTemporaryDirectory { dir =>
+        val target = new File(dir, "secret.json")
+        IO.writeFileAtomically(target, ownerOnly = true)(staging => IO.write(staging, "hush"))
+        val permissions = Files.getPosixFilePermissions(target.toPath).asScala.toSet
+        assert(permissions === Set(OWNER_READ, OWNER_WRITE))
+        assert(IO.read(target) === "hush")
+      }
+    }
+  }
 
   test("IO should relativize") {
     // Given:
