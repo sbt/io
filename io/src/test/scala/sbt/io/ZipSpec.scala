@@ -12,6 +12,7 @@
 package sbt.io
 
 import java.io.{ BufferedOutputStream, File, FileOutputStream }
+import java.net.URLClassLoader
 import java.nio.file.Files
 import java.util.concurrent.{ Executors, Future }
 import java.util.concurrent.atomic.AtomicInteger
@@ -156,6 +157,43 @@ class ZipSpec extends AnyFunSuite {
         assert(jf.getManifest.getMainAttributes.getValue(Attributes.Name.MAIN_CLASS) === "Main")
         assert(jf.getEntry("a.txt") != null)
       } finally jf.close()
+    }
+  }
+
+  test("IO.jar can overwrite a jar file a classloader still has open") {
+    // Windows repro for the AccessDeniedException seen when re-jarring a path that's
+    // still open elsewhere: the JDK's zip/jar file channel doesn't request
+    // FILE_SHARE_DELETE, so the rename `IO.jar`'s atomic write ends with can fail there
+    // even though nothing on this JVM still has the file open for writing.
+    IO.withTemporaryDirectory { tmp =>
+      val dir = tmp / "src"
+      IO.createDirectory(dir)
+      val jar = tmp / "out.jar"
+      val className = "AdHocFixture"
+
+      def buildJar(value: Int): Unit = {
+        val classFile = compileClass(
+          dir,
+          className,
+          s"public class $className { public static final int VALUE = $value; }"
+        )
+        IO.jar(Seq(classFile -> s"$className.class"), jar, new Manifest, fixedTime)
+      }
+
+      buildJar(1)
+
+      val loader = new URLClassLoader(Array(jar.toURI.toURL), null)
+      try {
+        val loaded = loader.loadClass(className)
+        assert(loaded.getField("VALUE").getInt(null) === 1)
+
+        // `jar` is still open for reading inside `loader` at this point.
+        buildJar(2)
+
+        val jf = new JarFile(jar)
+        try assert(jf.getJarEntry(s"$className.class") != null, "overwritten jar lost its entry")
+        finally jf.close()
+      } finally loader.close()
     }
   }
 
@@ -427,6 +465,18 @@ class ZipSpec extends AnyFunSuite {
   // -- helpers ---------------------------------------------------------------
 
   private def write(file: File, content: String): Unit = IO.write(file, content)
+
+  /** Compiles `source` (a single top level class named `className`) and returns its `.class` file. */
+  private def compileClass(dir: File, className: String, source: String): File = {
+    val javaFile = dir / s"$className.java"
+    write(javaFile, source)
+    val compiler = javax.tools.ToolProvider.getSystemJavaCompiler
+    assert(compiler != null, "no system Java compiler available to build the fixture class")
+    val result =
+      compiler.run(null, null, null, "-d", dir.getAbsolutePath, javaFile.getAbsolutePath)
+    assert(result == 0, s"failed to compile $className")
+    dir / s"$className.class"
+  }
 
   /**
    * Archives `build`'s files three ways and compares twice: `IO`'s writer against the reference,
