@@ -1140,7 +1140,7 @@ object IO {
       !sourceFile.isDirectory,
       "Source file '" + sourceFile.getAbsolutePath + "' is a directory."
     )
-    writeFileAtomically(targetFile) { staging =>
+    writeFile(targetFile) { staging =>
       fileInputChannel(sourceFile) { in =>
         fileOutputChannel(staging) { out =>
           // maximum bytes per transfer according to  from http://dzone.com/snippets/java-filecopy-using-nio
