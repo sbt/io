@@ -73,6 +73,9 @@ object IO {
 
   private lazy val jrtFs = FileSystems.getFileSystem(URI.create("jrt:/"))
 
+  private[sbt] val isWindows: Boolean =
+    System.getProperty("os.name").toLowerCase(Locale.ENGLISH).contains("windows")
+
   /**
    * Returns the NIO Path to the directory, Java module, or the JAR file containing the class file `cl`.
    * If the location cannot be determined, an error is generated.
@@ -475,6 +478,11 @@ object IO {
         transfer(in, outputStream)
       }
     }
+
+  /** Helper function to write atomically on non-Windows. */
+  private[sbt] def writeFile[A1](to: File)(write: File => A1): A1 =
+    if (isWindows) write(to)
+    else writeFileAtomically(to, ownerOnly = false)(write)
 
   /**
    * Stages a write to a sibling temp file and atomically replaces `to` only after
@@ -884,7 +892,7 @@ object IO {
         case parentFile => parentFile
       }
       createDirectory(outputDir)
-      writeFileAtomically(outputFile) { staging =>
+      writeFile(outputFile) { staging =>
         withZipOutput(staging, manifest, localTime, deflateOn) { output =>
           val createEntry: (String => ZipEntry) =
             if (manifest.isDefined) new JarEntry(_) else new ZipEntry(_)
@@ -1132,7 +1140,7 @@ object IO {
       !sourceFile.isDirectory,
       "Source file '" + sourceFile.getAbsolutePath + "' is a directory."
     )
-    writeFileAtomically(targetFile) { staging =>
+    writeFile(targetFile) { staging =>
       fileInputChannel(sourceFile) { in =>
         fileOutputChannel(staging) { out =>
           // maximum bytes per transfer according to  from http://dzone.com/snippets/java-filecopy-using-nio
@@ -1407,9 +1415,6 @@ object IO {
 
     dirURI.normalize
   }
-
-  private[sbt] val isWindows: Boolean =
-    System.getProperty("os.name").toLowerCase(Locale.ENGLISH).contains("windows")
 
   /** Converts the given File to a URI.  If the File is relative, the URI is relative, unlike File.toURI */
   def toURI(f: File): URI = {

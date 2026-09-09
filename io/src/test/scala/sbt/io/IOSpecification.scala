@@ -78,7 +78,7 @@ object IOSpecification extends Properties("IO") {
       IO.write(target, "previous")
       val failed = Try(IO.copyFile(source, target)).isFailure
       val content = IO.read(target)
-      (failed ?= true) && (content ?= "previous")
+      IO.isWindows || ((failed ?= true) && (content ?= "previous"))
     } finally IO.delete(dir)
   }
 
@@ -94,7 +94,7 @@ object IOSpecification extends Properties("IO") {
         IO.jar(Seq(phantom -> "phantom.txt"), target, new java.util.jar.Manifest, None)
       ).isFailure
       val content = IO.read(target)
-      (failed ?= true) && (content ?= "previous")
+      IO.isWindows || ((failed ?= true) && (content ?= "previous"))
     } finally IO.delete(dir)
   }
 
