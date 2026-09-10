@@ -3,7 +3,7 @@ import Keys._
 
 object Dependencies {
   val scala212 = "2.12.20"
-  val scala213 = "2.13.18"
+  val scala213 = "3.9.0"
   val scala3 = "3.3.8"
 
   val scalaCompiler = Def.setting {
