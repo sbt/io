@@ -12,7 +12,7 @@ object Dependencies {
   }
 
   val scalaVerify = "com.eed3si9n.verify" %% "verify" % "1.0.0"
-  val scalaCheck = "org.scalacheck" %% "scalacheck" % "1.19.0"
+  val scalaCheck = "org.scalacheck" %% "scalacheck" % "1.20.0"
   val scalatest = "org.scalatest" %% "scalatest" % "3.2.20"
   val swovalFiles = "com.swoval" % "file-tree-views" % "2.1.12"
 }
