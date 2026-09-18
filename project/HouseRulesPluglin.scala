@@ -15,6 +15,20 @@ object HouseRulesPlugin extends AutoPlugin {
     scalacOptions += "-language:higherKinds",
     scalacOptions += "-language:implicitConversions",
     scalacOptions ++= "-Xfuture".ifScala213OrMinus.value.toList,
+    scalacOptions ++= {
+      if (scalaVersion.value.startsWith("3.3.")) {
+        Seq(
+          "-release:11",
+          "-Yfuture-lazy-vals",
+        )
+      } else if (scalaBinaryVersion.value == "3") {
+        Nil
+      } else {
+        Seq(
+          "-release:8",
+        )
+      }
+    },
     scalacOptions ++= "-Xfatal-warnings"
       .ifScala(v => {
         sys.props.get("sbt.build.fatal") match {
