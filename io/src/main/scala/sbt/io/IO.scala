@@ -481,8 +481,27 @@ object IO {
 
   /** Helper function to write atomically on non-Windows. */
   private[sbt] def writeFile[A1](to: File)(write: File => A1): A1 =
-    if (isWindows) write(to)
-    else writeFileAtomically(to, ownerOnly = false)(write)
+    if (isWindows) {
+      breakSymlink(to, keepContent = false)
+      write(to)
+    } else writeFileAtomically(to, ownerOnly = false)(write)
+
+  /**
+   * Copy-on-write for symbolic links: if `file` is a symbolic link, it is replaced by a
+   * regular file so that a following in-place write leaves the link target untouched.
+   * If `keepContent` is true, the new file starts out with the target's content.
+   */
+  private def breakSymlink(file: File, keepContent: Boolean): Unit = {
+    val path = file.toPath
+    if (Files.isSymbolicLink(path)) {
+      if (keepContent && Files.exists(path))
+        writeFileAtomically(file) { staging =>
+          fileInputStream(file)(in => fileOutputStream()(staging)(out => transfer(in, out)))
+        }
+      else Files.deleteIfExists(path)
+      ()
+    }
+  }
 
   /**
    * Stages a write to a sibling temp file and atomically replaces `to` only after
@@ -1183,6 +1202,7 @@ object IO {
    * If `append` is `false`, the existing contents of `file` are overwritten.
    * If `append` is `true`, the new `content` is appended to the existing contents.
    * If `file` or any parent directories do not exist, they are created.
+   * If `file` is a symbolic link, the link is replaced by a regular file and its target is left unchanged.
    */
   def write(
       file: File,
@@ -1195,9 +1215,10 @@ object IO {
   def writer[T](file: File, content: String, charset: Charset, append: Boolean = false)(
       f: BufferedWriter => T
   ): T =
-    if (charset.newEncoder.canEncode(content))
+    if (charset.newEncoder.canEncode(content)) {
+      breakSymlink(file, keepContent = append)
       fileWriter(charset, append)(file)(f)
-    else
+    } else
       sys.error("String cannot be encoded by charset " + charset.name)
 
   def reader[T](file: File, charset: Charset = defaultCharset)(f: BufferedReader => T): T =
@@ -1230,6 +1251,8 @@ object IO {
   /**
    * Appends `content` to the existing contents of `file` using `charset` or UTF-8 if `charset` is not explicitly specified.
    * If `file` does not exist, it is created, as are any parent directories.
+   * If `file` is a symbolic link, the link is replaced by a regular file starting with the target's content,
+   * and the target is left unchanged.
    */
   def append(file: File, content: String, charset: Charset = defaultCharset): Unit =
     write(file, content, charset, true)
@@ -1237,6 +1260,8 @@ object IO {
   /**
    * Appends `bytes` to the existing contents of `file`.
    * If `file` does not exist, it is created, as are any parent directories.
+   * If `file` is a symbolic link, the link is replaced by a regular file starting with the target's content,
+   * and the target is left unchanged.
    */
   def append(file: File, bytes: Array[Byte]): Unit =
     writeBytes(file, bytes, true)
@@ -1244,12 +1269,15 @@ object IO {
   /**
    * Writes `bytes` to `file`, overwriting any existing content.
    * If any parent directories do not exist, they are first created.
+   * If `file` is a symbolic link, the link is replaced by a regular file and its target is left unchanged.
    */
   def write(file: File, bytes: Array[Byte]): Unit =
     writeBytes(file, bytes, false)
 
-  private def writeBytes(file: File, bytes: Array[Byte], append: Boolean): Unit =
+  private def writeBytes(file: File, bytes: Array[Byte], append: Boolean): Unit = {
+    breakSymlink(file, keepContent = append)
     fileOutputStream(append)(file) { _.write(bytes) }
+  }
 
   /** Reads all of the lines from `url` using the provided `charset` or UTF-8 if `charset` is not explicitly specified. */
   def readLinesURL(url: URL, charset: Charset = defaultCharset): List[String] =
@@ -1285,6 +1313,7 @@ object IO {
    * If `append` is `true`, the lines are appended to the file.
    * A newline is written after each line and NOT before the first line.
    * If any parent directories of `file` do not exist, they are first created.
+   * If `file` is a symbolic link, the link is replaced by a regular file and its target is left unchanged.
    */
   def writeLines(
       file: File,
@@ -1303,9 +1332,12 @@ object IO {
   /**
    * Writes `properties` to the File `to`, using `label` as the comment on the first line.
    * If any parent directories of `to` do not exist, they are first created.
+   * If `to` is a symbolic link, the link is replaced by a regular file and its target is left unchanged.
    */
-  def write(properties: Properties, label: String, to: File) =
+  def write(properties: Properties, label: String, to: File) = {
+    breakSymlink(to, keepContent = false)
     fileOutputStream()(to)(output => properties.store(output, label))
+  }
 
   /** Reads the properties in `from` into `properties`.  If `from` does not exist, `properties` is left unchanged. */
   def load(properties: Properties, from: File): Unit =

@@ -15,6 +15,7 @@ import java.io.File
 import java.nio.file.{ FileAlreadyExistsException, Files }
 import java.nio.file.attribute.PosixFilePermission.{ OWNER_READ, OWNER_WRITE }
 import scala.collection.JavaConverters._
+import org.scalatest.Assertion
 import org.scalatest.funsuite.AnyFunSuite
 import sbt.io.syntax._
 
@@ -316,6 +317,103 @@ class IOSpec extends AnyFunSuite {
       IO.touch(dir / "a.txt")
       IO.touch(dir / "b.txt")
       IO.move(dir / "a.txt", dir / "b.txt")
+    }
+  }
+
+  private def withSymlink(f: (File, File) => Assertion): Assertion =
+    IO.withTemporaryDirectory { dir =>
+      val target = dir / "cas" / "blob"
+      IO.write(target, "original")
+      val link = dir / "out" / "a.txt"
+      IO.createDirectory(link.getParentFile)
+      Files.createSymbolicLink(link.toPath, target.toPath)
+      f(link, target)
+    }
+
+  private def assertLinkBroken(link: File, target: File): Assertion = {
+    assert(!Files.isSymbolicLink(link.toPath))
+    assert(IO.read(target) === "original")
+  }
+
+  test("write(String) should replace a symlink instead of writing through it") {
+    withSymlink { (link, target) =>
+      IO.write(link, "new")
+      assertLinkBroken(link, target)
+      assert(IO.read(link) === "new")
+    }
+  }
+
+  test("write(Array[Byte]) should replace a symlink instead of writing through it") {
+    withSymlink { (link, target) =>
+      IO.write(link, "new".getBytes(IO.utf8))
+      assertLinkBroken(link, target)
+      assert(IO.read(link) === "new")
+    }
+  }
+
+  test("writeLines should replace a symlink instead of writing through it") {
+    withSymlink { (link, target) =>
+      IO.writeLines(link, List("a", "b"))
+      assertLinkBroken(link, target)
+      assert(IO.readLines(link) === List("a", "b"))
+    }
+  }
+
+  test("write(Properties) should replace a symlink instead of writing through it") {
+    withSymlink { (link, target) =>
+      val properties = new java.util.Properties
+      properties.setProperty("k", "v")
+      IO.write(properties, "label", link)
+      assertLinkBroken(link, target)
+      val loaded = new java.util.Properties
+      IO.load(loaded, link)
+      assert(loaded.getProperty("k") === "v")
+    }
+  }
+
+  test("append(String) should copy the symlink target before appending") {
+    withSymlink { (link, target) =>
+      IO.append(link, "+more")
+      assertLinkBroken(link, target)
+      assert(IO.read(link) === "original+more")
+    }
+  }
+
+  test("append(Array[Byte]) should copy the symlink target before appending") {
+    withSymlink { (link, target) =>
+      IO.append(link, "+more".getBytes(IO.utf8))
+      assertLinkBroken(link, target)
+      assert(IO.read(link) === "original+more")
+    }
+  }
+
+  test("append should keep a read-only symlink target untouched") {
+    withSymlink { (link, target) =>
+      assert(target.setWritable(false))
+      IO.append(link, "+more")
+      assertLinkBroken(link, target)
+      assert(IO.read(link) === "original+more")
+      assert(link.canWrite)
+    }
+  }
+
+  test("append should replace a dangling symlink with a new file") {
+    withSymlink { (link, target) =>
+      IO.delete(target)
+      IO.append(link, "new")
+      assert(!Files.isSymbolicLink(link.toPath))
+      assert(IO.read(link) === "new")
+      assert(!target.exists)
+    }
+  }
+
+  test("copyFile should replace a symlink instead of writing through it") {
+    withSymlink { (link, target) =>
+      val source = link.getParentFile / "source.txt"
+      IO.write(source, "copied")
+      IO.copyFile(source, link)
+      assertLinkBroken(link, target)
+      assert(IO.read(link) === "copied")
     }
   }
 
