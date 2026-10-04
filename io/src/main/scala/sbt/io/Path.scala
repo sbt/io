@@ -290,7 +290,23 @@ object Path extends Mapper {
   def apply(f: File): RichFile = new RichFile(f)
   def apply(f: String): RichFile = new RichFile(new File(f))
   def fileProperty(name: String): File = new File(System.getProperty(name))
-  def userHome: File = fileProperty("user.home")
+
+  /**
+   * User home directory. JDK reports `user.home` as `?` when the current user has no passwd
+   * entry (common in Docker; see JDK-8280357), so fall back to the `HOME` environment variable,
+   * then `java.io.tmpdir`.
+   */
+  def userHome: File = {
+    def valid(s: String): Boolean = s.trim.nonEmpty && s.trim != "?"
+    sys.props.get("user.home").filter(valid) match {
+      case Some(home) => new File(home)
+      case None       =>
+        sys.env.get("HOME").filter(valid) match {
+          case Some(home) => new File(home)
+          case None       => fileProperty("java.io.tmpdir")
+        }
+    }
+  }
 
   def absolute(file: File): File = new File(file.toURI.normalize).getAbsoluteFile
   def makeString(paths: Seq[File]): String = makeString(paths, File.pathSeparator)
