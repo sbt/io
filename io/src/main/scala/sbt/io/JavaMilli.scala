@@ -19,7 +19,9 @@ import sbt.internal.io.MilliMilliseconds
 
 object JavaMilli extends MilliMilliseconds {
   def getModifiedTime(filePath: String): Long =
-    mapNoSuchFileException(Files.getLastModifiedTime(JPaths.get(filePath)).toMillis)
+    // Avoids the by-name thunk of mapNoSuchFileException: this is an allocation hotspot.
+    try Files.getLastModifiedTime(JPaths.get(filePath)).toMillis
+    catch { case e: NoSuchFileException => throw noSuchFile(e) }
 
   def setModifiedTime(filePath: String, mtime: Long): Unit =
     mapNoSuchFileException {
@@ -31,6 +33,9 @@ object JavaMilli extends MilliMilliseconds {
     try {
       f
     } catch {
-      case e: NoSuchFileException => throw new FileNotFoundException(e.getFile).initCause(e)
+      case e: NoSuchFileException => throw noSuchFile(e)
     }
+
+  private def noSuchFile(e: NoSuchFileException): Throwable =
+    new FileNotFoundException(e.getFile).initCause(e)
 }
