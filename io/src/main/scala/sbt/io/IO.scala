@@ -1698,7 +1698,12 @@ object IO {
    */
   def getModifiedTimeOrZero(file: File): Long =
     try {
-      Retry(Milli.getModifiedTime(file), excludeFileNotFound*)
+      // Fast path without Retry, whose thunk/closures (and boxing on Scala 3) make this an allocation hotspot.
+      try Milli.getModifiedTime(file)
+      catch {
+        case e: FileNotFoundException => throw e
+        case NonFatal(_)              => Retry(Milli.getModifiedTime(file), excludeFileNotFound*)
+      }
     } catch {
       case _: FileNotFoundException =>
         val unnormalized = file.toPath
