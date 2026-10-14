@@ -12,6 +12,8 @@
 package sbt.nio
 
 import java.nio.file._
+import java.nio.file.attribute.PosixFilePermissions.fromString
+import java.util.Collections
 
 import org.scalatest.flatspec.AnyFlatSpec
 import sbt.io.IO
@@ -28,6 +30,7 @@ import sbt.nio.file.{
 import sbt.nio.file.syntax._
 
 import scala.collection.mutable
+import scala.util.Try
 
 class FileTreeViewSpec extends AnyFlatSpec {
   val view = FileTreeView.default
@@ -137,6 +140,24 @@ class FileTreeViewSpec extends AnyFlatSpec {
     val file = Files.createFile(dir.toPath / "file")
     intercept[NotDirectoryException](FileTreeView.nio.list(file))
     intercept[NotDirectoryException](FileTreeView.native.list(file))
+  }
+  it should "fail on a directory it can't read" in IO.withTemporaryDirectory { dir =>
+    Files.createFile(Files.createDirectories(dir.toPath / "a") / "A.scala")
+    val unreadable = Files.createDirectories(dir.toPath / "b")
+    Files.createFile(unreadable / "B.scala")
+    val restricted =
+      Try(Files.setPosixFilePermissions(unreadable, Collections.emptySet())).isSuccess
+    try {
+      // Root and non-POSIX file systems can still read the directory.
+      assume(restricted && Try(Files.list(unreadable).close()).isFailure)
+      val glob = Glob(dir, RecursiveGlob / "*.scala")
+      intercept[AccessDeniedException](FileTreeView.nio.list(glob))
+      intercept[AccessDeniedException](FileTreeView.native.list(glob))
+    } finally
+      if (restricted) {
+        Files.setPosixFilePermissions(unreadable, fromString("rwx------"))
+        ()
+      }
   }
   "iterator" should "be lazy" in IO.withTemporaryDirectory { dir =>
     val firstSubdir = Files.createDirectory(dir.toPath.resolve("first"))

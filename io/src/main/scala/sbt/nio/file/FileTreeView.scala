@@ -351,7 +351,8 @@ object FileTreeView {
               case null =>
               case a    => maybeAdd(path -> a)
             }
-          case _: IOException =>
+          // any other IOException would silently drop the directory's entries
+          case _: NotDirectoryException | _: NoSuchFileException =>
         }
       }
       @tailrec
