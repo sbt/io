@@ -417,9 +417,9 @@ object IO {
       preserveLastModified: Boolean
   ) = {
     val set = new HashSet[NioPath]
-    val canonicalDirPath = toDirectory.normalize().toString
+    val canonicalDir = toDirectory.toAbsolutePath.normalize
     def validateExtractPath(name: String, target: NioPath): Unit =
-      if (!target.normalize().toString.startsWith(canonicalDirPath)) {
+      if (!target.toAbsolutePath.normalize.startsWith(canonicalDir)) {
         throw new RuntimeException(s"Entry ($name) is outside of the target directory")
       }
     @tailrec def next(): Unit = {
